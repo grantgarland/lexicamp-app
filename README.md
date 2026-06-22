@@ -1,6 +1,6 @@
 # Lexicamp
 
-Lexicamp is a vocabulary learning app built with Expo / React Native. It helps users acquire new words in context through spaced repetition, reading, and listening — designed for language learners who want to build deep vocabulary retention.
+Lexicamp is a vocabulary learning app built with Expo / React Native. It helps users memorize new words faster through optimized spaced repetition — designed for language learners who want to build deep vocabulary retention.
 
 This repo contains the **app source code**. Business docs, architecture decisions, roadmap, and project context live in [lexicamp-project](https://github.com/grantgarland/lexicamp-project).
 
