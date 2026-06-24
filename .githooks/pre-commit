@@ -1,0 +1,43 @@
+#!/bin/sh
+# Keep publication assets in sync with the design-system source of truth.
+#
+# Runs only when a sync *input* is staged: the sync script or one of the
+# managed brand assets. Re-syncs from the design system and re-stages just
+# those managed assets, so whatever gets committed matches the source of truth.
+#
+# Installed via `git config core.hooksPath .githooks` (wired up automatically
+# by the package.json "prepare" script on npm install).
+
+MANAGED="assets/images/icon.png \
+assets/images/android-icon-foreground.png \
+assets/images/android-icon-background.png \
+assets/images/favicon.png \
+assets/images/android-icon-monochrome.png \
+assets/images/splash-icon.png"
+
+staged=$(git diff --cached --name-only)
+
+relevant=0
+for f in scripts/sync-brand-assets.js $MANAGED; do
+  if printf '%s\n' "$staged" | grep -qx "$f"; then
+    relevant=1
+    break
+  fi
+done
+[ "$relevant" -eq 1 ] || exit 0
+
+# The sync reads ../lexicamp-design-system; skip gracefully if it's absent.
+if [ ! -d "../lexicamp-design-system/project/assets" ]; then
+  echo "pre-commit: lexicamp-design-system not found alongside the app; skipping brand-asset sync." >&2
+  exit 0
+fi
+
+echo "pre-commit: syncing brand assets from design system…"
+if ! npm run --silent sync:assets; then
+  echo "pre-commit: brand-asset sync failed; aborting commit." >&2
+  exit 1
+fi
+
+# Re-stage only the managed assets the sync may have rewritten.
+git add $MANAGED
+exit 0
