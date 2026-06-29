@@ -44,3 +44,4 @@ example
 
 # Claude artifacts
 .claude/.session_active
+.claude/settings.local.json

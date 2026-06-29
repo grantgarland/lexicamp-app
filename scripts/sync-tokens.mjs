@@ -71,7 +71,8 @@ for (const [k, v] of Object.entries(lit)) {
     (palette[m[1]] ||= {})[m[2]] = v;
   } else if ((m = k.match(/^font-(serif|sans|mono)$/))) {
     font.family[m[1]] = (v.match(/"([^"]+)"/) || [, v])[1]; // first quoted family
-  } else if (k.startsWith('text-')) {
+  } else if (k.startsWith('text-') && /px$/.test(v)) {
+    // type scale only (`--text-md: 16px`). `--text-strong` etc. are colors → fall through.
     font.size[k.slice(5)] = num(v);
   } else if ((m = k.match(/^weight-(\w+)$/))) {
     font.weight[m[1]] = String(num(v));
