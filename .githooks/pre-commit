@@ -1,21 +1,43 @@
 #!/bin/sh
-# Keep publication assets in sync with the design-system source of truth.
+# Keep generated artifacts in sync with the design-system source of truth.
 #
-# Runs only when a sync *input* is staged: the sync script or one of the
-# managed brand assets. Re-syncs from the design system and re-stages just
-# those managed assets, so whatever gets committed matches the source of truth.
+# Two independent drift guards, each runs only when its inputs are staged:
+#   1. Brand assets  (sync-brand-assets.js + managed PNGs)
+#   2. Design tokens (sync-tokens.mjs -> src/theme/tokens.generated.ts)
+# Each re-syncs from the design system and re-stages its outputs, so whatever
+# gets committed matches the source of truth.
 #
 # Installed via `git config core.hooksPath .githooks` (wired up automatically
 # by the package.json "prepare" script on npm install).
 
+staged=$(git diff --cached --name-only)
+
+# ── Guard 2: design tokens ───────────────────────────────────────────────────
+# Trigger when the token sync script or its generated output is staged.
+token_relevant=0
+for f in scripts/sync-tokens.mjs src/theme/tokens.generated.ts; do
+  if printf '%s\n' "$staged" | grep -qx "$f"; then token_relevant=1; break; fi
+done
+if [ "$token_relevant" -eq 1 ]; then
+  if [ ! -d "../lexicamp-design-system/project/tokens" ]; then
+    echo "pre-commit: lexicamp-design-system not found alongside the app; skipping token sync." >&2
+  else
+    echo "pre-commit: syncing design tokens from design system…"
+    if ! node scripts/sync-tokens.mjs; then
+      echo "pre-commit: token sync failed; aborting commit." >&2
+      exit 1
+    fi
+    git add src/theme/tokens.generated.ts
+  fi
+fi
+
+# ── Guard 1: brand assets ────────────────────────────────────────────────────
 MANAGED="assets/images/icon.png \
 assets/images/android-icon-foreground.png \
 assets/images/android-icon-background.png \
 assets/images/favicon.png \
 assets/images/android-icon-monochrome.png \
 assets/images/splash-icon.png"
-
-staged=$(git diff --cached --name-only)
 
 relevant=0
 for f in scripts/sync-brand-assets.js $MANAGED; do
