@@ -19,6 +19,9 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { DevBadge } from '@/dev/DevBadge';
+import { DevConfigProvider } from '@/dev/devConfig';
+
 // Minimal root. Real navigation (NavShell / tabs) lands in P3–P4.
 // Registered names MUST match `theme.fonts.*` in `@/theme/theme` — one family per
 // weight (RN custom fonts don't select weight reliably via `fontWeight`).
@@ -40,10 +43,16 @@ export default function RootLayout() {
 
   if (!fontsLoaded) return null;
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <BottomSheetModalProvider>
-        <Stack screenOptions={{ headerShown: false }} />
-      </BottomSheetModalProvider>
-    </GestureHandlerRootView>
+    <DevConfigProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <BottomSheetModalProvider>
+          <Stack screenOptions={{ headerShown: false }}>
+            {/* Search is a route, presented as a slide-up modal sheet (from the Home FAB). */}
+            <Stack.Screen name="search" options={{ presentation: 'modal' }} />
+          </Stack>
+          {__DEV__ ? <DevBadge /> : null}
+        </BottomSheetModalProvider>
+      </GestureHandlerRootView>
+    </DevConfigProvider>
   );
 }

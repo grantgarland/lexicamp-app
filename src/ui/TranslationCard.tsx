@@ -4,6 +4,7 @@
 // item shows an example, optional details, and a save / saved / delete action.
 import { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
+import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { Card } from './Card';
@@ -92,7 +93,7 @@ export function TranslationCard({
         <RNText style={styles.phonetic}>{result.phonetic}</RNText>
       </View>
 
-      <View style={styles.accordion}>
+      <Animated.View style={styles.accordion} layout={LinearTransition.duration(240)}>
         {result.translations.map((t, i) => (
           <TranslationItem
             key={t.id}
@@ -104,7 +105,7 @@ export function TranslationCard({
             onDelete={() => onDelete(i)}
           />
         ))}
-      </View>
+      </Animated.View>
     </Card>
   );
 }
@@ -131,80 +132,84 @@ function TranslationItem({
     if (!isExpanded) setShowDetails(false);
   }, [isExpanded]);
 
-  if (!isExpanded) {
-    return (
-      <Pressable onPress={onExpand} style={styles.collapsed} accessibilityRole="button">
-        <View style={styles.collapsedLeft}>
-          <RNText style={styles.collapsedWord}>{translation.word}</RNText>
-          <RNText style={styles.collapsedPos}>{translation.pos}</RNText>
-        </View>
-        <IconChevronDown size={14} color={theme.color.textFaint} />
-      </Pressable>
-    );
-  }
-
+  // Layout-animated shell: height animates as the current word changes; the
+  // collapsed row and the expanded "current word" block crossfade in/out.
   return (
-    <View style={styles.expanded}>
-      <View style={styles.expandedHead}>
-        <RNText style={styles.eyebrow}>Current word</RNText>
-        <RNText style={styles.expandedWord}>{translation.word}</RNText>
-        <RNText style={[styles.expandedPos, { marginBottom: translation.example ? 12 : 0 }]}>{translation.pos}</RNText>
-      </View>
-
-      {translation.example != null && (
-        <View style={styles.exampleBox}>
-          <RNText style={styles.exampleSource}>&ldquo;{translation.example.source}&rdquo;</RNText>
-          <RNText style={styles.exampleTarget}>{translation.example.target}</RNText>
-        </View>
-      )}
-
-      {translation.details != null && translation.details.length > 0 && (
-        <View style={styles.detailsWrap}>
-          <Pressable onPress={() => setShowDetails((d) => !d)} style={styles.detailsToggle} accessibilityRole="button">
-            {showDetails ? (
-              <IconChevronUp size={13} color={theme.color.textMuted} />
-            ) : (
-              <IconChevronDown size={13} color={theme.color.textMuted} />
-            )}
-            <RNText style={styles.detailsToggleText}>More details</RNText>
+    <Animated.View layout={LinearTransition.duration(240)}>
+      {!isExpanded ? (
+        <Animated.View key="collapsed" entering={FadeIn.duration(180)} exiting={FadeOut.duration(120)}>
+          <Pressable onPress={onExpand} style={styles.collapsed} accessibilityRole="button">
+            <View style={styles.collapsedLeft}>
+              <RNText style={styles.collapsedWord}>{translation.word}</RNText>
+              <RNText style={styles.collapsedPos}>{translation.pos}</RNText>
+            </View>
+            <IconChevronDown size={14} color={theme.color.textFaint} />
           </Pressable>
-          {showDetails && (
-            <View style={styles.detailsList}>
-              {translation.details.map((d, i) => (
-                <View
-                  key={d.label}
-                  style={[styles.detailRow, i < translation.details!.length - 1 && styles.detailRowBorder]}
-                >
-                  <RNText style={styles.detailLabel}>{d.label}</RNText>
-                  <RNText style={styles.detailValue}>{d.value}</RNText>
-                </View>
-              ))}
+        </Animated.View>
+      ) : (
+        <Animated.View key="expanded" entering={FadeIn.duration(220)} exiting={FadeOut.duration(120)} style={styles.expanded}>
+          <View style={styles.expandedHead}>
+            <RNText style={styles.eyebrow}>Current word</RNText>
+            <RNText style={styles.expandedWord}>{translation.word}</RNText>
+            <RNText style={[styles.expandedPos, { marginBottom: translation.example ? 12 : 0 }]}>{translation.pos}</RNText>
+          </View>
+
+          {translation.example != null && (
+            <View style={styles.exampleBox}>
+              <RNText style={styles.exampleSource}>&ldquo;{translation.example.source}&rdquo;</RNText>
+              <RNText style={styles.exampleTarget}>{translation.example.target}</RNText>
             </View>
           )}
-        </View>
-      )}
 
-      <View style={styles.actionWrap}>
-        {buttonState === 'save' && (
-          <Pressable onPress={onSave} style={[styles.action, styles.actionSave]} accessibilityRole="button">
-            <IconBook size={16} color="#fff" />
-            <RNText style={styles.actionTextLight}>Save word</RNText>
-          </Pressable>
-        )}
-        {buttonState === 'saved' && (
-          <View style={[styles.action, styles.actionSaved]}>
-            <IconCheck size={17} color="#fff" />
-            <RNText style={styles.actionTextLight}>Saved!</RNText>
+          {translation.details != null && translation.details.length > 0 && (
+            <View style={styles.detailsWrap}>
+              <Pressable onPress={() => setShowDetails((d) => !d)} style={styles.detailsToggle} accessibilityRole="button">
+                {showDetails ? (
+                  <IconChevronUp size={13} color={theme.color.textMuted} />
+                ) : (
+                  <IconChevronDown size={13} color={theme.color.textMuted} />
+                )}
+                <RNText style={styles.detailsToggleText}>More details</RNText>
+              </Pressable>
+              {showDetails && (
+                <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.detailsList}>
+                  {translation.details.map((d, i) => (
+                    <View
+                      key={d.label}
+                      style={[styles.detailRow, i < translation.details!.length - 1 && styles.detailRowBorder]}
+                    >
+                      <RNText style={styles.detailLabel}>{d.label}</RNText>
+                      <RNText style={styles.detailValue}>{d.value}</RNText>
+                    </View>
+                  ))}
+                </Animated.View>
+              )}
+            </View>
+          )}
+
+          <View style={styles.actionWrap}>
+            {buttonState === 'save' && (
+              <Pressable onPress={onSave} style={[styles.action, styles.actionSave]} accessibilityRole="button">
+                <IconBook size={16} color="#fff" />
+                <RNText style={styles.actionTextLight}>Save word</RNText>
+              </Pressable>
+            )}
+            {buttonState === 'saved' && (
+              <Animated.View key="saved" entering={FadeIn.duration(200)} style={[styles.action, styles.actionSaved]}>
+                <IconCheck size={17} color="#fff" />
+                <RNText style={styles.actionTextLight}>Saved!</RNText>
+              </Animated.View>
+            )}
+            {buttonState === 'delete' && (
+              <Pressable onPress={onDelete} style={[styles.action, styles.actionDelete]} accessibilityRole="button">
+                <IconTrash size={15} color={theme.color.danger} />
+                <RNText style={styles.actionTextDanger}>Delete word</RNText>
+              </Pressable>
+            )}
           </View>
-        )}
-        {buttonState === 'delete' && (
-          <Pressable onPress={onDelete} style={[styles.action, styles.actionDelete]} accessibilityRole="button">
-            <IconTrash size={15} color={theme.color.danger} />
-            <RNText style={styles.actionTextDanger}>Delete word</RNText>
-          </Pressable>
-        )}
-      </View>
-    </View>
+        </Animated.View>
+      )}
+    </Animated.View>
   );
 }
 
@@ -226,7 +231,7 @@ const styles = StyleSheet.create((theme) => {
       marginLeft: 4,
     },
     posChipText: { fontFamily: fonts.sans.semibold, fontSize: 11, letterSpacing: 0.3, color: color.textMuted },
-    headword: { fontFamily: fonts.serif.semibold, fontSize: 36, lineHeight: 40, color: color.textStrong, marginBottom: 5 },
+    headword: { fontFamily: fonts.serif.semibold, fontSize: 36, color: color.textStrong, marginBottom: 5 },
     phonetic: { fontFamily: fonts.mono.regular, fontSize: 13, color: color.textMuted, letterSpacing: 0.4 },
 
     accordion: { borderTopWidth: theme.borderWidth.thin, borderTopColor: color.divider },
@@ -261,7 +266,7 @@ const styles = StyleSheet.create((theme) => {
       opacity: 0.7,
       marginBottom: 2,
     },
-    expandedWord: { fontFamily: fonts.serif.semibold, fontSize: 28, lineHeight: 31, color: color.textStrong, marginBottom: 4 },
+    expandedWord: { fontFamily: fonts.serif.semibold, fontSize: 28, color: color.textStrong, marginBottom: 4 },
     expandedPos: { fontFamily: fonts.mono.regular, fontSize: 11, color: color.textMuted },
 
     exampleBox: {
@@ -292,10 +297,14 @@ const styles = StyleSheet.create((theme) => {
       alignItems: 'center',
       justifyContent: 'center',
       gap: 8,
+      // Every state carries the same 1.5px border box (transparent unless delete) so
+      // toggling save → saved → delete never changes the button's size / shifts layout.
+      borderWidth: theme.borderWidth.base,
+      borderColor: 'transparent',
     },
     actionSave: { backgroundColor: color.accent, boxShadow: theme.shadow.accent },
     actionSaved: { backgroundColor: palette.green[500] },
-    actionDelete: { backgroundColor: color.dangerSoft, borderWidth: theme.borderWidth.base, borderColor: palette.red[100] },
+    actionDelete: { backgroundColor: color.dangerSoft, borderColor: palette.red[100] },
     actionTextLight: { fontFamily: fonts.sans.bold, fontSize: 15, color: '#fff' },
     actionTextDanger: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.danger },
   };

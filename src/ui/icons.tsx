@@ -129,6 +129,49 @@ export function IconCheck({ size = 16, color = STROKE }: IconProps) {
   );
 }
 
+export function IconSearch({ size = 17, color = STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="11" cy="11" r="7" />
+      <Path d="M21 21l-4.3-4.3" />
+    </Svg>
+  );
+}
+
+export function IconX({ size = 12, color = STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M6 6l12 12M18 6L6 18" />
+    </Svg>
+  );
+}
+
+export function IconFire({ size = 18, color = STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke="none">
+      <Path d="M12 2C9 6 7.5 8 7.5 11.5a4.5 4.5 0 009 0c0-1.8-.9-3.2-1.8-4.3.1 1.3-.6 2.1-1.4 2.1-1 0-1.5-.8-1.5-2C11.8 5.6 12 3.8 12 2z" />
+    </Svg>
+  );
+}
+
+export function IconClock({ size = 15, color = STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="12" cy="12" r="9" />
+      <Path d="M12 7v5l3 2" />
+    </Svg>
+  );
+}
+
+export function IconCalendar({ size = 15, color = STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Rect x="3" y="5" width="18" height="16" rx="2" />
+      <Path d="M3 9h18M8 3v4M16 3v4" />
+    </Svg>
+  );
+}
+
 export function IconPlay({ size = 18, color = STROKE }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke="none">

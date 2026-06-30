@@ -28,6 +28,11 @@ export {
   IconBook,
   IconCheck,
   IconPlay,
+  IconFire,
+  IconClock,
+  IconCalendar,
+  IconSearch,
+  IconX,
   type IconProps,
 } from './icons';
 
