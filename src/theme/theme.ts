@@ -15,16 +15,40 @@ import { tokens } from './tokens.generated';
 
 const { palette, color, font, space, radius, borderWidth, shadow, motion } = tokens;
 
-// Registered font-family names (must match the keys passed to expo-font useFonts).
+// Registered font-family names. RN custom fonts don't pick a weight from
+// `fontWeight` reliably (esp. Android) → register ONE family per weight and select
+// by name. Keys here MUST match the names passed to `useFonts` in app/_layout.
+// `family` keeps the regular-weight shorthand (serif/sans/mono) for convenience.
+const fonts = {
+  serif: {                      // Spectral — headwords, display, reading
+    regular: 'Spectral',
+    medium: 'Spectral-Medium',
+    semibold: 'Spectral-SemiBold',
+    bold: 'Spectral-Bold',
+  },
+  sans: {                       // Plus Jakarta Sans — UI / body
+    regular: 'PlusJakartaSans',
+    medium: 'PlusJakartaSans-Medium',
+    semibold: 'PlusJakartaSans-SemiBold',
+    bold: 'PlusJakartaSans-Bold',
+    extra: 'PlusJakartaSans-ExtraBold',
+  },
+  mono: {                       // Space Mono — IPA, counters, timers
+    regular: 'SpaceMono',
+    bold: 'SpaceMono-Bold',
+  },
+} as const;
+
 const family = {
-  serif: 'Spectral',          // headwords, display, reading
-  sans: 'PlusJakartaSans',    // UI / body
-  mono: 'SpaceMono',          // IPA, counters, timers
+  serif: fonts.serif.regular,
+  sans: fonts.sans.regular,
+  mono: fonts.mono.regular,
 } as const;
 
 const base = {
   palette,
   color,
+  fonts,
   family,
   weight: font.weight,
   size: font.size,
