@@ -8,6 +8,10 @@ import { useRouter } from 'expo-router';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { directionLangs } from '@/domain/derive';
+import type { Profile, SearchDirection } from '@/domain/types';
+import { useProfile } from '@/query/hooks';
+import { usePrefsStore } from '@/store/prefsStore';
 import {
   EmptyState,
   FONT_SCALE_MAX,
@@ -17,19 +21,16 @@ import {
   RawText,
   Screen,
   TranslationCard,
-  type TranslationDirection,
   type TranslationResult,
 } from '@/ui';
 
-const DIR_WORDS: Record<TranslationDirection, { source: string; target: string; placeholder: string }> = {
-  native_to_target: { source: 'Spanish', target: 'English', placeholder: 'Type a word in Spanish…' },
-  target_to_native: { source: 'English', target: 'Spanish', placeholder: 'Type a word in English…' },
-};
-
 // TODO(P4 data): replace with the real translate/dictionary lookup (returns null when
 // the word isn't found → drives the no-results state).
-function mockLookup(q: string, direction: TranslationDirection): TranslationResult {
-  const toEN = direction === 'native_to_target';
+function mockLookup(q: string, direction: SearchDirection): TranslationResult {
+  // The translated word is in the TARGET language: native_to_target → learning
+  // lang, target_to_native → native lang. For this profile that's EN→ES vs ES→EN,
+  // so target_to_native is the one that resolves to English.
+  const toEN = direction === 'target_to_native';
   return {
     sourceText: q,
     phonetic: toEN ? '/…/' : '/…/',
@@ -50,9 +51,20 @@ function mockLookup(q: string, direction: TranslationDirection): TranslationResu
 // SearchView — the search body. Reused both as the modal route (SearchScreen) and
 // as an in-Home overlay (so the bottom nav can stay visible). Closes via `onClose`.
 export function SearchView({ onClose }: { onClose: () => void }) {
+  // Direction + recents are per-device prefs (03) → the prefs store, not local state.
+  const direction = usePrefsStore((s) => s.searchDirection);
+  const setDirection = usePrefsStore((s) => s.setSearchDirection);
+  const recents = usePrefsStore((s) => s.recents);
+  const addRecent = usePrefsStore((s) => s.addRecent);
+  const removeRecent = usePrefsStore((s) => s.removeRecent);
+
+  // The language PAIR is a per-user fact (profiles.native_lang / learning_lang, 03);
+  // direction just picks which way to read it. Resolve both into the labels the UI shows.
+  const profile = useProfile();
+  const langs = profile ? directionLangs(profile, direction) : null;
+  const placeholder = langs ? `Type a word in ${langs.sourceName}…` : 'Type a word…';
+
   const [query, setQuery] = useState('');
-  const [direction, setDirection] = useState<TranslationDirection>('native_to_target');
-  const [recents, setRecents] = useState<string[]>(['montaña', 'recordar', 'fluidez']);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [justSaved, setJustSaved] = useState<string | null>(null);
@@ -68,7 +80,7 @@ export function SearchView({ onClose }: { onClose: () => void }) {
     setSaved((s) => new Set(s).add(id));
     setJustSaved(id);
     setTimeout(() => setJustSaved(null), 1500);
-    if (!recents.includes(q)) setRecents((r) => [q, ...r].slice(0, 8));
+    addRecent(q);
   };
   const unsave = (i: number) => {
     if (result == null) return;
@@ -87,16 +99,16 @@ export function SearchView({ onClose }: { onClose: () => void }) {
         <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close search" style={styles.close}>
           <IconXClose />
         </Pressable>
-        <DirectionToggle direction={direction} onChange={setDirection} />
+        <DirectionToggle direction={direction} onChange={setDirection} profile={profile} />
         <View style={styles.headerSpacer} />
       </View>
 
-      <SearchBar value={query} onChange={setQuery} placeholder={DIR_WORDS[direction].placeholder} />
+      <SearchBar value={query} onChange={setQuery} placeholder={placeholder} />
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {phase === 'recents' && (
           <Animated.View key="recents" entering={FadeIn.duration(200)} exiting={FadeOut.duration(140)}>
-            <RecentChips recents={recents} onTap={setQuery} onDismiss={(w) => setRecents((r) => r.filter((x) => x !== w))} />
+            <RecentChips recents={recents} onTap={setQuery} onDismiss={removeRecent} />
           </Animated.View>
         )}
         {phase === 'typing' && (
@@ -108,7 +120,8 @@ export function SearchView({ onClose }: { onClose: () => void }) {
           <Animated.View key="results" entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)} style={styles.resultWrap}>
             <TranslationCard
               result={result}
-              direction={direction}
+              sourceLang={langs?.sourceShort}
+              targetLang={langs?.targetShort}
               currentIdx={currentIdx}
               onSetCurrent={setCurrentIdx}
               savedIds={saved}
@@ -149,34 +162,41 @@ function IconXClose() {
   return <IconX size={18} color={theme.color.textBody} />;
 }
 
-function DirectionToggle({ direction, onChange }: { direction: TranslationDirection; onChange: (d: TranslationDirection) => void }) {
+function DirectionToggle({
+  direction,
+  onChange,
+  profile,
+}: {
+  direction: SearchDirection;
+  onChange: (d: SearchDirection) => void;
+  profile?: Profile;
+}) {
   const { theme } = useUnistyles();
-  const opts: { value: TranslationDirection; label: string }[] = [
-    { value: 'native_to_target', label: 'ES → EN' },
-    { value: 'target_to_native', label: 'EN → ES' },
-  ];
-  const meta = DIR_WORDS[direction];
+  const opts: SearchDirection[] = ['native_to_target', 'target_to_native'];
+  const active = profile ? directionLangs(profile, direction) : null;
   return (
     <View style={styles.dirWrap}>
       <View style={styles.segmented}>
-        {opts.map((opt) => {
-          const active = direction === opt.value;
+        {opts.map((value) => {
+          const isActive = direction === value;
+          const langs = profile ? directionLangs(profile, value) : null;
+          const label = langs ? `${langs.sourceShort} → ${langs.targetShort}` : '· → ·';
           return (
             <Pressable
-              key={opt.value}
-              onPress={() => onChange(opt.value)}
+              key={value}
+              onPress={() => onChange(value)}
               accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              style={[styles.segBtn, active && { backgroundColor: theme.color.brand }]}
+              accessibilityState={{ selected: isActive }}
+              style={[styles.segBtn, isActive && { backgroundColor: theme.color.brand }]}
             >
-              <RawText style={[styles.segText, { color: active ? '#fff' : theme.color.textMuted, fontFamily: active ? theme.fonts.mono.bold : theme.fonts.mono.regular }]}>
-                {opt.label}
+              <RawText style={[styles.segText, { color: isActive ? '#fff' : theme.color.textMuted, fontFamily: isActive ? theme.fonts.mono.bold : theme.fonts.mono.regular }]}>
+                {label}
               </RawText>
             </Pressable>
           );
         })}
       </View>
-      <RawText style={styles.dirHint}>Translating {meta.source} words into {meta.target}</RawText>
+      {active && <RawText style={styles.dirHint}>Translating {active.sourceName} words into {active.targetName}</RawText>}
     </View>
   );
 }

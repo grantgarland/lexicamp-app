@@ -11,8 +11,6 @@ import { Card } from './Card';
 import { IconArrowRight, IconBook, IconCheck, IconChevronDown, IconChevronUp, IconTrash } from './icons';
 import { RawText as RNText } from './Text';
 
-export type TranslationDirection = 'native_to_target' | 'target_to_native';
-
 export interface TranslationExample {
   source: string;
   target: string;
@@ -45,13 +43,11 @@ export interface TranslationCardProps {
   justSavedId?: string | null;
   onSave: (i: number) => void;
   onDelete: (i: number) => void;
-  direction?: TranslationDirection;
+  /** Short language-pair chip labels (e.g. 'EN' / 'ES'), resolved by the caller
+   *  from the user's profile + search direction. Presentational only. */
+  sourceLang?: string;
+  targetLang?: string;
 }
-
-const DIR_META: Record<TranslationDirection, { sourceLang: string; targetLang: string }> = {
-  native_to_target: { sourceLang: 'ES', targetLang: 'EN' },
-  target_to_native: { sourceLang: 'EN', targetLang: 'ES' },
-};
 
 type ButtonState = 'save' | 'saved' | 'delete';
 
@@ -63,10 +59,10 @@ export function TranslationCard({
   justSavedId,
   onSave,
   onDelete,
-  direction = 'native_to_target',
+  sourceLang,
+  targetLang,
 }: TranslationCardProps) {
   const { theme } = useUnistyles();
-  const meta = DIR_META[direction];
 
   const buttonState = (t: Translation): ButtonState => {
     if (!savedIds?.has(t.id)) return 'save';
@@ -79,11 +75,11 @@ export function TranslationCard({
       <View style={styles.header}>
         <View style={styles.dirRow}>
           <View style={[styles.langChip, styles.langChipSource]}>
-            <RNText style={[styles.langChipText, { color: theme.color.brand }]}>{meta.sourceLang}</RNText>
+            <RNText style={[styles.langChipText, { color: theme.color.brand }]}>{sourceLang}</RNText>
           </View>
           <IconArrowRight size={12} color={theme.color.textFaint} />
           <View style={[styles.langChip, styles.langChipTarget]}>
-            <RNText style={[styles.langChipText, { color: theme.color.textMuted }]}>{meta.targetLang}</RNText>
+            <RNText style={[styles.langChipText, { color: theme.color.textMuted }]}>{targetLang}</RNText>
           </View>
           <View style={styles.posChip}>
             <RNText style={styles.posChipText}>{result.pos}</RNText>

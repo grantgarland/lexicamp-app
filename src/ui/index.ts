@@ -45,7 +45,6 @@ export {
   type TranslationCardProps,
   type TranslationResult,
   type Translation,
-  type TranslationDirection,
 } from './TranslationCard';
 export { WordCharInput, type WordCharInputProps } from './WordCharInput';
 export { MasteryCard, type MasteryCardProps } from './MasteryCard';

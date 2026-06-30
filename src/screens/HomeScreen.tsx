@@ -1,14 +1,15 @@
 // HomeScreen (H-01, "words due") — assembled against home/Home.html. Composes the
 // kit (Screen, MasteryCard, TabBar) plus Home-specific pieces (greeting + streak,
-// the "Ready to review" study CTA, the quick-stat tiles). Screen-specific bits live
-// here, not in the kit. Data is mocked behind a single seam for P4 Supabase wiring.
+// the "Ready to review" study CTA, the quick-stat tiles). Reads from the app store:
+// `useHomeData()` (TanStack Query over the DataSource) returns a snapshot DERIVED
+// from real card fixtures, so the DevBadge scenario drives the screen variant.
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet as RNStyleSheet, View } from 'react-native';
 import Animated, { SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
-import { type UserState, useDevConfig } from '@/dev/devConfig';
+import { useHomeData } from '@/query/hooks';
 import { SearchView } from './SearchScreen';
 
 import {
@@ -23,28 +24,6 @@ import {
   TabBar,
 } from '@/ui';
 
-export interface HomeData {
-  streakDays: number;
-  subline?: string;
-  tierCounts: number[];
-  wordsSaved: number;
-  dueToday: number;
-  needRecall: number;
-  addedToday: number;
-  dueTomorrow: number;
-}
-
-// Dev presets per user-state — the DevBadge switches between them.
-// TODO(P4 data): replace with a Supabase-backed home query (tier counts, due/streak).
-const HOME_PRESETS: Record<UserState, HomeData> = {
-  empty: { streakDays: 1, subline: 'First day on the mountain', tierCounts: [0, 0, 0, 0, 0], wordsSaved: 0, dueToday: 0, needRecall: 0, addedToday: 0, dueTomorrow: 0 },
-  bc: { streakDays: 3, tierCounts: [12, 0, 0, 0, 0], wordsSaved: 12, dueToday: 6, needRecall: 9, addedToday: 4, dueTomorrow: 3 },
-  abc: { streakDays: 7, tierCounts: [20, 18, 0, 0, 0], wordsSaved: 38, dueToday: 11, needRecall: 16, addedToday: 3, dueTomorrow: 6 },
-  hc: { streakDays: 10, tierCounts: [10, 20, 12, 0, 0], wordsSaved: 42, dueToday: 15, needRecall: 22, addedToday: 3, dueTomorrow: 7 },
-  sr: { streakDays: 12, tierCounts: [10, 20, 12, 8, 0], wordsSaved: 50, dueToday: 18, needRecall: 26, addedToday: 2, dueTomorrow: 8 },
-  summit: { streakDays: 14, tierCounts: [10, 20, 12, 5, 13], wordsSaved: 60, dueToday: 23, needRecall: 31, addedToday: 3, dueTomorrow: 8 },
-};
-
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 function todayLabel() {
@@ -54,23 +33,26 @@ function todayLabel() {
 
 export function HomeScreen() {
   const [searchOpen, setSearchOpen] = useState(false);
-  const { userState } = useDevConfig();
-  const isEmpty = userState === 'empty';
-  const data = HOME_PRESETS[userState];
+  const { snapshot, streakDays } = useHomeData();
+  const isEmpty = snapshot?.isEmpty ?? false;
   return (
     <Screen edges={['top']}>
       {/* Content area. The search overlay fills THIS (above the nav); the TabBar is a
           later sibling, so it + the FAB paint on top of the overlay → nav stays visible. */}
       <View style={styles.body}>
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <GreetingRow dateLabel={todayLabel()} streakDays={data.streakDays} subline={data.subline} />
-          <MasteryCard tierCounts={data.tierCounts} wordsSaved={data.wordsSaved} isEmpty={isEmpty} />
-          {isEmpty ? (
-            <AddFirstWordCard onAdd={() => setSearchOpen(true)} />
-          ) : (
+          <GreetingRow dateLabel={todayLabel()} streakDays={streakDays} subline={isEmpty ? 'First day on the mountain' : undefined} />
+          {snapshot != null && (
             <>
-              <StudyCard due={data.dueToday} onStudy={() => {}} />
-              <StatTiles needRecall={data.needRecall} addedToday={data.addedToday} dueTomorrow={data.dueTomorrow} />
+              <MasteryCard tierCounts={snapshot.tierCounts} wordsSaved={snapshot.wordsSaved} isEmpty={isEmpty} />
+              {isEmpty ? (
+                <AddFirstWordCard onAdd={() => setSearchOpen(true)} />
+              ) : (
+                <>
+                  <StudyCard due={snapshot.needRecallToday} onStudy={() => {}} />
+                  <StatTiles needRecall={snapshot.needRecallTotal} addedToday={snapshot.addedToday} dueTomorrow={snapshot.dueTomorrow} />
+                </>
+              )}
             </>
           )}
         </ScrollView>

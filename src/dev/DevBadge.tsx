@@ -5,9 +5,9 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { type Plan, USER_STATE_LABELS, type UserState, useDevConfig } from './devConfig';
+import { type DevPlan, type DevUserState, USER_STATE_LABELS, useDevStore } from '@/store/devStore';
 
-const PLANS: { value: Plan; label: string }[] = [
+const PLANS: { value: DevPlan; label: string }[] = [
   { value: 'free', label: 'Free' },
   { value: 'paid', label: 'Paid' },
 ];
@@ -15,7 +15,10 @@ const PLANS: { value: Plan; label: string }[] = [
 export function DevBadge() {
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
-  const { plan, userState, setPlan, setUserState } = useDevConfig();
+  const plan = useDevStore((s) => s.plan);
+  const userState = useDevStore((s) => s.userState);
+  const setPlan = useDevStore((s) => s.setPlan);
+  const setUserState = useDevStore((s) => s.setUserState);
   const top = insets.top + 6;
 
   return (
@@ -46,7 +49,7 @@ export function DevBadge() {
                   key={o.value}
                   label={o.label}
                   active={userState === o.value}
-                  onPress={() => setUserState(o.value as UserState)}
+                  onPress={() => setUserState(o.value)}
                 />
               ))}
             </View>

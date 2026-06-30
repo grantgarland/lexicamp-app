@@ -15,12 +15,13 @@ import {
 } from '@expo-google-fonts/spectral';
 import { SpaceMono_400Regular, SpaceMono_700Bold } from '@expo-google-fonts/space-mono';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { DevBadge } from '@/dev/DevBadge';
-import { DevConfigProvider } from '@/dev/devConfig';
+import { queryClient } from '@/query/queryClient';
 
 // Minimal root. Real navigation (NavShell / tabs) lands in P3–P4.
 // Registered names MUST match `theme.fonts.*` in `@/theme/theme` — one family per
@@ -43,7 +44,7 @@ export default function RootLayout() {
 
   if (!fontsLoaded) return null;
   return (
-    <DevConfigProvider>
+    <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <BottomSheetModalProvider>
           <Stack screenOptions={{ headerShown: false }}>
@@ -53,6 +54,6 @@ export default function RootLayout() {
           {__DEV__ ? <DevBadge /> : null}
         </BottomSheetModalProvider>
       </GestureHandlerRootView>
-    </DevConfigProvider>
+    </QueryClientProvider>
   );
 }
