@@ -45,6 +45,37 @@ export function useDueCards() {
   return { cards: q.data ?? [], isLoading: q.isLoading };
 }
 
+export interface ProgressData {
+  tierCounts: number[]; // words per tier [bc..summit]
+  totalSaved: number;
+  totalMastered: number;
+  streakDays: number;
+  sessionsTotal: number;
+  avgAccuracy: number;
+  bestStreak: number;
+  daysActive: number;
+  isLoading: boolean;
+}
+/** Aggregated Progress-screen read (tier distribution + all-time study stats). */
+export function useProgressData(): ProgressData {
+  const userState = useDevStore((s) => s.userState);
+  const deck = useQuery({ queryKey: ['deckCards', userState], queryFn: () => ds.getDeckCards() });
+  const eng = useQuery({ queryKey: ['engagement', userState], queryFn: () => ds.getEngagement() });
+  const stats = useQuery({ queryKey: ['progressStats', userState], queryFn: () => ds.getProgressStats() });
+  const snap = deck.data != null ? homeSnapshot(deck.data.cards, deck.data.states) : null;
+  return {
+    tierCounts: snap?.tierCounts ?? [0, 0, 0, 0, 0],
+    totalSaved: snap?.wordsSaved ?? 0,
+    totalMastered: snap?.masteredCount ?? 0,
+    streakDays: eng.data?.streakDays ?? 0,
+    sessionsTotal: stats.data?.sessionsTotal ?? 0,
+    avgAccuracy: stats.data?.avgAccuracy ?? 0,
+    bestStreak: stats.data?.bestStreak ?? 0,
+    daysActive: stats.data?.daysActive ?? 0,
+    isLoading: deck.isLoading || stats.isLoading,
+  };
+}
+
 /** The user's saved words for the Word List (read). */
 export function useWords() {
   const userState = useDevStore((s) => s.userState); // dev knob → query key

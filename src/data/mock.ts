@@ -5,7 +5,7 @@ import type { BufferedRating, QuizCardItem } from '@/domain/quiz';
 import type { Card, CardFsrsState, Deck, Entitlement, Profile } from '@/domain/types';
 import { type DevPlan, type DevUserState, useDevStore } from '@/store/devStore';
 
-import type { DataSource, DeckCards, Engagement, WordListItem } from './DataSource';
+import type { DataSource, DeckCards, Engagement, ProgressStats, WordListItem } from './DataSource';
 
 const USER_ID = 'dev-user';
 const DECK_ID = 'dev-deck';
@@ -138,8 +138,16 @@ const WORD_BANK: { native: string; target: string }[] = [
   { native: 'tesoro', target: 'treasure' }, { native: 'anochecer', target: 'nightfall' },
 ];
 
+const POS_POOL = ['noun', 'adj.', 'verb', 'adv.'];
+const EXAMPLE_FRAMES = [
+  (w: string) => `Uso «${w}» casi todos los días.`,
+  (w: string) => `Esa palabra, «${w}», es muy útil.`,
+  (w: string) => `Aprendí «${w}» en mi última sesión.`,
+  (w: string) => `«${w}» apareció en la lectura de hoy.`,
+];
+
 // Word List fixtures — same per-tier distribution as the deck (so "My Words" count
-// matches Home's wordsSaved), with real display text + a spread createdAt. Newest first.
+// matches Home's wordsSaved), with real display text + derived metadata. Newest first.
 function buildWords(userState: DevUserState): WordListItem[] {
   const dist = DISTRIBUTION[userState];
   const now = Date.now();
@@ -149,11 +157,36 @@ function buildWords(userState: DevUserState): WordListItem[] {
     for (let j = 0; j < count; j += 1, g += 1) {
       const w = WORD_BANK[g % WORD_BANK.length];
       const createdAt = g % 6 === 0 ? new Date(now - 1 * HOUR) : new Date(now - (g + 2) * DAY);
-      out.push({ id: `w${tierIdx}_${j}`, native: w.native, target: w.target, stability: TIER_STABILITY[tierIdx], createdAt });
+      const dueAt =
+        g % 4 === 0 ? new Date(now - 2 * HOUR)
+        : g % 4 === 1 ? new Date(now - 3 * DAY)
+        : g % 4 === 2 ? new Date(now + 6 * HOUR)
+        : new Date(now + 5 * DAY);
+      out.push({
+        id: `w${tierIdx}_${j}`,
+        native: w.native,
+        target: w.target,
+        pos: POS_POOL[g % POS_POOL.length],
+        example: EXAMPLE_FRAMES[g % EXAMPLE_FRAMES.length](w.native),
+        stability: TIER_STABILITY[tierIdx],
+        reps: 2 + (g % 9),
+        createdAt,
+        dueAt,
+      });
     }
   });
   return out.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
+
+// All-time study stats per scenario (mock; real values derive from study_events later).
+const PROGRESS_STATS: Record<DevUserState, ProgressStats> = {
+  empty: { sessionsTotal: 0, avgAccuracy: 0, bestStreak: 0, daysActive: 0 },
+  bc: { sessionsTotal: 4, avgAccuracy: 71, bestStreak: 3, daysActive: 4 },
+  abc: { sessionsTotal: 12, avgAccuracy: 76, bestStreak: 7, daysActive: 10 },
+  hc: { sessionsTotal: 24, avgAccuracy: 80, bestStreak: 10, daysActive: 18 },
+  sr: { sessionsTotal: 33, avgAccuracy: 82, bestStreak: 12, daysActive: 24 },
+  summit: { sessionsTotal: 42, avgAccuracy: 85, bestStreak: 14, daysActive: 30 },
+};
 
 const scenario = () => useDevStore.getState();
 
@@ -172,6 +205,9 @@ export const mockDataSource: DataSource = {
   },
   async getEngagement(): Promise<Engagement> {
     return { streakDays: STREAK[scenario().userState] };
+  },
+  async getProgressStats(): Promise<ProgressStats> {
+    return PROGRESS_STATS[scenario().userState];
   },
   async getWords(): Promise<WordListItem[]> {
     return buildWords(scenario().userState);

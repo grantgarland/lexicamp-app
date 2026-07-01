@@ -45,6 +45,17 @@ function addedLabel(createdAt: Date, t: TFunction): string {
   return t('wordList.addedMonthsAgo', { count: Math.round(days / 30) });
 }
 
+/** Relative "next review" label (Due now / Today / Tomorrow / in N days · weeks). */
+function dueLabel(dueAt: Date, t: TFunction): string {
+  const ms = dueAt.getTime() - Date.now();
+  if (ms <= 0) return t('wordList.dueNow');
+  const days = Math.round(ms / DAY);
+  if (days === 0) return t('wordList.dueToday');
+  if (days === 1) return t('wordList.dueTomorrow');
+  if (days < 14) return t('wordList.dueInDays', { count: days });
+  return t('wordList.dueInWeeks', { count: Math.round(days / 7) });
+}
+
 function sortWords(list: WordListItem[], sortBy: SortId): WordListItem[] {
   const arr = [...list];
   switch (sortBy) {
@@ -69,6 +80,7 @@ export function WordListScreen() {
   const [sortBy, setSortBy] = useState<SortId>('newest');
   const [filterTiers, setFilterTiers] = useState<Set<TierId>>(new Set());
   const [filterOpen, setFilterOpen] = useState(false);
+  const [detailWord, setDetailWord] = useState<WordListItem | null>(null);
   const [pendingDelete, setPendingDelete] = useState<WordListItem | null>(null);
   // Optimistic removal until the real delete mutation (03 write) lands.
   const [removed, setRemoved] = useState<string[]>([]);
@@ -138,9 +150,7 @@ export function WordListScreen() {
               key={w.id}
               word={{ native: w.native, target: w.target, stability: w.stability, added: addedLabel(w.createdAt, t) }}
               isPremium={isPaid}
-              onPress={() => {
-                /* TODO(W-03): open word-detail sheet */
-              }}
+              onPress={() => setDetailWord(w)}
               onDelete={() => setPendingDelete(w)}
               onAddToDeck={() => {
                 /* TODO(W-08/W-07): add-to-deck sheet (paid) or premium gate (free) */
@@ -165,6 +175,16 @@ export function WordListScreen() {
           setSortBy('newest');
           setFilterTiers(new Set());
           setFilterOpen(false);
+        }}
+      />
+
+      {/* W-03 — Word detail */}
+      <WordDetailSheet
+        word={detailWord}
+        onClose={() => setDetailWord(null)}
+        onDelete={(w) => {
+          setDetailWord(null);
+          setPendingDelete(w);
         }}
       />
 
@@ -286,6 +306,58 @@ function FilterSortSheet({
   );
 }
 
+// W-03 — Word detail bottom sheet.
+function WordDetailSheet({ word, onClose, onDelete }: { word: WordListItem | null; onClose: () => void; onDelete: (w: WordListItem) => void }) {
+  const { theme } = useUnistyles();
+  const { t } = useTranslation();
+  const tier = word ? getTierByStability(word.stability) : null;
+  return (
+    <Sheet visible={word != null} onClose={onClose}>
+      {word != null && tier != null && (
+        <View>
+          <View style={styles.detailHead}>
+            <RawText style={styles.detailWord}>{word.native}</RawText>
+            <RawText style={styles.detailTarget}>{word.target}</RawText>
+          </View>
+          <View style={styles.detailMetaRow}>
+            <View style={styles.posPill}>
+              <RawText style={styles.posPillText}>{word.pos}</RawText>
+            </View>
+            <TierBadge tier={tier.id} variant="pill" size="md" />
+          </View>
+          <View style={[styles.memoryCard, { backgroundColor: tier.bg, borderColor: tier.border }]}>
+            <View style={styles.memoryTop}>
+              <RawText style={[styles.memoryTier, { color: tier.text }]}>{t(`tier.${tier.id}.name`)}</RawText>
+              <RawText style={[styles.memoryDays, { color: tier.text }]}>{t('wordList.memoryStrengthDays', { count: Math.round(word.stability) })}</RawText>
+            </View>
+            <RawText style={[styles.memoryDesc, { color: tier.text }]}>{t(`tier.${tier.id}.desc`)}</RawText>
+            <RawText style={[styles.memoryHint, { color: tier.text, borderTopColor: tier.border }]}>{t('wordList.memoryHint')}</RawText>
+          </View>
+          <RawText style={styles.detailSectionLabel}>{t('wordList.example')}</RawText>
+          <RawText style={styles.detailExample}>&ldquo;{word.example}&rdquo;</RawText>
+          <View style={styles.detailGrid}>
+            <DetailMeta label={t('wordList.nextReview')} value={dueLabel(word.dueAt, t)} />
+            <DetailMeta label={t('wordList.reviews')} value={t('wordList.reviewsValue', { count: word.reps })} />
+            <DetailMeta label={t('wordList.addedLabel')} value={addedLabel(word.createdAt, t)} />
+          </View>
+          <Pressable onPress={() => onDelete(word)} accessibilityRole="button" style={({ pressed }) => [styles.detailDelete, pressed && { opacity: 0.85 }]}>
+            <IconTrash size={17} color={theme.color.danger} />
+            <RawText style={styles.detailDeleteText}>{t('wordList.deleteWord')}</RawText>
+          </Pressable>
+        </View>
+      )}
+    </Sheet>
+  );
+}
+function DetailMeta({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.detailMeta}>
+      <RawText style={styles.detailMetaLabel}>{label}</RawText>
+      <RawText style={styles.detailMetaValue}>{value}</RawText>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create((theme) => {
   const { color, fonts, palette } = theme;
   return {
@@ -315,6 +387,28 @@ const styles = StyleSheet.create((theme) => {
     sheetActions: { flexDirection: 'row', gap: 10, paddingTop: 16 },
     sheetActionReset: { flex: 1 },
     sheetActionApply: { flex: 2 },
+
+    // Word detail sheet
+    detailHead: { marginBottom: 14 },
+    detailWord: { fontFamily: fonts.serif.bold, fontSize: 24, color: color.textStrong, letterSpacing: -0.3 },
+    detailTarget: { fontFamily: fonts.sans.regular, fontSize: 16, color: color.textMuted, marginTop: 3 },
+    detailMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
+    posPill: { backgroundColor: palette.slate[100], borderRadius: 4, paddingVertical: 2, paddingHorizontal: 8 },
+    posPillText: { fontFamily: fonts.sans.semibold, fontSize: 12, color: color.textMuted },
+    memoryCard: { borderWidth: theme.borderWidth.thin, borderRadius: 10, padding: 12, marginBottom: 14 },
+    memoryTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+    memoryTier: { fontFamily: fonts.sans.bold, fontSize: 12 },
+    memoryDays: { fontFamily: fonts.sans.semibold, fontSize: 12 },
+    memoryDesc: { fontFamily: fonts.sans.regular, fontSize: 12, lineHeight: 17, opacity: 0.85 },
+    memoryHint: { fontFamily: fonts.sans.regular, fontSize: 11, lineHeight: 15, opacity: 0.7, marginTop: 8, paddingTop: 8, borderTopWidth: theme.borderWidth.thin },
+    detailSectionLabel: { fontFamily: fonts.sans.bold, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', color: color.textMuted, marginBottom: 6 },
+    detailExample: { fontFamily: fonts.sans.regular, fontSize: 14, fontStyle: 'italic', lineHeight: 21, color: color.textBody, marginBottom: 16 },
+    detailGrid: { flexDirection: 'row', gap: 12, marginBottom: 18 },
+    detailMeta: { flex: 1 },
+    detailMetaLabel: { fontFamily: fonts.sans.bold, fontSize: 10, letterSpacing: 0.5, textTransform: 'uppercase', color: color.textMuted, marginBottom: 3 },
+    detailMetaValue: { fontFamily: fonts.sans.medium, fontSize: 13, color: color.textBody },
+    detailDelete: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(209, 73, 91, 0.12)', borderRadius: 10, paddingVertical: 12 },
+    detailDeleteText: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.danger },
 
     // Delete confirm sheet
     confirm: { alignItems: 'center', paddingTop: 4 },

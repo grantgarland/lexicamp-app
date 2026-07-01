@@ -22,7 +22,13 @@ export default function TabsLayout() {
   const searchOpen = useUiStore((s) => s.searchOpen);
   const setSearchOpen = useUiStore((s) => s.setSearchOpen);
 
-  const active: TabId = pathname.startsWith('/words') ? 'words' : 'home';
+  const active: TabId = pathname.startsWith('/words')
+    ? 'words'
+    : pathname.startsWith('/progress')
+      ? 'progress'
+      : pathname.startsWith('/settings')
+        ? 'settings'
+        : 'home';
 
   return (
     <View style={styles.root}>
@@ -56,7 +62,8 @@ export default function TabsLayout() {
             if (searchOpen) setSearchOpen(false);
             if (id === 'home') router.navigate('/');
             else if (id === 'words') router.navigate('/words');
-            // progress / settings routes arrive with those screens.
+            else if (id === 'progress') router.navigate('/progress');
+            else if (id === 'settings') router.navigate('/settings');
           }}
         />
       </View>

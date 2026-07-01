@@ -24,9 +24,25 @@ export interface WordListItem {
   id: string;
   native: string;
   target: string;
+  /** Part of speech (noun / verb / adj. …). */
+  pos: string;
+  /** An example sentence using the word. */
+  example: string;
   /** FSRS stability (days) → drives the row's tier indicator. */
   stability: number;
+  /** Completed reviews so far. */
+  reps: number;
   createdAt: Date;
+  /** Next scheduled review. */
+  dueAt: Date;
+}
+
+/** All-time study signals for the Progress screen (future: derived from study_events). */
+export interface ProgressStats {
+  sessionsTotal: number;
+  avgAccuracy: number; // 0–100
+  bestStreak: number; // days
+  daysActive: number;
 }
 
 export interface DataSource {
@@ -35,6 +51,8 @@ export interface DataSource {
   getActiveDeck(): Promise<Deck>;
   getDeckCards(): Promise<DeckCards>;
   getEngagement(): Promise<Engagement>;
+  /** All-time study stats for the Progress screen. */
+  getProgressStats(): Promise<ProgressStats>;
   /** The user's saved words for the Word List (newest first). */
   getWords(): Promise<WordListItem[]>;
   /** The due-now study queue, resolved to quiz view-models (capped per session). */
