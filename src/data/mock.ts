@@ -5,7 +5,7 @@ import type { BufferedRating, QuizCardItem } from '@/domain/quiz';
 import type { Card, CardFsrsState, Deck, Entitlement, Profile } from '@/domain/types';
 import { type DevPlan, type DevUserState, useDevStore } from '@/store/devStore';
 
-import type { DataSource, DeckCards, Engagement } from './DataSource';
+import type { DataSource, DeckCards, Engagement, WordListItem } from './DataSource';
 
 const USER_ID = 'dev-user';
 const DECK_ID = 'dev-deck';
@@ -103,6 +103,58 @@ const QUIZ_SESSION: QuizCardItem[] = [
   { id: 'q_speedbump', tierId: 'summit', mode: 'recall', content: { frontWord: 'speed bump / hump', frontSub: 'A raised ridge in a road to slow traffic.', frontPrompt: 'Recall the Russian phrase.', backWord: 'лежачий полицейский', backPhonetic: '/lʲɪˈʐatɕɪj pəlʲɪˈtsɛjskʲɪj/', backPos: 'noun', backExample: 'Впереди лежачий полицейский — сбавь скорость.' } },
 ];
 
+// A pool of real ES(native/headword) → EN(target) pairs. Sized to cover the largest
+// scenario (summit = 60 words) so no display duplicates. Stands in for translations_cache.
+const WORD_BANK: { native: string; target: string }[] = [
+  { native: 'melancólico', target: 'melancholic' }, { native: 'efímero', target: 'ephemeral' },
+  { native: 'nostalgia', target: 'nostalgia' }, { native: 'serendipia', target: 'serendipity' },
+  { native: 'agradecido', target: 'grateful' }, { native: 'felicidad', target: 'happiness' },
+  { native: 'libertad', target: 'freedom' }, { native: 'sueño', target: 'dream' },
+  { native: 'esperanza', target: 'hope' }, { native: 'sabiduría', target: 'wisdom' },
+  { native: 'amistad', target: 'friendship' }, { native: 'valentía', target: 'bravery' },
+  { native: 'tristeza', target: 'sadness' }, { native: 'alegría', target: 'joy' },
+  { native: 'recuerdo', target: 'memory' }, { native: 'paisaje', target: 'landscape' },
+  { native: 'amanecer', target: 'dawn' }, { native: 'atardecer', target: 'dusk' },
+  { native: 'estrella', target: 'star' }, { native: 'montaña', target: 'mountain' },
+  { native: 'río', target: 'river' }, { native: 'bosque', target: 'forest' },
+  { native: 'océano', target: 'ocean' }, { native: 'desierto', target: 'desert' },
+  { native: 'tormenta', target: 'storm' }, { native: 'lluvia', target: 'rain' },
+  { native: 'nieve', target: 'snow' }, { native: 'viento', target: 'wind' },
+  { native: 'fuego', target: 'fire' }, { native: 'tierra', target: 'earth' },
+  { native: 'cielo', target: 'sky' }, { native: 'corazón', target: 'heart' },
+  { native: 'alma', target: 'soul' }, { native: 'mente', target: 'mind' },
+  { native: 'fuerza', target: 'strength' }, { native: 'paciencia', target: 'patience' },
+  { native: 'gratitud', target: 'gratitude' }, { native: 'humildad', target: 'humility' },
+  { native: 'orgullo', target: 'pride' }, { native: 'destino', target: 'destiny' },
+  { native: 'camino', target: 'path' }, { native: 'viaje', target: 'journey' },
+  { native: 'aventura', target: 'adventure' }, { native: 'misterio', target: 'mystery' },
+  { native: 'silencio', target: 'silence' }, { native: 'susurro', target: 'whisper' },
+  { native: 'eco', target: 'echo' }, { native: 'sombra', target: 'shadow' },
+  { native: 'reflejo', target: 'reflection' }, { native: 'destello', target: 'sparkle' },
+  { native: 'anhelo', target: 'longing' }, { native: 'consuelo', target: 'comfort' },
+  { native: 'asombro', target: 'awe' }, { native: 'certeza', target: 'certainty' },
+  { native: 'duda', target: 'doubt' }, { native: 'verdad', target: 'truth' },
+  { native: 'promesa', target: 'promise' }, { native: 'secreto', target: 'secret' },
+  { native: 'tesoro', target: 'treasure' }, { native: 'anochecer', target: 'nightfall' },
+];
+
+// Word List fixtures — same per-tier distribution as the deck (so "My Words" count
+// matches Home's wordsSaved), with real display text + a spread createdAt. Newest first.
+function buildWords(userState: DevUserState): WordListItem[] {
+  const dist = DISTRIBUTION[userState];
+  const now = Date.now();
+  const out: WordListItem[] = [];
+  let g = 0;
+  dist.forEach((count, tierIdx) => {
+    for (let j = 0; j < count; j += 1, g += 1) {
+      const w = WORD_BANK[g % WORD_BANK.length];
+      const createdAt = g % 6 === 0 ? new Date(now - 1 * HOUR) : new Date(now - (g + 2) * DAY);
+      out.push({ id: `w${tierIdx}_${j}`, native: w.native, target: w.target, stability: TIER_STABILITY[tierIdx], createdAt });
+    }
+  });
+  return out.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
 const scenario = () => useDevStore.getState();
 
 export const mockDataSource: DataSource = {
@@ -120,6 +172,9 @@ export const mockDataSource: DataSource = {
   },
   async getEngagement(): Promise<Engagement> {
     return { streakDays: STREAK[scenario().userState] };
+  },
+  async getWords(): Promise<WordListItem[]> {
+    return buildWords(scenario().userState);
   },
   async getDueCards(): Promise<QuizCardItem[]> {
     return QUIZ_SESSION;

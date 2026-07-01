@@ -11,7 +11,7 @@ export { EmptyState, type EmptyStateProps } from './EmptyState';
 export { Input, type InputProps } from './Input';
 export { ProgressDots, type ProgressDotsProps } from './ProgressDots';
 export { Sheet, type SheetProps } from './Sheet';
-export { TabBar, type TabBarProps, type TabId } from './TabBar';
+export { TabBar, TAB_BAR_CORE_HEIGHT, type TabBarProps, type TabId } from './TabBar';
 export {
   IconHome,
   IconList,
@@ -38,6 +38,7 @@ export {
   IconArrowDown,
   IconMountain,
   IconInfo,
+  IconSliders,
   type IconProps,
 } from './icons';
 export { PRESS_OPACITY, pressableOpacity } from './pressable';

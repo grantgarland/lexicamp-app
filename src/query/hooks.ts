@@ -45,6 +45,13 @@ export function useDueCards() {
   return { cards: q.data ?? [], isLoading: q.isLoading };
 }
 
+/** The user's saved words for the Word List (read). */
+export function useWords() {
+  const userState = useDevStore((s) => s.userState); // dev knob → query key
+  const q = useQuery({ queryKey: ['words', userState], queryFn: () => ds.getWords() });
+  return { words: q.data ?? [], isLoading: q.isLoading };
+}
+
 /** Commit a completed quiz session (write) — invalidates home/due reads on success. */
 export function useCommitQuizSession() {
   const qc = useQueryClient();

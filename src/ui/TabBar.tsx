@@ -14,6 +14,11 @@ import { Text } from './Text';
 
 export type TabId = 'home' | 'words' | 'progress' | 'settings';
 
+/** Core bar height (excl. bottom safe-area inset). The tab layout renders the bar
+ *  absolutely and reserves this much scene space (+ inset) via a spacer. Matches the
+ *  `bar`/`tab` styles below (tab minHeight 48 + top border). */
+export const TAB_BAR_CORE_HEIGHT = 49;
+
 // Labels resolve from i18n (`tabs.<id>`) at render — the registry only fixes id + icon.
 const TABS: { id: TabId; Icon: ComponentType<IconProps> }[] = [
   { id: 'home', Icon: IconHome },

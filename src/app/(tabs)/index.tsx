@@ -1,6 +1,6 @@
 import { HomeScreen } from '@/screens/HomeScreen';
 
-// Home tab (H-01). The /kitchen-sink route remains available for kit development.
+// Home tab (H-01). Route: `/`.
 export default function Index() {
   return <HomeScreen />;
 }

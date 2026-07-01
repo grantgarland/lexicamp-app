@@ -18,12 +18,25 @@ export interface Engagement {
   streakDays: number;
 }
 
+/** A saved word resolved for the Word List (card ⋈ translations_cache ⋈ fsrs_state).
+ *  `native` = the learning-language headword (bold), `target` = its translation. */
+export interface WordListItem {
+  id: string;
+  native: string;
+  target: string;
+  /** FSRS stability (days) → drives the row's tier indicator. */
+  stability: number;
+  createdAt: Date;
+}
+
 export interface DataSource {
   getProfile(): Promise<Profile>;
   getEntitlement(): Promise<Entitlement>;
   getActiveDeck(): Promise<Deck>;
   getDeckCards(): Promise<DeckCards>;
   getEngagement(): Promise<Engagement>;
+  /** The user's saved words for the Word List (newest first). */
+  getWords(): Promise<WordListItem[]>;
   /** The due-now study queue, resolved to quiz view-models (capped per session). */
   getDueCards(): Promise<QuizCardItem[]>;
   /** Commit a completed session's buffered ratings (03 batch write). */

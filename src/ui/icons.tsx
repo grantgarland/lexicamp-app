@@ -204,6 +204,19 @@ export function IconPlay({ size = 18, color = STROKE }: IconProps) {
   );
 }
 
+export function IconSliders({ size = 16, color = STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round">
+      <Line x1="4" y1="7.5" x2="20" y2="7.5" />
+      <Line x1="4" y1="12" x2="20" y2="12" />
+      <Line x1="4" y1="16.5" x2="20" y2="16.5" />
+      <Circle cx="9" cy="7.5" r="2.3" fill="none" />
+      <Circle cx="15" cy="12" r="2.3" fill="none" />
+      <Circle cx="8" cy="16.5" r="2.3" fill="none" />
+    </Svg>
+  );
+}
+
 export function IconInfo({ size = 13, color = STROKE }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">

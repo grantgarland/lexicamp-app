@@ -7,13 +7,13 @@ import type { TFunction } from 'i18next';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet as RNStyleSheet, View } from 'react-native';
-import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
 import { useHomeData } from '@/query/hooks';
-import { SearchView } from './SearchScreen';
+import { useUiStore } from '@/store/uiStore';
 
 import {
   IconArrowRight,
@@ -28,7 +28,6 @@ import {
   MasteryCard,
   RawText,
   Screen,
-  TabBar,
   Tooltip,
   ForgettingCurve,
   CardSorter,
@@ -47,42 +46,28 @@ function todayLabel(t: TFunction) {
 export function HomeScreen() {
   const router = useRouter();
   const { t } = useTranslation();
-  const [searchOpen, setSearchOpen] = useState(false);
+  const setSearchOpen = useUiStore((s) => s.setSearchOpen);
   const { snapshot, streakDays } = useHomeData();
   const isEmpty = snapshot?.isEmpty ?? false;
   return (
     <Screen edges={['top']}>
-      {/* Content area. The search overlay fills THIS (above the nav); the TabBar is a
-          later sibling, so it + the FAB paint on top of the overlay → nav stays visible. */}
-      <View style={styles.body}>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <GreetingRow dateLabel={todayLabel(t)} streakDays={streakDays} subline={isEmpty ? t('home.firstDayOnMountain') : undefined} />
-          {snapshot != null && (
-            <>
-              <MasteryCard tierCounts={snapshot.tierCounts} wordsSaved={snapshot.wordsSaved} isEmpty={isEmpty} />
-              {isEmpty ? (
-                <AddFirstWordCard onAdd={() => setSearchOpen(true)} />
-              ) : (
-                <>
-                  <StudyCard due={snapshot.needRecallToday} onStudy={() => router.push('/quiz')} />
-                  <StatTiles needRecall={snapshot.needRecallTotal} addedToday={snapshot.addedToday} dueTomorrow={snapshot.dueTomorrow} />
-                </>
-              )}
-              <HowItWorksCard defaultOpen={isEmpty} />
-            </>
-          )}
-        </ScrollView>
-        {searchOpen && (
-          <Animated.View
-            entering={SlideInDown.duration(300)}
-            exiting={SlideOutDown.duration(240)}
-            style={styles.searchOverlay}
-          >
-            <SearchView onClose={() => setSearchOpen(false)} />
-          </Animated.View>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <GreetingRow dateLabel={todayLabel(t)} streakDays={streakDays} subline={isEmpty ? t('home.firstDayOnMountain') : undefined} />
+        {snapshot != null && (
+          <>
+            <MasteryCard tierCounts={snapshot.tierCounts} wordsSaved={snapshot.wordsSaved} isEmpty={isEmpty} />
+            {isEmpty ? (
+              <AddFirstWordCard onAdd={() => setSearchOpen(true)} />
+            ) : (
+              <>
+                <StudyCard due={snapshot.needRecallToday} onStudy={() => router.push('/quiz')} />
+                <StatTiles needRecall={snapshot.needRecallTotal} addedToday={snapshot.addedToday} dueTomorrow={snapshot.dueTomorrow} />
+              </>
+            )}
+            <HowItWorksCard defaultOpen={isEmpty} />
+          </>
         )}
-      </View>
-      <TabBar activeTab="home" sheetOpen={searchOpen} onFabPress={() => setSearchOpen((o) => !o)} />
+      </ScrollView>
     </Screen>
   );
 }
@@ -289,19 +274,6 @@ function AddFirstWordCard({ onAdd }: { onAdd: () => void }) {
 const styles = StyleSheet.create((theme) => {
   const { color, palette, fonts } = theme;
   return {
-    body: { flex: 1 },
-    searchOverlay: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: color.canvas,
-      borderTopLeftRadius: theme.radius.xl,
-      borderTopRightRadius: theme.radius.xl,
-      overflow: 'hidden',
-      boxShadow: theme.shadow.xl,
-    },
     content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16, gap: 14 },
 
     greetRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
