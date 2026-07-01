@@ -3,6 +3,7 @@
 export { Text, RawText, FONT_SCALE_MAX, type TextProps, type TextVariant } from './Text';
 export { Screen, SCREEN_MAX_WIDTH, type ScreenProps } from './Screen';
 export { Tooltip, InfoDot, type TooltipProps } from './Tooltip';
+export { Confetti, type ConfettiProps } from './Confetti';
 export { Button, type ButtonProps, type ButtonVariant } from './Button';
 export { Card, type CardProps } from './Card';
 export { TierBadge, type TierBadgeProps, type TierBadgeVariant } from './TierBadge';

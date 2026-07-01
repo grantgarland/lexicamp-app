@@ -184,7 +184,10 @@
     "resultA11y": "{{word}} — detalles del repaso",
     "pikaGoodJobA11y": "Pika levantando el pulgar",
     "pikaHugsA11y": "Pika dando un abrazo de ánimo",
-    "pikaCelebrateA11y": "Pika celebrando"
+    "pikaCelebrateA11y": "Pika celebrando",
+    "masteryHeadline": "¡Llegaste a la Cumbre!",
+    "masteryWordsLabel": "Palabras dominadas",
+    "keepClimbing": "Sigue subiendo →"
   },
   "wordRow": {
     "addToDeckA11y": "Añadir al mazo",

@@ -7,7 +7,8 @@ import { useState } from 'react';
 import type { TFunction } from 'i18next';
 import { useRouter } from 'expo-router';
 import { ActivityIndicator, Image, Pressable, ScrollView, View } from 'react-native';
-import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, FadeOut, SlideInDown, SlideOutDown, ZoomIn } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import type { BufferedRating, QuizCardItem, UiRating } from '@/domain/quiz';
@@ -17,6 +18,7 @@ import { useCommitQuizSession, useDueCards, useHomeData } from '@/query/hooks';
 import { TIERS, type TierId } from '@/theme/tiers';
 import {
   Button,
+  Confetti,
   EmptyState,
   IconArrowDown,
   IconArrowUp,
@@ -38,6 +40,9 @@ import pikaHugs from '../../assets/images/pika/hugs.png';
 import pikaCelebrate from '../../assets/images/pika/celebrate.png';
 
 type Phase = 'quiz' | 'end' | 'stats' | 'promo';
+
+// Summit celebration confetti (Q-10) — warm golds + a few accent flecks (milestone spec).
+const SUMMIT_CONFETTI = ['#e87722', '#f7a855', '#f5b91e', '#d97706', '#2f5e7e', '#459a6b', '#f472b6'];
 
 // Per-word review outcome for the results tooltip. A display heuristic until the FSRS
 // recompute (ts-fsrs) lands: only a clean recall promotes (and only below Summit); a
@@ -122,6 +127,7 @@ export function QuizScreen() {
         reviewed={ratings.length}
         streak={streakDays}
         onSeeResults={() => setPhase('stats')}
+        onStudyAgain={studyAgain}
       />
     );
   }
@@ -215,27 +221,52 @@ function QuizTopBar({ current, total, onClose }: { current: number; total: numbe
 }
 
 // ── End screen (Q-07 / Q-08) ─────────────────────────────────────────────────
-function EndScreen({ good, accuracy, reviewed, streak, onSeeResults }: { good: boolean; accuracy: number; reviewed: number; streak: number; onSeeResults: () => void }) {
+function EndScreen({
+  good,
+  accuracy,
+  reviewed,
+  streak,
+  onSeeResults,
+  onStudyAgain,
+}: {
+  good: boolean;
+  accuracy: number;
+  reviewed: number;
+  streak: number;
+  onSeeResults: () => void;
+  onStudyAgain: () => void;
+}) {
   const { t } = useTranslation();
   return (
     <Screen edges={['top', 'bottom']}>
       <View style={styles.centered}>
-        <Image
-          source={good ? pikaGoodJob : pikaHugs}
-          style={styles.pika}
-          resizeMode="contain"
-          accessibilityLabel={good ? t('quiz.pikaGoodJobA11y') : t('quiz.pikaHugsA11y')}
-        />
-        <RawText style={styles.endTitle}>{good ? t('quiz.endGreat') : t('quiz.endKeepGoing')}</RawText>
-        <RawText style={styles.endSub}>{good ? t('quiz.endStatsSub', { accuracy, streak }) : t('quiz.endEncourage')}</RawText>
-        <View style={styles.endStats}>
+        <Animated.View entering={ZoomIn.duration(500).delay(80)}>
+          <Image
+            source={good ? pikaGoodJob : pikaHugs}
+            style={styles.pika}
+            resizeMode="contain"
+            accessibilityLabel={good ? t('quiz.pikaGoodJobA11y') : t('quiz.pikaHugsA11y')}
+          />
+        </Animated.View>
+        <Animated.View entering={FadeInDown.duration(400).delay(180)} style={styles.endHead}>
+          <RawText style={styles.endTitle}>{good ? t('quiz.endGreat') : t('quiz.endKeepGoing')}</RawText>
+          <RawText style={styles.endSub}>{good ? t('quiz.endStatsSub', { accuracy, streak }) : t('quiz.endEncourage')}</RawText>
+        </Animated.View>
+        <Animated.View entering={FadeInDown.duration(400).delay(300)} style={styles.endStats}>
           <EndStat label={t('quiz.accuracy')} value={`${accuracy}%`} />
           <View style={styles.endStatDivider} />
           <EndStat label={t('quiz.reviewed')} value={t('quiz.wordsValue', { count: reviewed })} />
           <View style={styles.endStatDivider} />
           <EndStat label={t('quiz.streak')} value={t('quiz.daysValue', { count: streak })} />
-        </View>
-        <Button title={t('quiz.seeResults')} variant="primary" onPress={onSeeResults} />
+        </Animated.View>
+        <Animated.View entering={FadeInDown.duration(400).delay(400)} style={styles.endCtas}>
+          <Button title={t('quiz.seeResults')} variant="primary" onPress={onSeeResults} />
+          {!good && (
+            <View style={styles.endSecondary}>
+              <Button title={t('quiz.studyAgain')} variant="secondary" onPress={onStudyAgain} />
+            </View>
+          )}
+        </Animated.View>
       </View>
     </Screen>
   );
@@ -338,32 +369,58 @@ function RatingPill({ rating }: { rating: UiRating }) {
   );
 }
 
-// ── Tier promotion (Q-10) ────────────────────────────────────────────────────
+// ── Mastery / Summit celebration (Q-10) ──────────────────────────────────────
 function TierPromoScreen({ words, onContinue }: { words: string[]; onContinue: () => void }) {
-  const { theme } = useUnistyles();
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.promo}>
-      <View style={styles.promoBadge}>
-        <IconMountain size={36} color={theme.palette.blue[900]} />
-        <RawText style={styles.promoBadgeLabel}>{t('quiz.summitBadge')}</RawText>
-      </View>
-      <RawText style={styles.promoTitle}>
-        {t('quiz.reachedMastery', { count: words.length })}
-      </RawText>
-      <RawText style={styles.promoSub}>{t('quiz.masterySub')}</RawText>
-      <View style={styles.promoList}>
-        {words.map((w) => (
-          <View key={w} style={styles.promoWordRow}>
-            <RawText style={styles.promoStar}>★</RawText>
-            <RawText style={styles.promoWord}>{w}</RawText>
-          </View>
-        ))}
-      </View>
-      <Image source={pikaCelebrate} style={styles.promoPika} resizeMode="contain" accessibilityLabel={t('quiz.pikaCelebrateA11y')} />
-      <Pressable onPress={onContinue} accessibilityRole="button" style={({ pressed }) => [styles.promoBtn, pressed && { transform: [{ scale: 0.97 }] }]}>
-        <RawText style={styles.promoBtnText}>{t('quiz.keepGoing')}</RawText>
-      </Pressable>
+    <View style={styles.promoRoot}>
+      <Confetti colors={SUMMIT_CONFETTI} />
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.promoScroll, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 24 }]}
+      >
+        {/* Ascending stars over the badge */}
+        <Animated.View entering={FadeIn.duration(400).delay(500)} style={styles.promoStars}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <RawText key={i} style={[styles.promoStarTop, { fontSize: 10 + i * 2 }]}>
+              ★
+            </RawText>
+          ))}
+        </Animated.View>
+
+        {/* Summit badge — pops in with a gold glow */}
+        <Animated.View entering={ZoomIn.duration(560).delay(150)} style={styles.promoBadgeWrap}>
+          <TierBadge tier="summit" variant="badge" px={116} />
+        </Animated.View>
+
+        <Animated.View entering={FadeInDown.duration(400).delay(320)} style={styles.promoHead}>
+          <RawText style={styles.promoTitle}>{t('quiz.masteryHeadline')}</RawText>
+          <RawText style={styles.promoSub}>{t('quiz.masterySub')}</RawText>
+        </Animated.View>
+
+        {words.length > 0 && (
+          <Animated.View entering={FadeInDown.duration(400).delay(440)} style={styles.promoList}>
+            <RawText style={styles.promoWordsLabel}>{t('quiz.masteryWordsLabel')}</RawText>
+            {words.map((w) => (
+              <View key={w} style={styles.promoWordRow}>
+                <RawText style={styles.promoStar}>★</RawText>
+                <RawText style={styles.promoWord}>{w}</RawText>
+              </View>
+            ))}
+          </Animated.View>
+        )}
+
+        <Animated.View entering={ZoomIn.duration(520).delay(320)}>
+          <Image source={pikaCelebrate} style={styles.promoPika} resizeMode="contain" accessibilityLabel={t('quiz.pikaCelebrateA11y')} />
+        </Animated.View>
+
+        <Animated.View entering={FadeInDown.duration(400).delay(560)} style={styles.promoCtaWrap}>
+          <Pressable onPress={onContinue} accessibilityRole="button" style={({ pressed }) => [styles.promoBtn, pressed && { transform: [{ scale: 0.97 }] }]}>
+            <RawText style={styles.promoBtnText}>{t('quiz.keepClimbing')}</RawText>
+          </Pressable>
+        </Animated.View>
+      </ScrollView>
     </View>
   );
 }
@@ -411,9 +468,12 @@ const styles = StyleSheet.create((theme) => {
     // end screen
     centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, gap: 8 },
     pika: { width: 160, height: 160, marginBottom: 20 },
+    endHead: { alignItems: 'center' },
     endTitle: { fontFamily: fonts.serif.bold, fontSize: 30, color: color.textStrong, textAlign: 'center', letterSpacing: -0.4 },
-    endSub: { fontFamily: fonts.sans.regular, fontSize: 14, lineHeight: 22, color: color.textMuted, textAlign: 'center', maxWidth: 260, marginBottom: 12 },
+    endSub: { fontFamily: fonts.sans.regular, fontSize: 14, lineHeight: 22, color: color.textMuted, textAlign: 'center', maxWidth: 260, marginTop: 6, marginBottom: 12 },
     endStats: { flexDirection: 'row', alignSelf: 'stretch', borderWidth: theme.borderWidth.thin, borderColor: color.border, borderRadius: radius.lg, marginBottom: 12 },
+    endCtas: { alignSelf: 'stretch', width: '100%' },
+    endSecondary: { marginTop: 10 },
     endStat: { flex: 1, paddingVertical: 14, alignItems: 'center' },
     endStatValue: { fontFamily: fonts.mono.bold, fontSize: 17, color: color.textStrong },
     endStatLabel: { fontFamily: fonts.sans.medium, fontSize: 11, color: color.textMuted, marginTop: 3 },
@@ -437,18 +497,23 @@ const styles = StyleSheet.create((theme) => {
     statsFooter: { flexDirection: 'row', gap: 10, paddingHorizontal: 20, paddingTop: 14, paddingBottom: 8, borderTopWidth: theme.borderWidth.thin, borderTopColor: color.border },
     footerBtn: { flex: 1 },
 
-    // tier promo
-    promo: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, paddingVertical: 32, backgroundColor: palette.blue[900], gap: 6 },
-    promoBadge: { width: 100, height: 100, borderRadius: 50, backgroundColor: palette.pika[300], alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
-    promoBadgeLabel: { fontFamily: fonts.mono.bold, fontSize: 10, color: palette.blue[800], letterSpacing: 0.4, marginTop: 2 },
-    promoTitle: { fontFamily: fonts.serif.bold, fontSize: 28, color: '#fff', textAlign: 'center', letterSpacing: -0.4, marginBottom: 8 },
-    promoSub: { fontFamily: fonts.sans.regular, fontSize: 14, lineHeight: 22, color: 'rgba(255,255,255,0.6)', textAlign: 'center', maxWidth: 240, marginBottom: 20 },
-    promoList: { alignSelf: 'center', width: '100%', maxWidth: 240, gap: 6, marginBottom: 20 },
-    promoPika: { width: 110, height: 110, marginBottom: 24 },
-    promoWordRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: radius.md, paddingVertical: 8, paddingHorizontal: 14 },
-    promoStar: { fontSize: 13, color: palette.pika[300] },
+    // mastery / summit celebration (Q-10)
+    promoRoot: { flex: 1, backgroundColor: '#221e1b' },
+    promoScroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
+    promoStars: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, marginBottom: 10 },
+    promoStarTop: { color: '#f7a855' },
+    promoBadgeWrap: { marginBottom: 18, borderRadius: 999, boxShadow: '0 0 28px rgba(232, 119, 34, 0.45)' },
+    promoHead: { alignItems: 'center', marginBottom: 14 },
+    promoTitle: { fontFamily: fonts.serif.bold, fontSize: 26, color: '#fff', textAlign: 'center', letterSpacing: -0.4, lineHeight: 32 },
+    promoSub: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 20, color: 'rgba(255,255,255,0.6)', textAlign: 'center', maxWidth: 250, marginTop: 8 },
+    promoList: { width: '100%', maxWidth: 260, alignSelf: 'center', marginBottom: 16 },
+    promoWordsLabel: { fontFamily: fonts.sans.bold, fontSize: 10, letterSpacing: 0.8, textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', textAlign: 'center', marginBottom: 8 },
+    promoWordRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, marginTop: 5 },
+    promoStar: { fontSize: 12, color: '#f7a855' },
     promoWord: { fontFamily: fonts.serif.semibold, fontSize: 15, color: '#fff' },
-    promoBtn: { backgroundColor: color.accent, borderRadius: radius.md, paddingVertical: 15, paddingHorizontal: 40, boxShadow: theme.shadow.accent },
+    promoPika: { width: 148, height: 148, marginBottom: 20 },
+    promoCtaWrap: { alignSelf: 'stretch', width: '100%' },
+    promoBtn: { alignSelf: 'stretch', backgroundColor: color.accent, borderRadius: 14, paddingVertical: 15, alignItems: 'center', boxShadow: '0 6px 20px rgba(232, 119, 34, 0.35)' },
     promoBtnText: { fontFamily: fonts.sans.bold, fontSize: 16, color: '#fff' },
 
     // exit confirm

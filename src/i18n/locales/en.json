@@ -184,7 +184,10 @@
     "resultA11y": "{{word}} — review details",
     "pikaGoodJobA11y": "Pika giving a thumbs up",
     "pikaHugsA11y": "Pika giving an encouraging hug",
-    "pikaCelebrateA11y": "Pika celebrating"
+    "pikaCelebrateA11y": "Pika celebrating",
+    "masteryHeadline": "You reached the Summit!",
+    "masteryWordsLabel": "Words mastered",
+    "keepClimbing": "Keep climbing →"
   },
   "wordRow": {
     "addToDeckA11y": "Add to deck",
