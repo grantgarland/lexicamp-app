@@ -4,29 +4,47 @@
 // `useProgressData()`. The bottom nav is the persistent tab layout, not this screen.
 import type { TFunction } from 'i18next';
 import { useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import type { WordListItem } from '@/data/DataSource';
 import { useTranslation } from '@/i18n';
-import { useProgressData } from '@/query/hooks';
-import { TIERS } from '@/theme/tiers';
-import { EmptyState, IconBook, IconChart, IconCheck, IconFire, IconLock, IconMountain, RawText, Screen, SegmentedTabs } from '@/ui';
+import { dueLabel } from '@/lib/relativeTime';
+import { useProgressData, useWords } from '@/query/hooks';
+import { getTierByStability, TIERS } from '@/theme/tiers';
+import { EmptyState, IconBook, IconChart, IconCheck, IconFire, IconInfo, IconLock, IconMountain, RawText, Screen, SegmentedTabs, Sheet } from '@/ui';
 
 type SubTab = 'route' | 'inventory' | 'pace';
+type InfoKey = 'cefr' | 'fsrs';
 
-// CEFR tier bounds by cumulative mastered words (from the tier registry's wordCount).
-const THRESH = TIERS.map((t) => t.wordCount); // [100,500,1000,2000,3000]
-const tierMin = (i: number) => (i === 0 ? 0 : THRESH[i - 1]);
-const tierMax = (i: number) => THRESH[i];
-function currentTierIdx(mastered: number): number {
-  const i = THRESH.findIndex((max) => mastered < max);
-  return i === -1 ? TIERS.length - 1 : i;
+// A saved word's review "health" from its next-due date: overdue → needs review,
+// due within 2 days → approaching, else healthy. Drives the tier-drawer row dot.
+const DAY_MS = 24 * 60 * 60 * 1000;
+function wordHealth(dueAt: Date): 'due' | 'soon' | 'ok' {
+  const ms = dueAt.getTime() - Date.now();
+  if (ms <= 0) return 'due';
+  if (ms <= 2 * DAY_MS) return 'soon';
+  return 'ok';
+}
+
+// The user's current CEFR tier = the highest tier they hold any words at (drives the
+// "You are here" position). Mock-scale word bounds (real thresholds are 100s–1000s) so the
+// per-tier progress bar reads sensibly with the demo's ~12–60 saved words.
+const MOCK_MAX = [20, 40, 46, 55, Number.POSITIVE_INFINITY]; // upper word bound per tier
+const tierMin = (i: number) => (i === 0 ? 0 : MOCK_MAX[i - 1]);
+const tierMax = (i: number) => MOCK_MAX[i];
+function highestTierIndex(tierCounts: number[]): number {
+  for (let i = tierCounts.length - 1; i >= 0; i -= 1) if ((tierCounts[i] ?? 0) > 0) return i;
+  return 0;
 }
 
 export function ProgressScreen() {
   const { t } = useTranslation();
   const [tab, setTab] = useState<SubTab>('route');
+  const [info, setInfo] = useState<InfoKey | null>(null);
+  const [tierDrawer, setTierDrawer] = useState<number | null>(null);
   const data = useProgressData();
+  const { words } = useWords();
 
   return (
     <Screen edges={['top']}>
@@ -43,45 +61,60 @@ export function ProgressScreen() {
         />
       </View>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {tab === 'route' && <RouteTab data={data} t={t} />}
-        {tab === 'inventory' && <InventoryTab data={data} t={t} />}
+        {tab === 'route' && <RouteTab data={data} t={t} onInfo={setInfo} />}
+        {tab === 'inventory' && <InventoryTab data={data} t={t} onInfo={setInfo} onOpenTier={setTierDrawer} />}
         {tab === 'pace' && <PaceTab data={data} t={t} />}
       </ScrollView>
+
+      <InfoSheet infoKey={info} t={t} onClose={() => setInfo(null)} />
+      <TierWordsSheet tierIdx={tierDrawer} words={words} t={t} onClose={() => setTierDrawer(null)} />
     </Screen>
   );
 }
 
-type TabProps = { data: ReturnType<typeof useProgressData>; t: TFunction };
+type TabProps = {
+  data: ReturnType<typeof useProgressData>;
+  t: TFunction;
+  onInfo?: (key: InfoKey) => void;
+  onOpenTier?: (tierIdx: number) => void;
+};
 
 // ── Route ────────────────────────────────────────────────────────────────────
-function RouteTab({ data, t }: TabProps) {
+function RouteTab({ data, t, onInfo }: TabProps) {
   const { theme } = useUnistyles();
-  const mastered = data.totalMastered;
+  const count = data.totalSaved;
 
-  if (data.totalSaved === 0) {
+  if (count === 0) {
     return <EmptyState style={styles.empty} illustration={<IconMountain size={52} color={theme.color.evergreen} />} title={t('progress.emptyRouteTitle')} body={t('progress.emptyRouteBody')} />;
   }
 
-  const cur = currentTierIdx(mastered);
+  const cur = highestTierIndex(data.tierCounts);
   const curTier = TIERS[cur];
   const next = TIERS[cur + 1];
   const min = tierMin(cur);
   const max = tierMax(cur);
-  const pctInTier = Math.max(0, Math.min(100, Math.round(((mastered - min) / (max - min)) * 100)));
+  const pctInTier = Math.max(0, Math.min(100, Math.round(((count - min) / (max - min)) * 100)));
 
   return (
     <View style={styles.pad}>
       {/* You are here */}
       <View style={[styles.hereCard, { backgroundColor: curTier.bg, borderColor: curTier.border }]}>
-        <RawText style={styles.hereLabel}>{t('progress.youAreHere')}</RawText>
-        <RawText style={styles.hereTier}>{t(`tier.${curTier.id}.name`)}</RawText>
-        <RawText style={[styles.hereCefr, { color: curTier.color }]}>{t('progress.cefr', { level: curTier.cefr })}</RawText>
+        <View style={styles.hereTop}>
+          <View style={styles.hereTopText}>
+            <RawText style={styles.hereLabel}>{t('progress.youAreHere')}</RawText>
+            <RawText style={styles.hereTier}>{t(`tier.${curTier.id}.name`)}</RawText>
+            <RawText style={[styles.hereCefr, { color: curTier.color }]}>{t('progress.cefr', { level: curTier.cefr })}</RawText>
+          </View>
+          <Pressable onPress={() => onInfo?.('cefr')} accessibilityRole="button" accessibilityLabel={t('progress.aboutCefr')} hitSlop={8} style={({ pressed }) => [styles.hereInfo, { borderColor: curTier.border }, pressed && { opacity: 0.6 }]}>
+            <IconInfo size={13} color={curTier.color} />
+          </Pressable>
+        </View>
         <View style={styles.hereRow}>
           <RawText style={styles.hereMastered}>
-            {mastered}
-            <RawText style={styles.hereMasteredSuffix}> {t('progress.mastered')}</RawText>
+            {count}
+            <RawText style={styles.hereMasteredSuffix}> {t('progress.wordsSuffix')}</RawText>
           </RawText>
-          <RawText style={styles.hereToNext}>{next ? t('progress.toNext', { count: max - mastered, tier: t(`tier.${next.id}.name`) }) : t('progress.summitReached')}</RawText>
+          <RawText style={styles.hereToNext}>{next ? t('progress.toNext', { count: Math.max(0, max - count), tier: t(`tier.${next.id}.name`) }) : t('progress.summitReached')}</RawText>
         </View>
         <View style={styles.hereTrack}>
           <View style={[styles.hereFill, { width: `${pctInTier}%`, backgroundColor: curTier.color }]} />
@@ -124,7 +157,7 @@ function RouteTab({ data, t }: TabProps) {
                   <RawText style={styles.ladderStatus}>
                     {locked && t('progress.unlockAt', { count: tierMin(origIdx) })}
                     {completed && t('progress.masteredPlus', { count: tierMin(origIdx) })}
-                    {current && t('progress.ofWords', { count: mastered, max: tierMax(origIdx) })}
+                    {current && (Number.isFinite(tierMax(origIdx)) ? t('progress.ofWords', { count, max: tierMax(origIdx) }) : t('progress.atSummitWords', { count }))}
                   </RawText>
                 </View>
               </View>
@@ -136,7 +169,7 @@ function RouteTab({ data, t }: TabProps) {
 }
 
 // ── Inventory ─────────────────────────────────────────────────────────────────
-function InventoryTab({ data, t }: TabProps) {
+function InventoryTab({ data, t, onInfo, onOpenTier }: TabProps) {
   const { theme } = useUnistyles();
   if (data.totalSaved === 0) {
     return <EmptyState style={styles.empty} illustration={<IconBook size={48} color={theme.color.textMuted} />} title={t('progress.emptyInventoryTitle')} body={t('progress.emptyInventoryBody')} />;
@@ -144,8 +177,15 @@ function InventoryTab({ data, t }: TabProps) {
   const total = data.tierCounts.reduce((a, b) => a + b, 0);
   return (
     <View style={styles.pad}>
-      <RawText style={styles.sectionTitle}>{t('progress.wordsByTier')}</RawText>
-      <RawText style={styles.sectionSub}>{t('progress.wordsByTierSub', { count: total })}</RawText>
+      <View style={styles.invHead}>
+        <View style={styles.invHeadText}>
+          <RawText style={styles.sectionTitle}>{t('progress.wordsByTier')}</RawText>
+          <RawText style={styles.sectionSub}>{t('progress.wordsByTierSub', { count: total })}</RawText>
+        </View>
+        <Pressable onPress={() => onInfo?.('fsrs')} accessibilityRole="button" accessibilityLabel={t('progress.aboutFsrs')} hitSlop={8} style={({ pressed }) => [styles.headInfo, pressed && { opacity: 0.6 }]}>
+          <IconInfo size={14} color={theme.color.textMuted} />
+        </Pressable>
+      </View>
       {/* Segmented bar */}
       <View style={styles.invBar}>
         {TIERS.map((tier, i) => {
@@ -154,13 +194,21 @@ function InventoryTab({ data, t }: TabProps) {
           return <View key={tier.id} style={{ flex: c, backgroundColor: tier.color }} />;
         })}
       </View>
-      {/* Per-tier rows */}
+      {/* Per-tier rows — pressable when the tier holds words */}
       <View style={styles.invRows}>
         {TIERS.map((tier, i) => {
           const c = data.tierCounts[i] ?? 0;
           const pct = total > 0 ? Math.round((c / total) * 100) : 0;
+          const empty = c === 0;
           return (
-            <View key={tier.id} style={styles.invRow}>
+            <Pressable
+              key={tier.id}
+              disabled={empty}
+              onPress={() => onOpenTier?.(i)}
+              accessibilityRole={empty ? undefined : 'button'}
+              accessibilityLabel={empty ? undefined : t('progress.viewTierWords', { tier: t(`tier.${tier.id}.name`) })}
+              style={({ pressed }) => [styles.invRow, empty && styles.invRowEmpty, pressed && !empty && { opacity: 0.7 }]}
+            >
               <View style={[styles.invDot, { backgroundColor: tier.color }]} />
               <View style={styles.invRowBody}>
                 <View style={styles.invRowTop}>
@@ -172,7 +220,7 @@ function InventoryTab({ data, t }: TabProps) {
                   <RawText style={styles.invPct}>{pct}%</RawText>
                 </View>
               </View>
-            </View>
+            </Pressable>
           );
         })}
       </View>
@@ -186,11 +234,12 @@ function PaceTab({ data, t }: TabProps) {
   if (data.totalSaved === 0 || data.sessionsTotal === 0) {
     return <EmptyState style={styles.empty} illustration={<IconChart size={48} color={theme.color.brand} />} title={t('progress.emptyPaceTitle')} body={t('progress.emptyPaceBody')} />;
   }
-  const cur = currentTierIdx(data.totalMastered);
+  const count = data.totalSaved;
+  const cur = highestTierIndex(data.tierCounts);
   const next = TIERS[cur + 1];
-  const masteryRate = data.daysActive > 0 ? data.totalMastered / data.daysActive : 0;
-  const canProject = data.totalMastered > 0 && data.daysActive > 0 && next != null;
-  const wordsToNext = next ? tierMax(cur) - data.totalMastered : 0;
+  const masteryRate = data.daysActive > 0 ? count / data.daysActive : 0;
+  const canProject = count > 0 && data.daysActive > 0 && next != null && Number.isFinite(tierMax(cur));
+  const wordsToNext = canProject ? Math.max(0, tierMax(cur) - count) : 0;
   const daysToNext = canProject && masteryRate > 0 ? Math.ceil(wordsToNext / masteryRate) : null;
   const reviewsPerDay = data.daysActive > 0 ? Math.round((data.sessionsTotal * 20) / data.daysActive) : 0;
 
@@ -259,6 +308,67 @@ function PaceTab({ data, t }: TabProps) {
   );
 }
 
+// ── Info sheets (CEFR ladder / FSRS stability) ────────────────────────────────
+function InfoSheet({ infoKey, t, onClose }: { infoKey: InfoKey | null; t: TFunction; onClose: () => void }) {
+  const { theme } = useUnistyles();
+  const isCefr = infoKey === 'cefr';
+  return (
+    <Sheet visible={infoKey != null} onClose={onClose} title={t(isCefr ? 'progress.cefrTitle' : 'progress.fsrsTitle')}>
+      <RawText style={styles.infoIntro}>{t(isCefr ? 'progress.cefrIntro' : 'progress.fsrsIntro')}</RawText>
+      <View style={styles.infoList}>
+        {TIERS.map((tier) => (
+          <View key={tier.id} style={[styles.infoRow, { backgroundColor: isCefr ? tier.bg : theme.palette.slate[50], borderColor: isCefr ? tier.border : theme.color.border }]}>
+            <View style={[isCefr ? styles.infoDotRound : styles.infoDotSquare, { backgroundColor: tier.color }]} />
+            <View style={styles.infoRowBody}>
+              <RawText style={styles.infoTier}>{t(`tier.${tier.id}.name`)}</RawText>
+              <RawText style={styles.infoDesc}>{isCefr ? `${tier.wordCount}+ ${t('progress.wordsSuffix')}` : t(`tier.${tier.id}.desc`)}</RawText>
+            </View>
+            <RawText style={styles.infoMeta}>{isCefr ? t('progress.cefr', { level: tier.cefr }) : t(`tier.${tier.id}.stabilityRange`)}</RawText>
+          </View>
+        ))}
+      </View>
+      <RawText style={styles.infoNote}>{t(isCefr ? 'progress.cefrNote' : 'progress.fsrsNote')}</RawText>
+    </Sheet>
+  );
+}
+
+// ── Tier word drawer (P3) — lists the saved words at one stability tier ───────────
+function TierWordsSheet({ tierIdx, words, t, onClose }: { tierIdx: number | null; words: WordListItem[]; t: TFunction; onClose: () => void }) {
+  const { theme } = useUnistyles();
+  const tier = tierIdx != null ? TIERS[tierIdx] : null;
+  const rows = tier != null ? words.filter((w) => getTierByStability(w.stability).id === tier.id) : [];
+  const healthColor: Record<'due' | 'soon' | 'ok', string> = {
+    due: theme.color.danger,
+    soon: theme.palette.amber[500],
+    ok: theme.palette.green[500],
+  };
+  return (
+    <Sheet visible={tierIdx != null} onClose={onClose} title={tier != null ? t(`tier.${tier.id}.name`) : ''}>
+      {tier != null && (
+        <RawText style={styles.drawerSub}>{t('progress.tierWordsSub', { count: rows.length, range: t(`tier.${tier.id}.stabilityRange`) })}</RawText>
+      )}
+      <ScrollView style={styles.drawerScroll} showsVerticalScrollIndicator={false}>
+        {rows.map((w) => {
+          const health = wordHealth(w.dueAt);
+          return (
+            <View key={w.id} style={styles.drawerRow}>
+              <View style={[styles.drawerHealth, { backgroundColor: healthColor[health] }]} />
+              <View style={styles.drawerRowBody}>
+                <RawText style={styles.drawerWord}>{w.native}</RawText>
+                <RawText style={styles.drawerTarget}>{w.target}</RawText>
+              </View>
+              <View style={styles.drawerRight}>
+                <RawText style={[styles.drawerDue, { color: healthColor[health] }]}>{dueLabel(w.dueAt, t)}</RawText>
+                <RawText style={styles.drawerReps}>{t('progress.reviewsCount', { count: w.reps })}</RawText>
+              </View>
+            </View>
+          );
+        })}
+      </ScrollView>
+    </Sheet>
+  );
+}
+
 const styles = StyleSheet.create((theme) => {
   const { color, palette, fonts, radius } = theme;
   return {
@@ -274,6 +384,9 @@ const styles = StyleSheet.create((theme) => {
 
     // Route — you are here
     hereCard: { borderWidth: 1.5, borderRadius: radius.lg, paddingHorizontal: 18, paddingVertical: 16, marginBottom: 24 },
+    hereTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+    hereTopText: { flex: 1 },
+    hereInfo: { width: 26, height: 26, borderRadius: 13, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.5)' },
     hereLabel: { fontFamily: fonts.sans.bold, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', color: color.textMuted, marginBottom: 4 },
     hereTier: { fontFamily: fonts.serif.bold, fontSize: 20, color: color.textStrong },
     hereCefr: { fontFamily: fonts.sans.semibold, fontSize: 12, marginTop: 3 },
@@ -299,9 +412,13 @@ const styles = StyleSheet.create((theme) => {
     ladderStatus: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted },
 
     // Inventory
+    invHead: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 },
+    invHeadText: { flex: 1 },
+    headInfo: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.slate[100], marginLeft: 8 },
     invBar: { flexDirection: 'row', height: 20, borderRadius: 10, overflow: 'hidden', backgroundColor: palette.slate[100], marginBottom: 20 },
     invRows: { gap: 10 },
     invRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: color.surfaceCard, borderWidth: theme.borderWidth.thin, borderColor: color.border, borderRadius: radius.md, paddingVertical: 12, paddingHorizontal: 14 },
+    invRowEmpty: { opacity: 0.5 },
     invDot: { width: 10, height: 10, borderRadius: 3 },
     invRowBody: { flex: 1 },
     invRowTop: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
@@ -332,5 +449,29 @@ const styles = StyleSheet.create((theme) => {
     allTile: { width: '47.5%', flexGrow: 1, backgroundColor: color.surfaceCard, borderWidth: theme.borderWidth.thin, borderColor: color.border, borderRadius: radius.lg, paddingHorizontal: 14, paddingVertical: 14 },
     allValue: { fontFamily: fonts.serif.bold, fontSize: 26, color: color.textStrong, marginTop: 8, marginBottom: 4 },
     allLabel: { fontFamily: fonts.sans.semibold, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase', color: color.textMuted },
+
+    // Info sheets (CEFR / FSRS)
+    infoIntro: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 20, color: color.textMuted, marginBottom: 14 },
+    infoList: { gap: 8 },
+    infoRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: theme.borderWidth.thin, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 12 },
+    infoDotRound: { width: 8, height: 8, borderRadius: 4 },
+    infoDotSquare: { width: 10, height: 10, borderRadius: 3 },
+    infoRowBody: { flex: 1 },
+    infoTier: { fontFamily: fonts.sans.bold, fontSize: 13, color: color.textStrong },
+    infoDesc: { fontFamily: fonts.sans.regular, fontSize: 11, lineHeight: 15, color: color.textMuted, marginTop: 1 },
+    infoMeta: { fontFamily: fonts.mono.regular, fontSize: 11, color: color.textMuted, textAlign: 'right' },
+    infoNote: { fontFamily: fonts.sans.regular, fontSize: 11, lineHeight: 16, fontStyle: 'italic', color: color.textMuted, marginTop: 12 },
+
+    // Tier word drawer
+    drawerSub: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted, marginBottom: 12 },
+    drawerScroll: { maxHeight: 360 },
+    drawerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.border },
+    drawerHealth: { width: 8, height: 8, borderRadius: 4 },
+    drawerRowBody: { flex: 1 },
+    drawerWord: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.textStrong },
+    drawerTarget: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted, marginTop: 1 },
+    drawerRight: { alignItems: 'flex-end' },
+    drawerDue: { fontFamily: fonts.sans.semibold, fontSize: 12 },
+    drawerReps: { fontFamily: fonts.sans.regular, fontSize: 11, color: color.textMuted, marginTop: 2 },
   };
 });

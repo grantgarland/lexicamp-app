@@ -92,7 +92,8 @@ export function QuizScreen() {
   const stats = sessionStats(ratings);
 
   const closeAttempt = () => {
-    if (phase === 'quiz' && ratings.length > 0) setShowExit(true);
+    // Always confirm exiting an in-progress session (even before the first rating).
+    if (phase === 'quiz') setShowExit(true);
     else router.back();
   };
 

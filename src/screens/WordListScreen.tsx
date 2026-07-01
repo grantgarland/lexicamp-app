@@ -284,6 +284,7 @@ export function WordListScreen() {
             });
           }
           setPendingDeckDelete(null);
+          setDetailDeck(null); // also close the deck detail sheet if it was open
         }}
         onClose={() => setPendingDeckDelete(null)}
       />
@@ -305,6 +306,7 @@ export function WordListScreen() {
       <DeckDetailSheet
         deck={detailDeck}
         words={words}
+        removed={removed}
         removedFromDeck={removedFromDeck}
         onClose={() => setDetailDeck(null)}
         onStudy={() => {
@@ -595,6 +597,7 @@ function CreateDeckSheet({ visible, words, initialWord, onClose, onCreate }: { v
 function DeckDetailSheet({
   deck,
   words,
+  removed,
   removedFromDeck,
   onClose,
   onStudy,
@@ -604,6 +607,7 @@ function DeckDetailSheet({
 }: {
   deck: DeckSummary | null;
   words: WordListItem[];
+  removed: string[];
   removedFromDeck: Set<string>;
   onClose: () => void;
   onStudy: () => void;
@@ -616,9 +620,10 @@ function DeckDetailSheet({
     if (deck == null) return [];
     return words
       .slice(0, deck.wordCount)
+      .filter((w) => !removed.includes(w.id)) // globally deleted words drop from the deck too
       .filter((w) => !removedFromDeck.has(`${deck.id}|${w.id}`))
       .sort((a, b) => a.stability - b.stability); // tier low → high
-  }, [deck, words, removedFromDeck]);
+  }, [deck, words, removed, removedFromDeck]);
   return (
     <Sheet visible={deck != null} onClose={onClose} title={deck?.name}>
       {deck != null && (
