@@ -130,8 +130,8 @@
   },
   "rating": {
     "prompt": "¿Qué tan bien la recordaste?",
-    "again": "Otra vez",
-    "againSub": "Sin recuerdo",
+    "again": "Limitado",
+    "againSub": "Recuerdo limitado",
     "almost": "Casi",
     "almostSub": "Recuerdo parcial",
     "gotIt": "La sé",
@@ -170,7 +170,21 @@
     "exitBodyRated": "Has calificado {{rated}} de {{total}} tarjetas. Si sales ahora, no se guardará ninguna de esas calificaciones: el historial de repaso solo se actualiza al completar una sesión.",
     "exitBodyNone": "Si sales ahora, no se guardará ningún progreso. El historial de repaso solo se actualiza al completar una sesión.",
     "exitConfirm": "Salir del cuestionario",
-    "keepStudying": "Seguir estudiando"
+    "keepStudying": "Seguir estudiando",
+    "reviewed": "Repasadas",
+    "wordsValue_one": "{{count}} palabra",
+    "wordsValue_other": "{{count}} palabras",
+    "resultPromotedTitle": "Ascendida",
+    "resultPromoted": "{{from}} → {{to}} — este repaso llevó su estabilidad de memoria más allá del umbral de {{to}}.",
+    "resultSummitTitle": "Repasada en la Cumbre",
+    "resultSummit": "Ya dominada: este repaso la reforzó; la estabilidad se mantiene por encima de 30 días.",
+    "resultReviewedTitle": "Repasada",
+    "resultHeld": "La estabilidad subió pero se quedó en {{tier}}. Un par de recuerdos claros más para ascender.",
+    "resultLimited": "El recuerdo fue limitado, así que se queda en {{tier}} y volverá antes.",
+    "resultA11y": "{{word}} — detalles del repaso",
+    "pikaGoodJobA11y": "Pika levantando el pulgar",
+    "pikaHugsA11y": "Pika dando un abrazo de ánimo",
+    "pikaCelebrateA11y": "Pika celebrando"
   },
   "wordRow": {
     "addToDeckA11y": "Añadir al mazo",

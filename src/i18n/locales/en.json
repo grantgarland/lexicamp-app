@@ -130,8 +130,8 @@
   },
   "rating": {
     "prompt": "How well did you recall it?",
-    "again": "Again",
-    "againSub": "No recall",
+    "again": "Limited",
+    "againSub": "Limited recall",
     "almost": "Almost",
     "almostSub": "Partial recall",
     "gotIt": "Got it",
@@ -170,7 +170,21 @@
     "exitBodyRated": "You've rated {{rated}} of {{total}} cards. If you exit now, none of those ratings will be saved — review history only updates when a session completes.",
     "exitBodyNone": "If you exit now, no progress will be saved. Review history only updates when a session completes.",
     "exitConfirm": "Exit quiz",
-    "keepStudying": "Keep studying"
+    "keepStudying": "Keep studying",
+    "reviewed": "Reviewed",
+    "wordsValue_one": "{{count}} word",
+    "wordsValue_other": "{{count}} words",
+    "resultPromotedTitle": "Promoted",
+    "resultPromoted": "{{from}} → {{to}} — this recall pushed its memory stability past the {{to}} threshold.",
+    "resultSummitTitle": "Reviewed at Summit",
+    "resultSummit": "Already mastered — this review reinforced it; stability stays above 30 days.",
+    "resultReviewedTitle": "Reviewed",
+    "resultHeld": "Stability rose but it stayed in {{tier}}. A couple more clean recalls to promote.",
+    "resultLimited": "Recall was limited, so it stays in {{tier}} and comes back sooner.",
+    "resultA11y": "{{word}} — review details",
+    "pikaGoodJobA11y": "Pika giving a thumbs up",
+    "pikaHugsA11y": "Pika giving an encouraging hug",
+    "pikaCelebrateA11y": "Pika celebrating"
   },
   "wordRow": {
     "addToDeckA11y": "Add to deck",

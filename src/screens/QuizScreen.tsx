@@ -4,8 +4,9 @@
 // quiz write pattern. Composes the kit (QuizCardFront/Back, RatingButtons, TierBadge)
 // + screen-specific phases built inline (top bar, end, stats, tier-promo, exit confirm).
 import { useState } from 'react';
+import type { TFunction } from 'i18next';
 import { useRouter } from 'expo-router';
-import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
@@ -13,11 +14,13 @@ import type { BufferedRating, QuizCardItem, UiRating } from '@/domain/quiz';
 import { sessionStats } from '@/domain/quiz';
 import { useTranslation } from '@/i18n';
 import { useCommitQuizSession, useDueCards, useHomeData } from '@/query/hooks';
+import { TIERS, type TierId } from '@/theme/tiers';
 import {
   Button,
   EmptyState,
   IconArrowDown,
   IconArrowUp,
+  IconInfo,
   IconMountain,
   IconX,
   QuizCardBack,
@@ -26,9 +29,43 @@ import {
   RawText,
   Screen,
   TierBadge,
+  Tooltip,
 } from '@/ui';
 
+// Sanctioned Pika moments only (Q-07/Q-08 end, Q-10 mastery) — assets from the brand kit.
+import pikaGoodJob from '../../assets/images/pika/good-job.png';
+import pikaHugs from '../../assets/images/pika/hugs.png';
+import pikaCelebrate from '../../assets/images/pika/celebrate.png';
+
 type Phase = 'quiz' | 'end' | 'stats' | 'promo';
+
+// Per-word review outcome for the results tooltip. A display heuristic until the FSRS
+// recompute (ts-fsrs) lands: only a clean recall promotes (and only below Summit); a
+// reviewed word does NOT necessarily change tier.
+type OutcomeKind = 'promoted' | 'summit' | 'held' | 'limited';
+function reviewOutcome(tierId: TierId, rating: UiRating): { kind: OutcomeKind; toId?: TierId } {
+  const i = TIERS.findIndex((tt) => tt.id === tierId);
+  if (rating === 'got_it') {
+    if (i >= 0 && i < TIERS.length - 1) return { kind: 'promoted', toId: TIERS[i + 1].id };
+    return { kind: 'summit' };
+  }
+  if (rating === 'almost') return { kind: 'held' };
+  return { kind: 'limited' };
+}
+function outcomeTip(t: TFunction, tierId: TierId, rating: UiRating): { title: string; content: string } {
+  const o = reviewOutcome(tierId, rating);
+  const name = (id: TierId) => t(`tier.${id}.name`);
+  switch (o.kind) {
+    case 'promoted':
+      return { title: t('quiz.resultPromotedTitle'), content: t('quiz.resultPromoted', { from: name(tierId), to: name(o.toId as TierId) }) };
+    case 'summit':
+      return { title: t('quiz.resultSummitTitle'), content: t('quiz.resultSummit') };
+    case 'held':
+      return { title: t('quiz.resultReviewedTitle'), content: t('quiz.resultHeld', { tier: name(tierId) }) };
+    default:
+      return { title: t('quiz.resultReviewedTitle'), content: t('quiz.resultLimited', { tier: name(tierId) }) };
+  }
+}
 
 export function QuizScreen() {
   const router = useRouter();
@@ -78,7 +115,15 @@ export function QuizScreen() {
   };
 
   if (phase === 'end') {
-    return <EndScreen good={stats.accuracy >= 60} accuracy={stats.accuracy} streak={streakDays} onSeeResults={() => setPhase('stats')} />;
+    return (
+      <EndScreen
+        good={stats.accuracy >= 60}
+        accuracy={stats.accuracy}
+        reviewed={ratings.length}
+        streak={streakDays}
+        onSeeResults={() => setPhase('stats')}
+      />
+    );
   }
   if (phase === 'stats') {
     return <StatsScreen cards={cards} ratings={ratings} onStudyAgain={studyAgain} onDone={done} />;
@@ -120,7 +165,8 @@ export function QuizScreen() {
 
   return (
     <Screen edges={['top', 'bottom']}>
-      <QuizTopBar current={idx + (revealed ? 1 : 0)} total={total} onClose={closeAttempt} />
+      {/* 1-based, advances on traversal to a new card (idx+1), not on flip/reveal. */}
+      <QuizTopBar current={idx + 1} total={total} onClose={closeAttempt} />
       {card != null && (
         <View style={styles.cardArea}>
           <ScrollView contentContainerStyle={styles.cardScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
@@ -169,20 +215,23 @@ function QuizTopBar({ current, total, onClose }: { current: number; total: numbe
 }
 
 // ── End screen (Q-07 / Q-08) ─────────────────────────────────────────────────
-function EndScreen({ good, accuracy, streak, onSeeResults }: { good: boolean; accuracy: number; streak: number; onSeeResults: () => void }) {
-  const { theme } = useUnistyles();
+function EndScreen({ good, accuracy, reviewed, streak, onSeeResults }: { good: boolean; accuracy: number; reviewed: number; streak: number; onSeeResults: () => void }) {
   const { t } = useTranslation();
   return (
     <Screen edges={['top', 'bottom']}>
       <View style={styles.centered}>
-        {/* Pika pose placeholder — swap for the brand asset when bundled. */}
-        <View style={[styles.pika, { backgroundColor: good ? theme.palette.green[100] : theme.palette.blue[100] }]}>
-          <IconMountain size={48} color={good ? theme.color.evergreen : theme.color.brand} />
-        </View>
+        <Image
+          source={good ? pikaGoodJob : pikaHugs}
+          style={styles.pika}
+          resizeMode="contain"
+          accessibilityLabel={good ? t('quiz.pikaGoodJobA11y') : t('quiz.pikaHugsA11y')}
+        />
         <RawText style={styles.endTitle}>{good ? t('quiz.endGreat') : t('quiz.endKeepGoing')}</RawText>
         <RawText style={styles.endSub}>{good ? t('quiz.endStatsSub', { accuracy, streak }) : t('quiz.endEncourage')}</RawText>
         <View style={styles.endStats}>
           <EndStat label={t('quiz.accuracy')} value={`${accuracy}%`} />
+          <View style={styles.endStatDivider} />
+          <EndStat label={t('quiz.reviewed')} value={t('quiz.wordsValue', { count: reviewed })} />
           <View style={styles.endStatDivider} />
           <EndStat label={t('quiz.streak')} value={t('quiz.daysValue', { count: streak })} />
         </View>
@@ -228,15 +277,25 @@ function StatsScreen({ cards, ratings, onStudyAgain, onDone }: { cards: QuizCard
       <ScrollView style={styles.statsList} contentContainerStyle={styles.statsListContent}>
         {cards.map((c, i) => {
           const rating = ratings[i]?.rating ?? 'again';
+          const tip = outcomeTip(t, c.tierId, rating);
           return (
-            <View key={c.id} style={styles.statRow}>
-              <TierBadge tier={c.tierId} variant="pill" size="sm" />
-              <View style={styles.statRowBody}>
-                <RawText style={styles.statWord}>{c.content.backWord}</RawText>
-                <RawText style={styles.statSource}>{c.content.frontWord}</RawText>
+            <Tooltip
+              key={c.id}
+              title={tip.title}
+              content={tip.content}
+              indicator={false}
+              accessibilityLabel={t('quiz.resultA11y', { word: c.content.backWord })}
+            >
+              <View style={styles.statRow}>
+                <TierBadge tier={c.tierId} variant="pill" size="sm" />
+                <View style={styles.statRowBody}>
+                  <RawText style={styles.statWord}>{c.content.backWord}</RawText>
+                  <RawText style={styles.statSource}>{c.content.frontWord}</RawText>
+                </View>
+                <IconInfo size={13} color={theme.color.textFaint} />
+                <RatingPill rating={rating} />
               </View>
-              <RatingPill rating={rating} />
-            </View>
+            </Tooltip>
           );
         })}
       </ScrollView>
@@ -301,6 +360,7 @@ function TierPromoScreen({ words, onContinue }: { words: string[]; onContinue: (
           </View>
         ))}
       </View>
+      <Image source={pikaCelebrate} style={styles.promoPika} resizeMode="contain" accessibilityLabel={t('quiz.pikaCelebrateA11y')} />
       <Pressable onPress={onContinue} accessibilityRole="button" style={({ pressed }) => [styles.promoBtn, pressed && { transform: [{ scale: 0.97 }] }]}>
         <RawText style={styles.promoBtnText}>{t('quiz.keepGoing')}</RawText>
       </Pressable>
@@ -350,7 +410,7 @@ const styles = StyleSheet.create((theme) => {
 
     // end screen
     centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, gap: 8 },
-    pika: { width: 120, height: 120, borderRadius: 60, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+    pika: { width: 160, height: 160, marginBottom: 20 },
     endTitle: { fontFamily: fonts.serif.bold, fontSize: 30, color: color.textStrong, textAlign: 'center', letterSpacing: -0.4 },
     endSub: { fontFamily: fonts.sans.regular, fontSize: 14, lineHeight: 22, color: color.textMuted, textAlign: 'center', maxWidth: 260, marginBottom: 12 },
     endStats: { flexDirection: 'row', alignSelf: 'stretch', borderWidth: theme.borderWidth.thin, borderColor: color.border, borderRadius: radius.lg, marginBottom: 12 },
@@ -383,7 +443,8 @@ const styles = StyleSheet.create((theme) => {
     promoBadgeLabel: { fontFamily: fonts.mono.bold, fontSize: 10, color: palette.blue[800], letterSpacing: 0.4, marginTop: 2 },
     promoTitle: { fontFamily: fonts.serif.bold, fontSize: 28, color: '#fff', textAlign: 'center', letterSpacing: -0.4, marginBottom: 8 },
     promoSub: { fontFamily: fonts.sans.regular, fontSize: 14, lineHeight: 22, color: 'rgba(255,255,255,0.6)', textAlign: 'center', maxWidth: 240, marginBottom: 20 },
-    promoList: { alignSelf: 'center', width: '100%', maxWidth: 240, gap: 6, marginBottom: 28 },
+    promoList: { alignSelf: 'center', width: '100%', maxWidth: 240, gap: 6, marginBottom: 20 },
+    promoPika: { width: 110, height: 110, marginBottom: 24 },
     promoWordRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: radius.md, paddingVertical: 8, paddingHorizontal: 14 },
     promoStar: { fontSize: 13, color: palette.pika[300] },
     promoWord: { fontFamily: fonts.serif.semibold, fontSize: 15, color: '#fff' },

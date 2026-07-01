@@ -222,7 +222,8 @@ export function WordCharInput({ word, accentColor, borderColor, backgroundColor,
 
 const styles = StyleSheet.create(() => ({
   wrap: { position: 'relative', height: CELL_H, alignSelf: 'stretch' },
-  row: { alignItems: 'flex-end', paddingHorizontal: PAD },
+  // flexGrow + center: short answers sit centered in the card; long ones overflow → scroll.
+  row: { flexGrow: 1, justifyContent: 'center', alignItems: 'flex-end', paddingHorizontal: PAD },
   cell: { width: CELL_W, height: CELL_H, fontSize: FONT, textAlign: 'center', padding: 0 },
   fade: { position: 'absolute', top: 0, bottom: 0 },
   fadeLeft: { left: 0 },
