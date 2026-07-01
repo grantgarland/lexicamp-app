@@ -24,6 +24,7 @@ import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-c
 
 import { DevBadge } from '@/dev/DevBadge';
 import { queryClient } from '@/query/queryClient';
+import { PortalHost, Toast } from '@/ui';
 
 // Minimal root. Real navigation (NavShell / tabs) lands in P3–P4.
 // Registered names MUST match `theme.fonts.*` in `@/theme/theme` — one family per
@@ -59,6 +60,10 @@ export default function RootLayout() {
               {/* Quiz is an immersive full-screen modal (from Home "Study now"). */}
               <Stack.Screen name="quiz" options={{ presentation: 'fullScreenModal' }} />
             </Stack>
+            {/* In-app overlays (sheets/dialogs) + toasts render above everything, on top
+                of the persistent nav — see ui/Portal + ui/Sheet + ui/Toast. */}
+            <PortalHost />
+            <Toast />
             {__DEV__ ? <DevBadge /> : null}
           </BottomSheetModalProvider>
         </SafeAreaProvider>

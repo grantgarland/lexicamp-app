@@ -1,14 +1,15 @@
-// Sheet — bottom sheet / modal overlay, the RN realization of `_shared/sheet-overlay.js`.
-// Built on React Native's `Modal` (transparent, fade) with a navy scrim that dismisses on
-// tap and a bottom-anchored, rounded surface. This is the same proven primitive the
-// Tooltip uses; it renders above nav + tab bar reliably. Controlled via `visible`/`onClose`.
-import type { ReactNode } from 'react';
-import { Modal, Pressable, View } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+// Sheet — bottom sheet / modal overlay. Rendered through the in-app Portal (NOT RN
+// `Modal`), so sheets stack: opening a second sheet slides it up over the first, which
+// stays mounted behind it; dismissing slides back down to reveal it. Slide + scrim fade
+// via a single reanimated progress value; unmounts only after the close animation.
+import { type ReactNode, useEffect, useState } from 'react';
+import { Pressable, StyleSheet as RNStyleSheet, useWindowDimensions, View } from 'react-native';
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
+import { Portal } from './Portal';
 import { Text } from './Text';
 
 export interface SheetProps {
@@ -21,16 +22,39 @@ export interface SheetProps {
 }
 
 export function Sheet({ visible, onClose, title, children }: SheetProps) {
-  useUnistyles(); // subscribe to theme so styles re-resolve on theme change
+  useUnistyles();
   const insets = useSafeAreaInsets();
+  const { height: winH } = useWindowDimensions();
   const { t } = useTranslation();
+  const [mounted, setMounted] = useState(visible);
+  const [sheetH, setSheetH] = useState(0);
+  const p = useSharedValue(visible ? 1 : 0);
 
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      p.value = withTiming(1, { duration: 260, easing: Easing.out(Easing.cubic) });
+    } else {
+      p.value = withTiming(0, { duration: 200, easing: Easing.in(Easing.cubic) }, (finished) => {
+        if (finished) runOnJS(setMounted)(false);
+      });
+    }
+  }, [visible, p]);
+
+  const scrimStyle = useAnimatedStyle(() => ({ opacity: p.value }));
+  const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - p.value) * (sheetH || winH * 0.6) }] }));
+
+  if (!mounted) return null;
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      {/* GestureHandlerRootView so swipeable rows work inside the modal. */}
-      <GestureHandlerRootView style={styles.root}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={t('common.dismiss')} />
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]}>
+    <Portal>
+      <View style={styles.container} pointerEvents="box-none">
+        <Animated.View style={[styles.scrim, scrimStyle]}>
+          <Pressable style={RNStyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={t('common.dismiss')} />
+        </Animated.View>
+        <Animated.View
+          onLayout={(e) => setSheetH(e.nativeEvent.layout.height)}
+          style={[styles.sheet, sheetStyle, { paddingBottom: insets.bottom + 20 }]}
+        >
           <View style={styles.handle} />
           {title != null && (
             <Text variant="heading" style={styles.title}>
@@ -38,14 +62,15 @@ export function Sheet({ visible, onClose, title, children }: SheetProps) {
             </Text>
           )}
           {children}
-        </View>
-      </GestureHandlerRootView>
-    </Modal>
+        </Animated.View>
+      </View>
+    </Portal>
   );
 }
 
 const styles = StyleSheet.create((theme) => ({
-  root: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(24, 47, 63, 0.45)' },
+  container: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'flex-end' },
+  scrim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(24, 47, 63, 0.45)' },
   sheet: {
     backgroundColor: theme.color.surfaceCard,
     borderTopLeftRadius: theme.radius.xl,

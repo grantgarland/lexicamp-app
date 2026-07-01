@@ -190,9 +190,9 @@ const PROGRESS_STATS: Record<DevUserState, ProgressStats> = {
 
 // Custom decks (Premium). Static fixtures; word membership is not modeled in the mock.
 const DECKS: DeckSummary[] = [
-  { id: 'd_travel', name: 'Travel', wordCount: 12, reviews: 9, createdAt: new Date(Date.now() - 24 * DAY) },
-  { id: 'd_business', name: 'Business', wordCount: 8, reviews: 5, createdAt: new Date(Date.now() - 12 * DAY) },
-  { id: 'd_favorites', name: 'Favorites', wordCount: 5, reviews: 3, createdAt: new Date(Date.now() - 4 * DAY) },
+  { id: 'd_travel', name: 'Travel', wordCount: 12, reviews: 9, createdAt: new Date(Date.now() - 24 * DAY), lastReviewedAt: new Date(Date.now() - 2 * DAY) },
+  { id: 'd_business', name: 'Business', wordCount: 8, reviews: 5, createdAt: new Date(Date.now() - 12 * DAY), lastReviewedAt: new Date(Date.now() - 5 * HOUR) },
+  { id: 'd_favorites', name: 'Favorites', wordCount: 5, reviews: 3, createdAt: new Date(Date.now() - 4 * DAY), lastReviewedAt: null },
 ];
 
 const scenario = () => useDevStore.getState();

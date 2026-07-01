@@ -45,6 +45,8 @@ export interface DeckSummary {
   /** Times the deck has been studied. */
   reviews: number;
   createdAt: Date;
+  /** Last time the deck was studied (null = never). */
+  lastReviewedAt: Date | null;
 }
 
 /** All-time study signals for the Progress screen (future: derived from study_events). */

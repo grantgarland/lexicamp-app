@@ -13,7 +13,7 @@ import { StyleSheet } from 'react-native-unistyles';
 
 import { SearchView } from '@/screens/SearchScreen';
 import { useUiStore } from '@/store/uiStore';
-import { TAB_BAR_CORE_HEIGHT, TabBar, type TabId, Toast } from '@/ui';
+import { TAB_BAR_CORE_HEIGHT, TabBar, type TabId } from '@/ui';
 
 export default function TabsLayout() {
   const router = useRouter();
@@ -67,9 +67,6 @@ export default function TabsLayout() {
           }}
         />
       </View>
-
-      {/* Transient confirmation toasts (above the nav). */}
-      <Toast />
     </View>
   );
 }

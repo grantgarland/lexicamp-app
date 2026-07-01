@@ -1,20 +1,32 @@
-// UI store — ephemeral, cross-screen view state that isn't server/domain data. Today:
-// the search overlay open flag, so the persistent tab layout can render the search sheet
-// ABOVE the tab scenes while the bottom nav (a later sibling) still paints on top.
+// UI store — ephemeral, cross-screen view state that isn't server/domain data:
+// the search overlay flag + the app-wide toast.
 import { create } from 'zustand';
 
-export interface ToastState {
-  id: number;
+export type ToastVariant = 'info' | 'success' | 'warning' | 'destructive';
+
+export interface ToastConfig {
+  variant?: ToastVariant;
+  /** Bold header line (optional). */
+  title?: string;
+  /** Body line. */
   message: string;
+  /** Optional action (e.g. Undo). */
+  action?: { label: string; onPress: () => void };
+  /** Stay until dismissed (auto-set true for destructive). */
+  persistent?: boolean;
+}
+
+export interface ToastState extends ToastConfig {
+  id: number;
 }
 
 interface UiState {
   searchOpen: boolean;
   setSearchOpen: (v: boolean) => void;
   toggleSearch: () => void;
-  /** Transient confirmation toast (e.g. "Added to Travel words"). */
   toast: ToastState | null;
-  showToast: (message: string) => void;
+  /** Show a toast. Pass a string for a plain info toast, or a config object. */
+  showToast: (config: string | ToastConfig) => void;
   hideToast: () => void;
 }
 
@@ -23,6 +35,10 @@ export const useUiStore = create<UiState>((set) => ({
   setSearchOpen: (v) => set({ searchOpen: v }),
   toggleSearch: () => set((s) => ({ searchOpen: !s.searchOpen })),
   toast: null,
-  showToast: (message) => set({ toast: { id: Date.now(), message } }),
+  showToast: (config) => {
+    const c: ToastConfig = typeof config === 'string' ? { message: config } : config;
+    const persistent = c.persistent ?? c.variant === 'destructive';
+    set({ toast: { id: Date.now(), ...c, persistent } });
+  },
   hideToast: () => set({ toast: null }),
 }));

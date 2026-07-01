@@ -6,7 +6,8 @@
     "closeSearch": "Close search",
     "clear": "Clear",
     "filter": "Filter and sort",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "undo": "Undo"
   },
   "tabs": {
     "home": "Home",
@@ -196,7 +197,9 @@
     "addToDeckA11y": "Add to deck",
     "addToDeck": "Add to Deck",
     "deleteA11y": "Delete word",
-    "delete": "Delete"
+    "delete": "Delete",
+    "removeA11y": "Remove from deck",
+    "remove": "Remove"
   },
   "wordList": {
     "title": "My Words",
@@ -276,7 +279,10 @@
     "deckCreated": "Created {{name}}",
     "deckWordsLabel": "Words",
     "deckReviewsLabel": "Reviews",
-    "deckCreatedLabel": "Created",
+    "deckLastReviewedLabel": "Last reviewed",
+    "lastReviewedNever": "Never",
+    "wordDeleted": "Deleted “{{word}}”",
+    "deckDeleted": "Deleted “{{name}}”",
     "deckEmptyTitle": "This deck is empty",
     "deckEmptyBody": "Add words to this deck from your library.",
     "deleteDeckTitle": "Delete “{{name}}”?",

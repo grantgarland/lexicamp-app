@@ -6,7 +6,8 @@
     "closeSearch": "Cerrar búsqueda",
     "clear": "Borrar",
     "filter": "Filtrar y ordenar",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "undo": "Deshacer"
   },
   "tabs": {
     "home": "Inicio",
@@ -196,7 +197,9 @@
     "addToDeckA11y": "Añadir al mazo",
     "addToDeck": "Añadir al mazo",
     "deleteA11y": "Eliminar palabra",
-    "delete": "Eliminar"
+    "delete": "Eliminar",
+    "removeA11y": "Quitar del mazo",
+    "remove": "Quitar"
   },
   "wordList": {
     "title": "Mis palabras",
@@ -276,7 +279,10 @@
     "deckCreated": "Mazo «{{name}}» creado",
     "deckWordsLabel": "Palabras",
     "deckReviewsLabel": "Repasos",
-    "deckCreatedLabel": "Creado",
+    "deckLastReviewedLabel": "Último repaso",
+    "lastReviewedNever": "Nunca",
+    "wordDeleted": "«{{word}}» eliminada",
+    "deckDeleted": "«{{name}}» eliminado",
     "deckEmptyTitle": "Este mazo está vacío",
     "deckEmptyBody": "Añade palabras a este mazo desde tu biblioteca.",
     "deleteDeckTitle": "¿Eliminar «{{name}}»?",

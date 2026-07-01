@@ -7,7 +7,7 @@ import { useState } from 'react';
 import type { TFunction } from 'i18next';
 import { useRouter } from 'expo-router';
 import { ActivityIndicator, Image, Pressable, ScrollView, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown, FadeOut, SlideInDown, SlideOutDown, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
@@ -19,6 +19,7 @@ import { TIERS, type TierId } from '@/theme/tiers';
 import {
   Button,
   Confetti,
+  ConfirmDialog,
   EmptyState,
   IconArrowDown,
   IconArrowUp,
@@ -192,7 +193,19 @@ export function QuizScreen() {
         </View>
       )}
 
-      {showExit && <ExitConfirmModal cardsRated={ratings.length} total={total} onConfirm={() => router.back()} onCancel={() => setShowExit(false)} />}
+      <ConfirmDialog
+        visible={showExit}
+        title={t('quiz.exitTitle')}
+        body={ratings.length > 0 ? t('quiz.exitBodyRated', { rated: ratings.length, total }) : t('quiz.exitBodyNone')}
+        confirmLabel={t('quiz.exitConfirm')}
+        cancelLabel={t('quiz.keepStudying')}
+        destructive
+        onConfirm={() => {
+          setShowExit(false);
+          router.back();
+        }}
+        onClose={() => setShowExit(false)}
+      />
     </Screen>
   );
 }
@@ -425,30 +438,6 @@ function TierPromoScreen({ words, onContinue }: { words: string[]; onContinue: (
   );
 }
 
-// ── Exit confirm (Q-06) ──────────────────────────────────────────────────────
-function ExitConfirmModal({ cardsRated, total, onConfirm, onCancel }: { cardsRated: number; total: number; onConfirm: () => void; onCancel: () => void }) {
-  const { t } = useTranslation();
-  return (
-    <View style={styles.exitOverlay}>
-      <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.exitScrim}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} accessibilityLabel={t('common.dismiss')} />
-      </Animated.View>
-      <Animated.View entering={SlideInDown.duration(260)} exiting={SlideOutDown.duration(200)} style={styles.exitSheet}>
-        <View style={styles.exitHandle} />
-        <RawText style={styles.exitTitle}>{t('quiz.exitTitle')}</RawText>
-        <RawText style={styles.exitBody}>
-          {cardsRated > 0
-            ? t('quiz.exitBodyRated', { rated: cardsRated, total })
-            : t('quiz.exitBodyNone')}
-        </RawText>
-        <Pressable onPress={onConfirm} accessibilityRole="button" style={({ pressed }) => [styles.exitConfirm, pressed && { opacity: 0.9 }]}>
-          <RawText style={styles.exitConfirmText}>{t('quiz.exitConfirm')}</RawText>
-        </Pressable>
-        <Button title={t('quiz.keepStudying')} variant="primary" onPress={onCancel} />
-      </Animated.View>
-    </View>
-  );
-}
 
 const styles = StyleSheet.create((theme) => {
   const { color, palette, fonts, radius } = theme;

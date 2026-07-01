@@ -14,7 +14,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useTranslation } from '@/i18n';
 import { useDecks, useEntitlement, useWords } from '@/query/hooks';
 import type { DeckSummary, WordListItem } from '@/data/DataSource';
-import { addedLabel, shortDate } from '@/lib/relativeTime';
+import { addedLabel } from '@/lib/relativeTime';
 import { useUiStore } from '@/store/uiStore';
 import { getTierByStability, TIERS, type TierId } from '@/theme/tiers';
 
@@ -36,6 +36,7 @@ import {
   SearchBar,
   SegmentedTabs,
   Sheet,
+  SkeletonRows,
   TierBadge,
   WordDetailSheet,
   WordRow,
@@ -62,8 +63,8 @@ export function WordListScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const showToast = useUiStore((s) => s.showToast);
-  const { words } = useWords();
-  const { decks } = useDecks();
+  const { words, isLoading: wordsLoading } = useWords();
+  const { decks, isLoading: decksLoading } = useDecks();
   const { isPaid } = useEntitlement();
 
   const [subTab, setSubTab] = useState<'words' | 'decks'>('words');
@@ -156,7 +157,9 @@ export function WordListScreen() {
 
       {/* Words tab */}
       {subTab === 'words' &&
-        (noneSaved ? (
+        (wordsLoading ? (
+          <SkeletonRows />
+        ) : noneSaved ? (
           <EmptyState title={t('wordList.emptyTitle')} body={t('wordList.emptyBody')} style={styles.empty} />
         ) : visible.length === 0 ? (
           <View style={styles.noMatch}>
@@ -187,7 +190,9 @@ export function WordListScreen() {
             <View style={styles.stickyCreate}>
               <CreateNewDeckRow onPress={() => openCreate()} />
             </View>
-            {allDecks.length === 0 ? (
+            {decksLoading ? (
+              <SkeletonRows count={3} />
+            ) : allDecks.length === 0 ? (
               <View style={styles.decksEmpty}>
                 <RawText style={styles.decksEmptyTitle}>{t('wordList.decksEmptyTitle')}</RawText>
                 <RawText style={styles.decksEmptyBody}>{t('wordList.decksEmptyBody')}</RawText>
@@ -246,7 +251,15 @@ export function WordListScreen() {
         confirmLabel={t('wordList.deleteConfirm')}
         destructive
         onConfirm={() => {
-          if (pendingDelete) setRemoved((r) => [...r, pendingDelete.id]);
+          const w = pendingDelete;
+          if (w) {
+            setRemoved((r) => [...r, w.id]);
+            showToast({
+              variant: 'destructive',
+              message: t('wordList.wordDeleted', { word: w.native }),
+              action: { label: t('common.undo'), onPress: () => setRemoved((r) => r.filter((id) => id !== w.id)) },
+            });
+          }
           setPendingDelete(null);
         }}
         onClose={() => setPendingDelete(null)}
@@ -261,7 +274,15 @@ export function WordListScreen() {
         confirmLabel={t('wordList.deleteDeck')}
         destructive
         onConfirm={() => {
-          if (pendingDeckDelete) deleteDeck(pendingDeckDelete);
+          const d = pendingDeckDelete;
+          if (d) {
+            deleteDeck(d);
+            showToast({
+              variant: 'destructive',
+              message: t('wordList.deckDeleted', { name: d.name }),
+              action: { label: t('common.undo'), onPress: () => setRemovedDecks((r) => r.filter((id) => id !== d.id)) },
+            });
+          }
           setPendingDeckDelete(null);
         }}
         onClose={() => setPendingDeckDelete(null)}
@@ -274,9 +295,9 @@ export function WordListScreen() {
         initialWord={createInitialWord}
         onClose={() => setCreateOpen(false)}
         onCreate={(name, ids) => {
-          setExtraDecks((e) => [...e, { id: `d_${Date.now()}`, name, wordCount: ids.length, reviews: 0, createdAt: new Date() }]);
+          setExtraDecks((e) => [...e, { id: `d_${Date.now()}`, name, wordCount: ids.length, reviews: 0, createdAt: new Date(), lastReviewedAt: null }]);
           setCreateOpen(false);
-          showToast(t('wordList.deckCreated', { name }));
+          showToast({ variant: 'success', message: t('wordList.deckCreated', { name }) });
         }}
       />
 
@@ -328,7 +349,7 @@ export function WordListScreen() {
         onAdd={(w, d) => {
           setAdded((s) => new Set(s).add(`${d.id}|${w.id}`));
           setAddToDeckWord(null);
-          showToast(t('wordList.addedToDeck', { deck: d.name }));
+          showToast({ variant: 'success', message: t('wordList.addedToDeck', { deck: d.name }) });
         }}
         onCreateNew={() => {
           const w = addToDeckWord;
@@ -506,6 +527,15 @@ function WordPicker({
   return (
     <>
       <SearchBar value={pickerQuery} onChange={setPickerQuery} placeholder={t('wordList.filterPlaceholder')} style={styles.pickerSearch} />
+      {/* Sticky selected-gutter: never scrolls out of view; caps at ~5 rows then scrolls. */}
+      {gutter.length > 0 && (
+        <View style={styles.gutter}>
+          <ScrollView style={styles.gutterScroll} nestedScrollEnabled showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            {gutter.map(renderItem)}
+          </ScrollView>
+          <View style={styles.gutterDivider} />
+        </View>
+      )}
       <List
         scroll
         style={styles.pickerList}
@@ -513,8 +543,6 @@ function WordPicker({
         emptyTitle={words.length === 0 ? t('wordList.pickerEmptyTitle') : t('wordList.noMatch')}
         emptyBody={words.length === 0 ? t('wordList.pickerEmptyBody') : undefined}
       >
-        {gutter.map(renderItem)}
-        {gutter.length > 0 && <View style={styles.gutterDivider} />}
         {rest.map(renderItem)}
       </List>
     </>
@@ -600,7 +628,7 @@ function DeckDetailSheet({
             items={[
               { label: t('wordList.deckWordsLabel'), value: String(deck.wordCount) },
               { label: t('wordList.deckReviewsLabel'), value: String(deck.reviews) },
-              { label: t('wordList.deckCreatedLabel'), value: shortDate(deck.createdAt, t) },
+              { label: t('wordList.deckLastReviewedLabel'), value: deck.lastReviewedAt != null ? addedLabel(deck.lastReviewedAt, t) : t('wordList.lastReviewedNever') },
             ]}
           />
           <List scroll style={styles.deckWordScroll} isEmpty={deckWords.length === 0} emptyTitle={t('wordList.deckEmptyTitle')} emptyBody={t('wordList.deckEmptyBody')}>
@@ -680,7 +708,8 @@ const styles = StyleSheet.create((theme) => {
     titleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 },
     title: { fontFamily: fonts.sans.extra, fontSize: 22, letterSpacing: -0.3, color: color.textStrong },
     count: { fontFamily: fonts.sans.medium, fontSize: 13, color: color.textMuted },
-    searchUnderTabs: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 2 },
+    // Matches the Custom Decks "Create new deck" container height/gap (both ~64px, bordered).
+    searchUnderTabs: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.divider },
 
     listContent: { paddingBottom: 16 },
     empty: { paddingTop: 64 },
@@ -694,7 +723,9 @@ const styles = StyleSheet.create((theme) => {
     decksContent: { paddingTop: 12, paddingBottom: 20 },
     decksHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 8 },
     decksCount: { fontFamily: fonts.sans.medium, fontSize: 13, color: color.textMuted },
-    gutterDivider: { height: 1.5, backgroundColor: color.borderStrong, marginVertical: 4, marginHorizontal: 16, borderRadius: 1 },
+    gutter: {},
+    gutterScroll: { maxHeight: 190 },
+    gutterDivider: { height: 1.5, backgroundColor: color.borderStrong, marginTop: 2, marginBottom: 4, borderRadius: 1 },
     deckStats: { marginBottom: 14 },
     deckWordScroll: { maxHeight: 340 },
     newDeck: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 9, paddingHorizontal: 14, borderRadius: theme.radius.md, backgroundColor: color.brand },
