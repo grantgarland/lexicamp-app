@@ -5,7 +5,7 @@ import type { BufferedRating, QuizCardItem } from '@/domain/quiz';
 import type { Card, CardFsrsState, Deck, Entitlement, Profile } from '@/domain/types';
 import { type DevPlan, type DevUserState, useDevStore } from '@/store/devStore';
 
-import type { DataSource, DeckCards, Engagement, ProgressStats, WordListItem } from './DataSource';
+import type { DataSource, DeckCards, DeckSummary, Engagement, ProgressStats, WordListItem } from './DataSource';
 
 const USER_ID = 'dev-user';
 const DECK_ID = 'dev-deck';
@@ -188,6 +188,13 @@ const PROGRESS_STATS: Record<DevUserState, ProgressStats> = {
   summit: { sessionsTotal: 42, avgAccuracy: 85, bestStreak: 14, daysActive: 30 },
 };
 
+// Custom decks (Premium). Static fixtures; word membership is not modeled in the mock.
+const DECKS: DeckSummary[] = [
+  { id: 'd_travel', name: 'Travel', wordCount: 12 },
+  { id: 'd_business', name: 'Business', wordCount: 8 },
+  { id: 'd_favorites', name: 'Favorites', wordCount: 5 },
+];
+
 const scenario = () => useDevStore.getState();
 
 export const mockDataSource: DataSource = {
@@ -208,6 +215,9 @@ export const mockDataSource: DataSource = {
   },
   async getProgressStats(): Promise<ProgressStats> {
     return PROGRESS_STATS[scenario().userState];
+  },
+  async getDecks(): Promise<DeckSummary[]> {
+    return DECKS;
   },
   async getWords(): Promise<WordListItem[]> {
     return buildWords(scenario().userState);

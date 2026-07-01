@@ -83,6 +83,12 @@ export function useWords() {
   return { words: q.data ?? [], isLoading: q.isLoading };
 }
 
+/** Custom decks (Premium). */
+export function useDecks() {
+  const q = useQuery({ queryKey: ['decks'], queryFn: () => ds.getDecks() });
+  return { decks: q.data ?? [], isLoading: q.isLoading };
+}
+
 /** Commit a completed quiz session (write) — invalidates home/due reads on success. */
 export function useCommitQuizSession() {
   const qc = useQueryClient();

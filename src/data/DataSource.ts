@@ -37,6 +37,13 @@ export interface WordListItem {
   dueAt: Date;
 }
 
+/** A custom deck summary for the Word List → Decks tab (Premium). */
+export interface DeckSummary {
+  id: string;
+  name: string;
+  wordCount: number;
+}
+
 /** All-time study signals for the Progress screen (future: derived from study_events). */
 export interface ProgressStats {
   sessionsTotal: number;
@@ -53,6 +60,8 @@ export interface DataSource {
   getEngagement(): Promise<Engagement>;
   /** All-time study stats for the Progress screen. */
   getProgressStats(): Promise<ProgressStats>;
+  /** Custom decks (Premium feature). */
+  getDecks(): Promise<DeckSummary[]>;
   /** The user's saved words for the Word List (newest first). */
   getWords(): Promise<WordListItem[]>;
   /** The due-now study queue, resolved to quiz view-models (capped per session). */

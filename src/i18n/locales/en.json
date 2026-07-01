@@ -243,7 +243,20 @@
     "dueInDays_one": "in {{count}} day",
     "dueInDays_other": "in {{count}} days",
     "dueInWeeks_one": "in {{count}} week",
-    "dueInWeeks_other": "in {{count}} weeks"
+    "dueInWeeks_other": "in {{count}} weeks",
+    "tabAllWords": "All Words",
+    "tabCustomDecks": "Custom Decks",
+    "deckCount_one": "{{count}} deck",
+    "deckCount_other": "{{count}} decks",
+    "newDeck": "New Deck",
+    "premiumTitle": "Custom Decks",
+    "premiumBody": "Organize your words your way. Custom decks are a Premium feature.",
+    "unlockPremium": "Unlock Premium",
+    "premiumPricing": "7-day free trial · $7.99/mo or $39.99/yr",
+    "createDeckTitle": "New deck",
+    "deckNamePlaceholder": "Deck name",
+    "create": "Create",
+    "addToDeckTitle": "Add to deck"
   },
   "progress": {
     "title": "Progress",

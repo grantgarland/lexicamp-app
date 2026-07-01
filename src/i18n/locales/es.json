@@ -243,7 +243,20 @@
     "dueInDays_one": "en {{count}} día",
     "dueInDays_other": "en {{count}} días",
     "dueInWeeks_one": "en {{count}} semana",
-    "dueInWeeks_other": "en {{count}} semanas"
+    "dueInWeeks_other": "en {{count}} semanas",
+    "tabAllWords": "Palabras",
+    "tabCustomDecks": "Mazos",
+    "deckCount_one": "{{count}} mazo",
+    "deckCount_other": "{{count}} mazos",
+    "newDeck": "Nuevo mazo",
+    "premiumTitle": "Mazos personalizados",
+    "premiumBody": "Organiza tus palabras a tu manera. Los mazos personalizados son una función Premium.",
+    "unlockPremium": "Desbloquear Premium",
+    "premiumPricing": "7 días de prueba gratis · $7.99/mes o $39.99/año",
+    "createDeckTitle": "Nuevo mazo",
+    "deckNamePlaceholder": "Nombre del mazo",
+    "create": "Crear",
+    "addToDeckTitle": "Añadir al mazo"
   },
   "progress": {
     "title": "Progreso",
