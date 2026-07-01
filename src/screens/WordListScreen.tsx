@@ -8,6 +8,7 @@
 // row tap + Add-to-Deck are wired as TODOs.
 import { useMemo, useState } from 'react';
 import type { TFunction } from 'i18next';
+import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, TextInput, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
@@ -18,17 +19,20 @@ import { getTierByStability, TIERS, type TierId } from '@/theme/tiers';
 
 import {
   Button,
+  ButtonRow,
   DeckRow,
   EmptyState,
-  IconCheck,
+  IconChevronRight,
   IconFolderPlus,
+  IconList,
   IconLock,
-  IconSearch,
-  IconSliders,
   IconTrash,
-  IconX,
+  List,
+  ListItem,
   RawText,
   Screen,
+  SearchBar,
+  SegmentedTabs,
   Sheet,
   TierBadge,
   WordRow,
@@ -76,6 +80,7 @@ function sortWords(list: WordListItem[], sortBy: SortId): WordListItem[] {
 export function WordListScreen() {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
+  const router = useRouter();
   const { words } = useWords();
   const { decks } = useDecks();
   const { isPaid } = useEntitlement();
@@ -94,6 +99,8 @@ export function WordListScreen() {
   const [createOpen, setCreateOpen] = useState(false);
   const [detailDeck, setDetailDeck] = useState<DeckSummary | null>(null);
   const [addToDeckWord, setAddToDeckWord] = useState<WordListItem | null>(null);
+  // Local deck membership (deckId|wordId) — optimistic until the real write lands.
+  const [added, setAdded] = useState<Set<string>>(new Set());
   const allDecks = [...decks, ...extraDecks];
 
   const filterActive = sortBy !== 'newest' || filterTiers.size > 0;
@@ -121,55 +128,31 @@ export function WordListScreen() {
           </RawText>
         </View>
         {subTab === 'words' && (
-          <View style={styles.searchRow}>
-            <View style={styles.searchField}>
-              <IconSearch size={16} color={theme.color.textMuted} />
-              <TextInput
-                value={query}
-                onChangeText={setQuery}
-                placeholder={t('wordList.searchPlaceholder')}
-                placeholderTextColor={theme.color.textMuted}
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={[styles.searchInput, { fontFamily: theme.fonts.sans.regular, color: theme.color.textBody }]}
-              />
-              {query !== '' && (
-                <Pressable onPress={() => setQuery('')} accessibilityRole="button" accessibilityLabel={t('wordList.clearSearch')} hitSlop={8}>
-                  <IconX size={14} color={theme.color.textMuted} />
-                </Pressable>
-              )}
-            </View>
-            <Pressable
-              onPress={() => setFilterOpen(true)}
-              accessibilityRole="button"
-              accessibilityLabel={t('wordList.filterA11y')}
-              style={[styles.filterBtn, { backgroundColor: filterActive ? theme.color.brand : theme.palette.slate[100] }]}
-            >
-              <IconSliders size={16} color={filterActive ? '#fff' : theme.color.textMuted} />
-            </Pressable>
-          </View>
+          <SearchBar
+            value={query}
+            onChange={setQuery}
+            placeholder={t('wordList.searchPlaceholder')}
+            onFilter={() => setFilterOpen(true)}
+            filterActive={filterActive}
+            style={styles.headerSearch}
+          />
         )}
-        {/* Sub-nav: All Words | Custom Decks */}
-        <View style={styles.subNav}>
-          {(['words', 'decks'] as const).map((id) => {
-            const on = subTab === id;
-            return (
-              <Pressable key={id} onPress={() => setSubTab(id)} style={styles.subNavTab} accessibilityRole="tab" accessibilityState={{ selected: on }}>
-                <View style={styles.subNavRow}>
-                  <RawText style={[styles.subNavText, on && styles.subNavTextOn]}>
-                    {id === 'words' ? t('wordList.tabAllWords') : t('wordList.tabCustomDecks')}
-                  </RawText>
-                  {id === 'decks' && !isPaid && (
-                    <View style={styles.proBadge}>
-                      <RawText style={styles.proBadgeText}>PRO</RawText>
-                    </View>
-                  )}
+        <SegmentedTabs
+          active={subTab}
+          onChange={(id) => setSubTab(id as 'words' | 'decks')}
+          tabs={[
+            { id: 'words', label: t('wordList.tabAllWords') },
+            {
+              id: 'decks',
+              label: t('wordList.tabCustomDecks'),
+              badge: !isPaid ? (
+                <View style={styles.proBadge}>
+                  <RawText style={styles.proBadgeText}>PRO</RawText>
                 </View>
-                <View style={[styles.subNavUnderline, on && styles.subNavUnderlineOn]} />
-              </Pressable>
-            );
-          })}
-        </View>
+              ) : undefined,
+            },
+          ]}
+        />
       </View>
 
       {/* Words tab */}
@@ -201,13 +184,23 @@ export function WordListScreen() {
           <PremiumGate />
         ) : (
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.decksContent}>
-            {allDecks.map((d) => (
-              <DeckRow key={d.id} deck={{ name: d.name }} wordCount={d.wordCount} onPress={() => setDetailDeck(d)} onDelete={() => setExtraDecks((e) => e.filter((x) => x.id !== d.id))} />
-            ))}
-            <Pressable style={({ pressed }) => [styles.newDeck, pressed && { opacity: 0.7 }]} onPress={() => setCreateOpen(true)} accessibilityRole="button">
-              <IconFolderPlus size={18} color={theme.color.brand} />
-              <RawText style={styles.newDeckText}>{t('wordList.newDeck')}</RawText>
-            </Pressable>
+            <View style={styles.decksHeader}>
+              <RawText style={styles.decksCount}>{t('wordList.deckCount', { count: allDecks.length })}</RawText>
+              <Pressable style={({ pressed }) => [styles.newDeck, pressed && { opacity: 0.7 }]} onPress={() => setCreateOpen(true)} accessibilityRole="button">
+                <IconFolderPlus size={16} color="#fff" />
+                <RawText style={styles.newDeckText}>{t('wordList.newDeck')}</RawText>
+              </Pressable>
+            </View>
+            {allDecks.length === 0 ? (
+              <View style={styles.decksEmpty}>
+                <RawText style={styles.decksEmptyTitle}>{t('wordList.decksEmptyTitle')}</RawText>
+                <RawText style={styles.decksEmptyBody}>{t('wordList.decksEmptyBody')}</RawText>
+              </View>
+            ) : (
+              allDecks.map((d) => (
+                <DeckRow key={d.id} deck={{ name: d.name }} wordCount={d.wordCount} onPress={() => setDetailDeck(d)} onDelete={() => setExtraDecks((e) => e.filter((x) => x.id !== d.id))} />
+              ))
+            )}
           </ScrollView>
         ))}
 
@@ -264,18 +257,44 @@ export function WordListScreen() {
       {/* W-05 — Create deck */}
       <CreateDeckSheet
         visible={createOpen}
+        words={words}
         onClose={() => setCreateOpen(false)}
-        onCreate={(name) => {
-          setExtraDecks((e) => [...e, { id: `d_${Date.now()}`, name, wordCount: 0 }]);
+        onCreate={(name, ids) => {
+          setExtraDecks((e) => [...e, { id: `d_${Date.now()}`, name, wordCount: ids.length }]);
           setCreateOpen(false);
         }}
       />
 
       {/* W-06 — Deck detail */}
-      <DeckDetailSheet deck={detailDeck} words={words} onClose={() => setDetailDeck(null)} />
+      <DeckDetailSheet
+        deck={detailDeck}
+        words={words}
+        onClose={() => setDetailDeck(null)}
+        onStudy={() => {
+          setDetailDeck(null);
+          router.push('/quiz');
+        }}
+        onDelete={(d) => {
+          setExtraDecks((e) => e.filter((x) => x.id !== d.id));
+          setDetailDeck(null);
+        }}
+      />
 
       {/* W-08 — Add to deck */}
-      <AddToDeckSheet word={addToDeckWord} decks={allDecks} onClose={() => setAddToDeckWord(null)} />
+      <AddToDeckSheet
+        word={addToDeckWord}
+        decks={allDecks}
+        added={added}
+        onAdd={(w, d) => {
+          setAdded((s) => new Set(s).add(`${d.id}|${w.id}`));
+          setAddToDeckWord(null);
+        }}
+        onCreateNew={() => {
+          setAddToDeckWord(null);
+          setCreateOpen(true);
+        }}
+        onClose={() => setAddToDeckWord(null)}
+      />
     </Screen>
   );
 }
@@ -347,28 +366,28 @@ function FilterSortSheet({
         <RawText style={styles.sheetLabel}>
           {t('wordList.filterByTier')} <RawText style={styles.sheetHint}>{t('wordList.filterByTierHint')}</RawText>
         </RawText>
-        {TIERS.map((tier) => {
-          const on = localTiers.has(tier.id);
-          return (
-            <Pressable key={tier.id} onPress={() => toggleTier(tier.id)} style={styles.optionRow} accessibilityRole="checkbox" accessibilityState={{ checked: on }}>
-              <View style={[styles.checkbox, { borderColor: on ? tier.color : theme.palette.slate[300], backgroundColor: on ? tier.color : 'transparent' }]}>
-                {on && <IconCheck size={12} color="#fff" />}
-              </View>
-              <TierBadge tier={tier} variant="pill" size="sm" />
-              <RawText style={styles.optionLabel}>{tier.name}</RawText>
-            </Pressable>
-          );
-        })}
+        <List>
+          {TIERS.map((tier, i) => (
+            <ListItem
+              key={tier.id}
+              checkbox
+              checked={localTiers.has(tier.id)}
+              checkColor={tier.color}
+              leading={<TierBadge tier={tier.id} variant="pill" size="sm" />}
+              title={t(`tier.${tier.id}.name`)}
+              subtitleInline
+              onPress={() => toggleTier(tier.id)}
+              last={i === TIERS.length - 1}
+            />
+          ))}
+        </List>
       </View>
 
-      <View style={styles.sheetActions}>
-        <View style={styles.sheetActionReset}>
-          <Button title={t('wordList.reset')} variant="secondary" onPress={onReset} />
-        </View>
-        <View style={styles.sheetActionApply}>
-          <Button title={t('wordList.apply')} variant="primary" onPress={() => onApply(localSort, localTiers)} />
-        </View>
-      </View>
+      <ButtonRow
+        style={styles.sheetActions}
+        left={{ title: t('wordList.reset'), onPress: onReset }}
+        right={{ title: t('wordList.apply'), variant: 'primary', onPress: () => onApply(localSort, localTiers) }}
+      />
     </Sheet>
   );
 }
@@ -444,16 +463,80 @@ function PremiumGate() {
   );
 }
 
-// W-05 — Create custom deck.
-function CreateDeckSheet({ visible, onClose, onCreate }: { visible: boolean; onClose: () => void; onCreate: (name: string) => void }) {
+// Shared word-picker list (checkbox rows) used by Create/Deck-detail sheets: SearchBar +
+// filtered word ListItems. Built-in empty state (no matches / no words).
+function WordPicker({
+  words,
+  selected,
+  onToggle,
+  selectable = true,
+}: {
+  words: WordListItem[];
+  selected?: Set<string>;
+  onToggle?: (id: string) => void;
+  selectable?: boolean;
+}) {
+  const { t } = useTranslation();
+  const [pickerQuery, setPickerQuery] = useState('');
+  const filtered = useMemo(() => {
+    const q = pickerQuery.trim().toLowerCase();
+    return q === '' ? words : words.filter((w) => w.native.toLowerCase().includes(q) || w.target.toLowerCase().includes(q));
+  }, [words, pickerQuery]);
+  return (
+    <>
+      <SearchBar value={pickerQuery} onChange={setPickerQuery} placeholder={t('wordList.filterPlaceholder')} style={styles.pickerSearch} />
+      <List
+        scroll
+        style={styles.pickerList}
+        isEmpty={filtered.length === 0}
+        emptyTitle={words.length === 0 ? t('wordList.pickerEmptyTitle') : t('wordList.noMatch')}
+        emptyBody={words.length === 0 ? t('wordList.pickerEmptyBody') : undefined}
+      >
+        {filtered.map((w, i) => {
+          const tier = getTierByStability(w.stability);
+          return (
+            <ListItem
+              key={w.id}
+              checkbox={selectable}
+              checked={selected?.has(w.id) ?? false}
+              checkColor={tier.color}
+              leading={<TierBadge tier={tier.id} variant="pill" size="sm" />}
+              title={w.native}
+              subtitle={w.target}
+              subtitleInline
+              compact
+              onPress={selectable && onToggle ? () => onToggle(w.id) : undefined}
+              last={i === filtered.length - 1}
+            />
+          );
+        })}
+      </List>
+    </>
+  );
+}
+
+// W-05 — Create custom deck: name + word selection.
+function CreateDeckSheet({ visible, words, onClose, onCreate }: { visible: boolean; words: WordListItem[]; onClose: () => void; onCreate: (name: string, ids: string[]) => void }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const [name, setName] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
     setWasVisible(visible);
-    if (visible) setName('');
+    if (visible) {
+      setName('');
+      setSelected(new Set());
+    }
   }
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const canCreate = name.trim() !== '' && selected.size > 0;
   return (
     <Sheet visible={visible} onClose={onClose} title={t('wordList.createDeckTitle')}>
       <TextInput
@@ -461,46 +544,95 @@ function CreateDeckSheet({ visible, onClose, onCreate }: { visible: boolean; onC
         onChangeText={setName}
         placeholder={t('wordList.deckNamePlaceholder')}
         placeholderTextColor={theme.color.textMuted}
-        autoFocus
         style={[styles.deckNameInput, { fontFamily: theme.fonts.sans.medium, color: theme.color.textStrong }]}
       />
-      <Button title={t('wordList.create')} variant="primary" onPress={() => name.trim() !== '' && onCreate(name.trim())} />
+      <RawText style={styles.pickerLabel}>{t('wordList.selectWords', { count: selected.size })}</RawText>
+      <WordPicker words={words} selected={selected} onToggle={toggle} />
+      <View style={styles.pickerCta}>
+        <Button title={t('wordList.create')} variant="primary" disabled={!canCreate} onPress={() => canCreate && onCreate(name.trim(), [...selected])} />
+      </View>
     </Sheet>
   );
 }
 
-// W-06 — Deck detail (name + its words). Membership isn't modeled in the mock, so it
-// shows a slice of the library as stand-in contents.
-function DeckDetailSheet({ deck, words, onClose }: { deck: DeckSummary | null; words: WordListItem[]; onClose: () => void }) {
+// W-06 — Deck detail: word list + Delete/Study footer (no name field). Membership isn't
+// modeled in the mock, so it shows a slice of the library as stand-in contents.
+function DeckDetailSheet({ deck, words, onClose, onStudy, onDelete }: { deck: DeckSummary | null; words: WordListItem[]; onClose: () => void; onStudy: () => void; onDelete: (d: DeckSummary) => void }) {
   const { t } = useTranslation();
   const deckWords = deck ? words.slice(0, deck.wordCount) : [];
   return (
     <Sheet visible={deck != null} onClose={onClose} title={deck?.name}>
-      <RawText style={styles.deckDetailCount}>{t('deckRow.words', { count: deck?.wordCount ?? 0 })}</RawText>
-      <ScrollView style={styles.deckWordList} showsVerticalScrollIndicator={false}>
-        {deckWords.map((w) => (
-          <WordRow key={w.id} compact word={{ native: w.native, target: w.target, stability: w.stability }} />
-        ))}
-      </ScrollView>
+      <RawText style={styles.pickerLabel}>{t('deckRow.words', { count: deck?.wordCount ?? 0 })}</RawText>
+      <WordPicker words={deckWords} selectable={false} />
+      <ButtonRow
+        style={styles.pickerCta}
+        left={{ title: t('wordList.deleteDeck'), variant: 'destructive', onPress: () => deck && onDelete(deck) }}
+        right={{ title: t('wordList.studyDeck'), variant: 'primary', onPress: onStudy }}
+      />
     </Sheet>
   );
 }
 
-// W-08 — Add a word to a deck.
-function AddToDeckSheet({ word, decks, onClose }: { word: WordListItem | null; decks: DeckSummary[]; onClose: () => void }) {
+// W-08 — Add a word to a deck (icon-slot deck rows + create-new-deck).
+function AddToDeckSheet({
+  word,
+  decks,
+  added,
+  onAdd,
+  onCreateNew,
+  onClose,
+}: {
+  word: WordListItem | null;
+  decks: DeckSummary[];
+  added: Set<string>;
+  onAdd: (w: WordListItem, d: DeckSummary) => void;
+  onCreateNew: () => void;
+  onClose: () => void;
+}) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   return (
     <Sheet visible={word != null} onClose={onClose} title={t('wordList.addToDeckTitle')}>
-      <View>
-        {decks.map((d) => (
-          <Pressable key={d.id} style={({ pressed }) => [styles.addDeckRow, pressed && { opacity: 0.6 }]} onPress={onClose} accessibilityRole="button">
-            <IconFolderPlus size={18} color={theme.color.brand} />
-            <RawText style={styles.addDeckName}>{d.name}</RawText>
-            <RawText style={styles.addDeckCount}>{t('deckRow.words', { count: d.wordCount })}</RawText>
+      {word != null && (
+        <>
+          <RawText style={styles.addToDeckSub}>{`${word.native} · ${word.target}`}</RawText>
+          <List
+            isEmpty={decks.length === 0}
+            emptyState={<RawText style={styles.addToDeckEmpty}>{t('wordList.addToDeckEmpty')}</RawText>}
+          >
+            {decks.map((d) => {
+              const inDeck = added.has(`${d.id}|${word.id}`);
+              return (
+                <ListItem
+                  key={d.id}
+                  leading={
+                    <View style={styles.deckIconTile}>
+                      <IconList size={16} color={theme.color.brand} />
+                    </View>
+                  }
+                  title={d.name}
+                  subtitle={t('deckRow.words', { count: d.wordCount })}
+                  disabled={inDeck}
+                  onPress={() => onAdd(word, d)}
+                  trailing={
+                    inDeck ? (
+                      <RawText style={styles.alreadyAdded}>{t('wordList.alreadyAdded')}</RawText>
+                    ) : (
+                      <IconChevronRight size={14} color={theme.color.borderStrong} />
+                    )
+                  }
+                />
+              );
+            })}
+          </List>
+          <Pressable style={({ pressed }) => [styles.createNewRow, pressed && { opacity: 0.6 }]} onPress={onCreateNew} accessibilityRole="button">
+            <View style={styles.createNewTile}>
+              <RawText style={styles.createNewPlus}>+</RawText>
+            </View>
+            <RawText style={styles.createNewText}>{t('wordList.createNewDeck')}</RawText>
           </Pressable>
-        ))}
-      </View>
+        </>
+      )}
     </Sheet>
   );
 }
@@ -508,33 +640,26 @@ function AddToDeckSheet({ word, decks, onClose }: { word: WordListItem | null; d
 const styles = StyleSheet.create((theme) => {
   const { color, fonts, palette } = theme;
   return {
-    header: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 10, borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.border },
+    header: { paddingHorizontal: 16, paddingTop: 4 },
     titleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 },
     title: { fontFamily: fonts.sans.extra, fontSize: 22, letterSpacing: -0.3, color: color.textStrong },
     count: { fontFamily: fonts.sans.medium, fontSize: 13, color: color.textMuted },
-    searchRow: { flexDirection: 'row', gap: 8 },
-    searchField: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: palette.slate[100], borderRadius: 10, paddingHorizontal: 12, height: 40 },
-    searchInput: { flex: 1, fontSize: 15, padding: 0 },
-    filterBtn: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+    headerSearch: { marginBottom: 10 },
 
     listContent: { paddingBottom: 16 },
     empty: { paddingTop: 64 },
-
-    // sub-nav
-    subNav: { flexDirection: 'row', marginTop: 4 },
-    subNavTab: { flex: 1, alignItems: 'center' },
-    subNavRow: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 9 },
-    subNavText: { fontFamily: fonts.sans.regular, fontSize: 14, color: color.textMuted },
-    subNavTextOn: { fontFamily: fonts.sans.semibold, color: color.brand },
-    subNavUnderline: { height: 2, alignSelf: 'stretch', backgroundColor: 'transparent' },
-    subNavUnderlineOn: { backgroundColor: color.brand },
     proBadge: { backgroundColor: palette.amber[100], borderRadius: 3, paddingHorizontal: 5, paddingVertical: 1 },
     proBadgeText: { fontFamily: fonts.sans.bold, fontSize: 9, letterSpacing: 0.3, color: palette.amber[800] },
 
     // decks tab
-    decksContent: { paddingTop: 4, paddingBottom: 20 },
-    newDeck: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 14, marginHorizontal: 16, paddingVertical: 13, borderRadius: theme.radius.md, borderWidth: theme.borderWidth.base, borderColor: palette.blue[200], borderStyle: 'dashed', backgroundColor: palette.blue[50] },
-    newDeckText: { fontFamily: fonts.sans.bold, fontSize: 15, color: color.brand },
+    decksContent: { paddingTop: 12, paddingBottom: 20 },
+    decksHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 8 },
+    decksCount: { fontFamily: fonts.sans.medium, fontSize: 13, color: color.textMuted },
+    newDeck: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 9, paddingHorizontal: 14, borderRadius: theme.radius.md, backgroundColor: color.brand },
+    newDeckText: { fontFamily: fonts.sans.bold, fontSize: 14, color: '#fff' },
+    decksEmpty: { alignItems: 'center', paddingTop: 60, paddingHorizontal: 24 },
+    decksEmptyTitle: { fontFamily: fonts.serif.semibold, fontSize: 18, color: color.textStrong, marginBottom: 6 },
+    decksEmptyBody: { fontFamily: fonts.sans.regular, fontSize: 14, color: color.textMuted, textAlign: 'center' },
     gate: { alignItems: 'center', paddingHorizontal: 24, paddingTop: 48 },
     gateLock: { width: 64, height: 64, borderRadius: 32, backgroundColor: palette.amber[100], alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
     gateTitle: { fontFamily: fonts.sans.bold, fontSize: 17, color: color.textStrong, marginBottom: 8 },
@@ -545,11 +670,18 @@ const styles = StyleSheet.create((theme) => {
 
     // create / detail / add-to-deck
     deckNameInput: { borderWidth: theme.borderWidth.base, borderColor: color.border, borderRadius: theme.radius.md, paddingHorizontal: 14, height: 48, fontSize: 16, marginBottom: 14 },
-    deckDetailCount: { fontFamily: fonts.sans.medium, fontSize: 13, color: color.textMuted, marginBottom: 10 },
-    deckWordList: { maxHeight: 360 },
-    addDeckRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.divider },
-    addDeckName: { flex: 1, fontFamily: fonts.sans.semibold, fontSize: 15, color: color.textStrong },
-    addDeckCount: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted },
+    pickerLabel: { fontFamily: fonts.sans.bold, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase', color: color.textMuted, marginBottom: 8 },
+    pickerSearch: { marginBottom: 8 },
+    pickerList: { maxHeight: 320 },
+    pickerCta: { marginTop: 14 },
+    addToDeckSub: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted, marginBottom: 12, marginTop: -6 },
+    addToDeckEmpty: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted, textAlign: 'center', paddingVertical: 20 },
+    deckIconTile: { width: 38, height: 38, borderRadius: 9, backgroundColor: palette.blue[50], borderWidth: theme.borderWidth.thin, borderColor: palette.blue[200], alignItems: 'center', justifyContent: 'center' },
+    alreadyAdded: { fontFamily: fonts.sans.semibold, fontSize: 11, color: color.brand },
+    createNewRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, paddingHorizontal: 0 },
+    createNewTile: { width: 38, height: 38, borderRadius: 9, borderWidth: 1.5, borderColor: palette.slate[300], borderStyle: 'dashed', backgroundColor: palette.slate[50], alignItems: 'center', justifyContent: 'center' },
+    createNewPlus: { fontFamily: fonts.sans.regular, fontSize: 20, color: color.textMuted, lineHeight: 22 },
+    createNewText: { fontFamily: fonts.sans.semibold, fontSize: 14, color: color.brand },
     noMatch: { paddingVertical: 48, paddingHorizontal: 24, alignItems: 'center' },
     noMatchText: { fontFamily: fonts.sans.regular, fontSize: 15, color: color.textMuted },
 

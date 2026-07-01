@@ -4,13 +4,13 @@
 // `useProgressData()`. The bottom nav is the persistent tab layout, not this screen.
 import type { TFunction } from 'i18next';
 import { useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
 import { useProgressData } from '@/query/hooks';
 import { TIERS } from '@/theme/tiers';
-import { EmptyState, IconBook, IconChart, IconCheck, IconFire, IconLock, IconMountain, RawText, Screen } from '@/ui';
+import { EmptyState, IconBook, IconChart, IconCheck, IconFire, IconLock, IconMountain, RawText, Screen, SegmentedTabs } from '@/ui';
 
 type SubTab = 'route' | 'inventory' | 'pace';
 
@@ -32,17 +32,15 @@ export function ProgressScreen() {
     <Screen edges={['top']}>
       <View style={styles.header}>
         <RawText style={styles.title}>{t('progress.title')}</RawText>
-        <View style={styles.subTabs}>
-          {(['route', 'inventory', 'pace'] as SubTab[]).map((id) => {
-            const on = tab === id;
-            return (
-              <Pressable key={id} onPress={() => setTab(id)} style={styles.subTab} accessibilityRole="tab" accessibilityState={{ selected: on }}>
-                <RawText style={[styles.subTabText, on && styles.subTabTextOn]}>{t(`progress.tab${id[0].toUpperCase()}${id.slice(1)}`)}</RawText>
-                <View style={[styles.subTabUnderline, on && styles.subTabUnderlineOn]} />
-              </Pressable>
-            );
-          })}
-        </View>
+        <SegmentedTabs
+          active={tab}
+          onChange={(id) => setTab(id as SubTab)}
+          tabs={[
+            { id: 'route', label: t('progress.tabRoute') },
+            { id: 'inventory', label: t('progress.tabInventory') },
+            { id: 'pace', label: t('progress.tabPace') },
+          ]}
+        />
       </View>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {tab === 'route' && <RouteTab data={data} t={t} />}
@@ -264,14 +262,8 @@ function PaceTab({ data, t }: TabProps) {
 const styles = StyleSheet.create((theme) => {
   const { color, palette, fonts, radius } = theme;
   return {
-    header: { paddingHorizontal: 16, paddingTop: 4, borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.border },
+    header: { paddingHorizontal: 16, paddingTop: 4 },
     title: { fontFamily: fonts.sans.extra, fontSize: 22, letterSpacing: -0.3, color: color.textStrong, marginBottom: 8 },
-    subTabs: { flexDirection: 'row' },
-    subTab: { flex: 1, alignItems: 'center', paddingBottom: 0 },
-    subTabText: { fontFamily: fonts.sans.regular, fontSize: 14, color: color.textMuted, paddingVertical: 9 },
-    subTabTextOn: { fontFamily: fonts.sans.semibold, color: color.brand },
-    subTabUnderline: { height: 2, alignSelf: 'stretch', backgroundColor: 'transparent' },
-    subTabUnderlineOn: { backgroundColor: color.brand },
 
     scroll: { paddingBottom: 20 },
     pad: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },

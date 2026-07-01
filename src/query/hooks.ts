@@ -85,7 +85,8 @@ export function useWords() {
 
 /** Custom decks (Premium). */
 export function useDecks() {
-  const q = useQuery({ queryKey: ['decks'], queryFn: () => ds.getDecks() });
+  const userState = useDevStore((s) => s.userState);
+  const q = useQuery({ queryKey: ['decks', userState], queryFn: () => ds.getDecks() });
   return { decks: q.data ?? [], isLoading: q.isLoading };
 }
 

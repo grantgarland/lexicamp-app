@@ -217,7 +217,8 @@ export const mockDataSource: DataSource = {
     return PROGRESS_STATS[scenario().userState];
   },
   async getDecks(): Promise<DeckSummary[]> {
-    return DECKS;
+    // New user (empty scenario) has no decks yet → decks-tab empty state.
+    return scenario().userState === 'empty' ? [] : DECKS;
   },
   async getWords(): Promise<WordListItem[]> {
     return buildWords(scenario().userState);

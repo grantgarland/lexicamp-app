@@ -3,7 +3,9 @@
     "moreInfo": "Más información",
     "dismiss": "Cerrar",
     "search": "Buscar",
-    "closeSearch": "Cerrar búsqueda"
+    "closeSearch": "Cerrar búsqueda",
+    "clear": "Borrar",
+    "filter": "Filtrar y ordenar"
   },
   "tabs": {
     "home": "Inicio",
@@ -255,8 +257,20 @@
     "premiumPricing": "7 días de prueba gratis · $7.99/mes o $39.99/año",
     "createDeckTitle": "Nuevo mazo",
     "deckNamePlaceholder": "Nombre del mazo",
-    "create": "Crear",
-    "addToDeckTitle": "Añadir al mazo"
+    "create": "Crear mazo",
+    "addToDeckTitle": "Añadir al mazo",
+    "selectWords_one": "Selecciona palabras ({{count}} seleccionada)",
+    "selectWords_other": "Selecciona palabras ({{count}} seleccionadas)",
+    "filterPlaceholder": "Filtrar…",
+    "pickerEmptyTitle": "Aún no hay palabras",
+    "pickerEmptyBody": "Guarda palabras en tu biblioteca primero y luego añádelas a mazos.",
+    "decksEmptyTitle": "Aún no hay mazos.",
+    "decksEmptyBody": "Crea tu primer mazo arriba.",
+    "deleteDeck": "Eliminar mazo",
+    "studyDeck": "Estudiar mazo",
+    "alreadyAdded": "Ya añadida",
+    "addToDeckEmpty": "Aún no hay mazos — crea el primero abajo.",
+    "createNewDeck": "Crear nuevo mazo…"
   },
   "progress": {
     "title": "Progreso",

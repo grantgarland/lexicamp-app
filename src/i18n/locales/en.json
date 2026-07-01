@@ -3,7 +3,9 @@
     "moreInfo": "More info",
     "dismiss": "Dismiss",
     "search": "Search",
-    "closeSearch": "Close search"
+    "closeSearch": "Close search",
+    "clear": "Clear",
+    "filter": "Filter and sort"
   },
   "tabs": {
     "home": "Home",
@@ -255,8 +257,20 @@
     "premiumPricing": "7-day free trial · $7.99/mo or $39.99/yr",
     "createDeckTitle": "New deck",
     "deckNamePlaceholder": "Deck name",
-    "create": "Create",
-    "addToDeckTitle": "Add to deck"
+    "create": "Create deck",
+    "addToDeckTitle": "Add to Deck",
+    "selectWords_one": "Select words ({{count}} selected)",
+    "selectWords_other": "Select words ({{count}} selected)",
+    "filterPlaceholder": "Filter…",
+    "pickerEmptyTitle": "No words yet",
+    "pickerEmptyBody": "Save words to your library first, then add them to decks.",
+    "decksEmptyTitle": "No decks yet.",
+    "decksEmptyBody": "Create your first deck above.",
+    "deleteDeck": "Delete Deck",
+    "studyDeck": "Study Deck",
+    "alreadyAdded": "Already added",
+    "addToDeckEmpty": "No decks yet — create your first one below.",
+    "createNewDeck": "Create new deck…"
   },
   "progress": {
     "title": "Progress",

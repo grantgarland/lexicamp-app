@@ -11,6 +11,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useTranslation } from '@/i18n';
 import { getTierByStability } from '@/theme/tiers';
 import { IconChevronRight, IconFolderPlus, IconLock, IconTrash } from './icons';
+import { ListItem } from './List';
 import { Text } from './Text';
 import { TierBadge } from './TierBadge';
 
@@ -75,23 +76,23 @@ export function WordRow({ word, onPress, onDelete, onAddToDeck, isPremium = fals
   );
 
   const face = (
-    <Pressable onPress={onPress} style={styles.face} accessibilityRole="button">
-      <TierBadge tier={tier} variant="pill" size="sm" />
-      <View style={styles.body}>
-        <Text variant="bodyStrong" numberOfLines={1} style={styles.native}>
-          {word.native}
-        </Text>
-        <Text variant="caption" numberOfLines={1} style={styles.target}>
-          {word.target}
-        </Text>
-      </View>
-      {!compact && word.added != null && (
-        <Text variant="footnote" color="textFaint">
-          {word.added}
-        </Text>
-      )}
-      <IconChevronRight size={14} color={theme.color.borderStrong} />
-    </Pressable>
+    <ListItem
+      leading={<TierBadge tier={tier} variant="pill" size="sm" />}
+      title={word.native}
+      subtitle={word.target}
+      onPress={onPress}
+      last
+      trailing={
+        <View style={styles.trailing}>
+          {!compact && word.added != null && (
+            <Text variant="footnote" color="textFaint">
+              {word.added}
+            </Text>
+          )}
+          <IconChevronRight size={14} color={theme.color.borderStrong} />
+        </View>
+      }
+    />
   );
 
   if (compact) return <View style={styles.container}>{face}</View>;
@@ -124,9 +125,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: 16,
     backgroundColor: theme.color.surfaceCard,
   },
-  body: { flex: 1, minWidth: 0 },
-  native: { fontSize: 15 },
-  target: { fontSize: 13 },
+  trailing: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   tray: { flexDirection: 'row' },
   action: { width: ACTION_W, alignItems: 'center', justifyContent: 'center', gap: 4 },
   actionLabel: { color: '#fff', fontSize: 9, letterSpacing: 0.3 },

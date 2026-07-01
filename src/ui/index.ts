@@ -13,6 +13,10 @@ export { Input, type InputProps } from './Input';
 export { ProgressDots, type ProgressDotsProps } from './ProgressDots';
 export { Sheet, type SheetProps } from './Sheet';
 export { TabBar, TAB_BAR_CORE_HEIGHT, type TabBarProps, type TabId } from './TabBar';
+export { SearchBar, type SearchBarProps } from './SearchBar';
+export { SegmentedTabs, type SegmentedTab, type SegmentedTabsProps } from './SegmentedTabs';
+export { ButtonRow, type ButtonRowButton, type ButtonRowProps } from './ButtonRow';
+export { List, ListItem, Checkbox, type ListProps, type ListItemProps } from './List';
 export {
   IconHome,
   IconList,
