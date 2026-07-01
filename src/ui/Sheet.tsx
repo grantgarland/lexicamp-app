@@ -4,6 +4,7 @@
 // Tooltip uses; it renders above nav + tab bar reliably. Controlled via `visible`/`onClose`.
 import type { ReactNode } from 'react';
 import { Modal, Pressable, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
@@ -26,7 +27,8 @@ export function Sheet({ visible, onClose, title, children }: SheetProps) {
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <View style={styles.root}>
+      {/* GestureHandlerRootView so swipeable rows work inside the modal. */}
+      <GestureHandlerRootView style={styles.root}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={t('common.dismiss')} />
         <View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]}>
           <View style={styles.handle} />
@@ -37,7 +39,7 @@ export function Sheet({ visible, onClose, title, children }: SheetProps) {
           )}
           {children}
         </View>
-      </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }

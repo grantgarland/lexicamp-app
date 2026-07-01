@@ -204,15 +204,24 @@ export function IconPlay({ size = 18, color = STROKE }: IconProps) {
   );
 }
 
-export function IconSliders({ size = 16, color = STROKE }: IconProps) {
+export function IconMinus({ size = 18, color = STROKE }: IconProps) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round">
-      <Line x1="4" y1="7.5" x2="20" y2="7.5" />
-      <Line x1="4" y1="12" x2="20" y2="12" />
-      <Line x1="4" y1="16.5" x2="20" y2="16.5" />
-      <Circle cx="9" cy="7.5" r="2.3" fill="none" />
-      <Circle cx="15" cy="12" r="2.3" fill="none" />
-      <Circle cx="8" cy="16.5" r="2.3" fill="none" />
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round">
+      <Path d="M5 12h14" />
+    </Svg>
+  );
+}
+
+export function IconSliders({ size = 18, color = STROKE }: IconProps) {
+  // Vertical sliders ("tune") — three tracks with a handle at a different height each.
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.9} strokeLinecap="round">
+      <Line x1="6" y1="4" x2="6" y2="20" />
+      <Line x1="12" y1="4" x2="12" y2="20" />
+      <Line x1="18" y1="4" x2="18" y2="20" />
+      <Line x1="3" y1="9" x2="9" y2="9" strokeWidth={2.6} />
+      <Line x1="9" y1="15" x2="15" y2="15" strokeWidth={2.6} />
+      <Line x1="15" y1="7.5" x2="21" y2="7.5" strokeWidth={2.6} />
     </Svg>
   );
 }

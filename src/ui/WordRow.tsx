@@ -10,7 +10,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
 import { getTierByStability } from '@/theme/tiers';
-import { IconChevronRight, IconFolderPlus, IconLock, IconTrash } from './icons';
+import { IconChevronRight, IconFolderPlus, IconLock, IconMinus, IconTrash } from './icons';
 import { ListItem } from './List';
 import { Text } from './Text';
 import { TierBadge } from './TierBadge';
@@ -28,6 +28,8 @@ export interface WordRowProps {
   onPress?: () => void;
   onDelete?: () => void;
   onAddToDeck?: () => void;
+  /** Deck context: replaces the Add/Delete tray with a single "Remove from deck". */
+  onRemoveFromDeck?: () => void;
   /** Free tier shows a lock on Add-to-Deck. */
   isPremium?: boolean;
   /** Static row (no swipe, no date). */
@@ -36,44 +38,62 @@ export interface WordRowProps {
 
 const ACTION_W = 76;
 
-export function WordRow({ word, onPress, onDelete, onAddToDeck, isPremium = false, compact = false }: WordRowProps) {
+export function WordRow({ word, onPress, onDelete, onAddToDeck, onRemoveFromDeck, isPremium = false, compact = false }: WordRowProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const ref = useRef<SwipeableMethods>(null);
   const tier = getTierByStability(word.stability);
 
-  const renderRightActions = () => (
-    <View style={styles.tray}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t('wordRow.addToDeckA11y')}
-        style={[styles.action, { backgroundColor: isPremium ? theme.color.brand : theme.palette.slate[400] }]}
-        onPress={() => {
-          ref.current?.close();
-          onAddToDeck?.();
-        }}
-      >
-        {isPremium ? <IconFolderPlus size={18} color="#fff" /> : <IconLock size={18} color="#fff" />}
-        <Text variant="label" style={styles.actionLabel}>
-          {t('wordRow.addToDeck')}
-        </Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t('wordRow.deleteA11y')}
-        style={[styles.action, { backgroundColor: theme.color.danger }]}
-        onPress={() => {
-          ref.current?.close();
-          onDelete?.();
-        }}
-      >
-        <IconTrash size={18} color="#fff" />
-        <Text variant="label" style={styles.actionLabel}>
-          {t('wordRow.delete')}
-        </Text>
-      </Pressable>
-    </View>
-  );
+  const renderRightActions = () =>
+    onRemoveFromDeck != null ? (
+      <View style={styles.tray}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('wordRow.removeA11y')}
+          style={[styles.action, { backgroundColor: theme.color.brand }]}
+          onPress={() => {
+            ref.current?.close();
+            onRemoveFromDeck();
+          }}
+        >
+          <IconMinus size={18} color="#fff" />
+          <Text variant="label" style={styles.actionLabel}>
+            {t('wordRow.remove')}
+          </Text>
+        </Pressable>
+      </View>
+    ) : (
+      <View style={styles.tray}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('wordRow.addToDeckA11y')}
+          style={[styles.action, { backgroundColor: isPremium ? theme.color.brand : theme.palette.slate[400] }]}
+          onPress={() => {
+            ref.current?.close();
+            onAddToDeck?.();
+          }}
+        >
+          {isPremium ? <IconFolderPlus size={18} color="#fff" /> : <IconLock size={18} color="#fff" />}
+          <Text variant="label" style={styles.actionLabel}>
+            {t('wordRow.addToDeck')}
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('wordRow.deleteA11y')}
+          style={[styles.action, { backgroundColor: theme.color.danger }]}
+          onPress={() => {
+            ref.current?.close();
+            onDelete?.();
+          }}
+        >
+          <IconTrash size={18} color="#fff" />
+          <Text variant="label" style={styles.actionLabel}>
+            {t('wordRow.delete')}
+          </Text>
+        </Pressable>
+      </View>
+    );
 
   const face = (
     <ListItem

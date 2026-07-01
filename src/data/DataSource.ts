@@ -42,6 +42,9 @@ export interface DeckSummary {
   id: string;
   name: string;
   wordCount: number;
+  /** Times the deck has been studied. */
+  reviews: number;
+  createdAt: Date;
 }
 
 /** All-time study signals for the Progress screen (future: derived from study_events). */

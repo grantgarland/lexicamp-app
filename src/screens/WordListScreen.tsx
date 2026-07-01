@@ -7,7 +7,6 @@
 // Custom Decks sub-nav (W-04/07) and the word-detail sheet (W-03) are the next chunk; the
 // row tap + Add-to-Deck are wired as TODOs.
 import { useMemo, useState } from 'react';
-import type { TFunction } from 'i18next';
 import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, TextInput, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -15,14 +14,17 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useTranslation } from '@/i18n';
 import { useDecks, useEntitlement, useWords } from '@/query/hooks';
 import type { DeckSummary, WordListItem } from '@/data/DataSource';
+import { addedLabel, shortDate } from '@/lib/relativeTime';
+import { useUiStore } from '@/store/uiStore';
 import { getTierByStability, TIERS, type TierId } from '@/theme/tiers';
 
 import {
   Button,
   ButtonRow,
+  ConfirmDialog,
   DeckRow,
+  DetailStats,
   EmptyState,
-  IconChevronRight,
   IconFolderPlus,
   IconList,
   IconLock,
@@ -35,33 +37,11 @@ import {
   SegmentedTabs,
   Sheet,
   TierBadge,
+  WordDetailSheet,
   WordRow,
 } from '@/ui';
 
-const DAY = 24 * 60 * 60 * 1000;
-
 type SortId = 'newest' | 'oldest' | 'az' | 'tier';
-
-/** Relative "added" label (Today / Yesterday / N days · weeks · months ago). */
-function addedLabel(createdAt: Date, t: TFunction): string {
-  const days = Math.floor((Date.now() - createdAt.getTime()) / DAY);
-  if (days <= 0) return t('wordList.addedToday');
-  if (days === 1) return t('wordList.addedYesterday');
-  if (days < 14) return t('wordList.addedDaysAgo', { count: days });
-  if (days < 60) return t('wordList.addedWeeksAgo', { count: Math.round(days / 7) });
-  return t('wordList.addedMonthsAgo', { count: Math.round(days / 30) });
-}
-
-/** Relative "next review" label (Due now / Today / Tomorrow / in N days · weeks). */
-function dueLabel(dueAt: Date, t: TFunction): string {
-  const ms = dueAt.getTime() - Date.now();
-  if (ms <= 0) return t('wordList.dueNow');
-  const days = Math.round(ms / DAY);
-  if (days === 0) return t('wordList.dueToday');
-  if (days === 1) return t('wordList.dueTomorrow');
-  if (days < 14) return t('wordList.dueInDays', { count: days });
-  return t('wordList.dueInWeeks', { count: Math.round(days / 7) });
-}
 
 function sortWords(list: WordListItem[], sortBy: SortId): WordListItem[] {
   const arr = [...list];
@@ -81,6 +61,7 @@ export function WordListScreen() {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const router = useRouter();
+  const showToast = useUiStore((s) => s.showToast);
   const { words } = useWords();
   const { decks } = useDecks();
   const { isPaid } = useEntitlement();
@@ -97,11 +78,26 @@ export function WordListScreen() {
   // Decks (W-04…W-08). `extraDecks` holds optimistically-created decks.
   const [extraDecks, setExtraDecks] = useState<DeckSummary[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createInitialWord, setCreateInitialWord] = useState<WordListItem | null>(null);
   const [detailDeck, setDetailDeck] = useState<DeckSummary | null>(null);
   const [addToDeckWord, setAddToDeckWord] = useState<WordListItem | null>(null);
+  const [pendingDeckDelete, setPendingDeckDelete] = useState<DeckSummary | null>(null);
+  const [deckWordDetail, setDeckWordDetail] = useState<WordListItem | null>(null);
+  const [pendingRemove, setPendingRemove] = useState<{ deck: DeckSummary; word: WordListItem } | null>(null);
+  const [removedFromDeck, setRemovedFromDeck] = useState<Set<string>>(new Set());
   // Local deck membership (deckId|wordId) — optimistic until the real write lands.
   const [added, setAdded] = useState<Set<string>>(new Set());
-  const allDecks = [...decks, ...extraDecks];
+  const [removedDecks, setRemovedDecks] = useState<string[]>([]);
+  const allDecks = [...decks, ...extraDecks].filter((d) => !removedDecks.includes(d.id));
+
+  const openCreate = (initialWord: WordListItem | null = null) => {
+    setCreateInitialWord(initialWord);
+    setCreateOpen(true);
+  };
+  const deleteDeck = (d: DeckSummary) => {
+    setRemovedDecks((r) => [...r, d.id]);
+    setExtraDecks((e) => e.filter((x) => x.id !== d.id));
+  };
 
   const filterActive = sortBy !== 'newest' || filterTiers.size > 0;
 
@@ -127,16 +123,6 @@ export function WordListScreen() {
             {subTab === 'words' ? t('wordList.count', { count: savedCount }) : t('wordList.deckCount', { count: allDecks.length })}
           </RawText>
         </View>
-        {subTab === 'words' && (
-          <SearchBar
-            value={query}
-            onChange={setQuery}
-            placeholder={t('wordList.searchPlaceholder')}
-            onFilter={() => setFilterOpen(true)}
-            filterActive={filterActive}
-            style={styles.headerSearch}
-          />
-        )}
         <SegmentedTabs
           active={subTab}
           onChange={(id) => setSubTab(id as 'words' | 'decks')}
@@ -154,6 +140,19 @@ export function WordListScreen() {
           ]}
         />
       </View>
+
+      {/* Search sits UNDER the tabs (words tab only) so switching tabs never moves the
+          tab row across routes. */}
+      {subTab === 'words' && (
+        <SearchBar
+          value={query}
+          onChange={setQuery}
+          placeholder={t('wordList.searchPlaceholder')}
+          onFilter={() => setFilterOpen(true)}
+          filterActive={filterActive}
+          style={styles.searchUnderTabs}
+        />
+      )}
 
       {/* Words tab */}
       {subTab === 'words' &&
@@ -183,13 +182,10 @@ export function WordListScreen() {
         (!isPaid ? (
           <PremiumGate />
         ) : (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.decksContent}>
-            <View style={styles.decksHeader}>
-              <RawText style={styles.decksCount}>{t('wordList.deckCount', { count: allDecks.length })}</RawText>
-              <Pressable style={({ pressed }) => [styles.newDeck, pressed && { opacity: 0.7 }]} onPress={() => setCreateOpen(true)} accessibilityRole="button">
-                <IconFolderPlus size={16} color="#fff" />
-                <RawText style={styles.newDeckText}>{t('wordList.newDeck')}</RawText>
-              </Pressable>
+          <View style={styles.decksBody}>
+            {/* Sticky "Create new deck" — consistent with the Add-to-Deck sheet; never scrolls. */}
+            <View style={styles.stickyCreate}>
+              <CreateNewDeckRow onPress={() => openCreate()} />
             </View>
             {allDecks.length === 0 ? (
               <View style={styles.decksEmpty}>
@@ -197,11 +193,20 @@ export function WordListScreen() {
                 <RawText style={styles.decksEmptyBody}>{t('wordList.decksEmptyBody')}</RawText>
               </View>
             ) : (
-              allDecks.map((d) => (
-                <DeckRow key={d.id} deck={{ name: d.name }} wordCount={d.wordCount} onPress={() => setDetailDeck(d)} onDelete={() => setExtraDecks((e) => e.filter((x) => x.id !== d.id))} />
-              ))
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.decksList}>
+                {allDecks.map((d) => (
+                  <DeckRow
+                    key={d.id}
+                    deck={{ name: d.name }}
+                    wordCount={d.wordCount}
+                    onPress={() => setDetailDeck(d)}
+                    onStudy={() => router.push('/quiz')}
+                    onDelete={() => setPendingDeckDelete(d)}
+                  />
+                ))}
+              </ScrollView>
             )}
-          </ScrollView>
+          </View>
         ))}
 
       {/* W-02 — Filter & sort */}
@@ -232,36 +237,46 @@ export function WordListScreen() {
         }}
       />
 
-      {/* Delete confirmation */}
-      <Sheet visible={pendingDelete != null} onClose={() => setPendingDelete(null)}>
-        <View style={styles.confirm}>
-          <View style={styles.confirmIcon}>
-            <IconTrash size={22} color={theme.color.danger} />
-          </View>
-          <RawText style={styles.confirmTitle}>{t('wordList.deleteTitle', { word: pendingDelete?.native ?? '' })}</RawText>
-          <RawText style={styles.confirmBody}>{t('wordList.deleteBody')}</RawText>
-          <Button
-            title={t('wordList.deleteConfirm')}
-            variant="destructive"
-            onPress={() => {
-              if (pendingDelete) setRemoved((r) => [...r, pendingDelete.id]);
-              setPendingDelete(null);
-            }}
-          />
-          <View style={styles.confirmCancel}>
-            <Button title={t('wordList.cancel')} variant="secondary" onPress={() => setPendingDelete(null)} />
-          </View>
-        </View>
-      </Sheet>
+      {/* Delete-word confirmation (shared dialog) */}
+      <ConfirmDialog
+        visible={pendingDelete != null}
+        icon={<IconTrash size={22} color={theme.color.danger} />}
+        title={t('wordList.deleteTitle', { word: pendingDelete?.native ?? '' })}
+        body={t('wordList.deleteBody')}
+        confirmLabel={t('wordList.deleteConfirm')}
+        destructive
+        onConfirm={() => {
+          if (pendingDelete) setRemoved((r) => [...r, pendingDelete.id]);
+          setPendingDelete(null);
+        }}
+        onClose={() => setPendingDelete(null)}
+      />
+
+      {/* Delete-deck confirmation (data removed; words kept) */}
+      <ConfirmDialog
+        visible={pendingDeckDelete != null}
+        icon={<IconTrash size={22} color={theme.color.danger} />}
+        title={t('wordList.deleteDeckTitle', { name: pendingDeckDelete?.name ?? '' })}
+        body={t('wordList.deleteDeckBody')}
+        confirmLabel={t('wordList.deleteDeck')}
+        destructive
+        onConfirm={() => {
+          if (pendingDeckDelete) deleteDeck(pendingDeckDelete);
+          setPendingDeckDelete(null);
+        }}
+        onClose={() => setPendingDeckDelete(null)}
+      />
 
       {/* W-05 — Create deck */}
       <CreateDeckSheet
         visible={createOpen}
         words={words}
+        initialWord={createInitialWord}
         onClose={() => setCreateOpen(false)}
         onCreate={(name, ids) => {
-          setExtraDecks((e) => [...e, { id: `d_${Date.now()}`, name, wordCount: ids.length }]);
+          setExtraDecks((e) => [...e, { id: `d_${Date.now()}`, name, wordCount: ids.length, reviews: 0, createdAt: new Date() }]);
           setCreateOpen(false);
+          showToast(t('wordList.deckCreated', { name }));
         }}
       />
 
@@ -269,15 +284,40 @@ export function WordListScreen() {
       <DeckDetailSheet
         deck={detailDeck}
         words={words}
+        removedFromDeck={removedFromDeck}
         onClose={() => setDetailDeck(null)}
         onStudy={() => {
           setDetailDeck(null);
           router.push('/quiz');
         }}
-        onDelete={(d) => {
-          setExtraDecks((e) => e.filter((x) => x.id !== d.id));
-          setDetailDeck(null);
+        onDelete={(d) => setPendingDeckDelete(d)}
+        onWordPress={(w) => setDeckWordDetail(w)}
+        onRemoveWord={(deck, w) => setPendingRemove({ deck, word: w })}
+      />
+
+      {/* Nested: a word's detail opened from inside the deck (returns to the deck sheet) */}
+      <WordDetailSheet
+        word={deckWordDetail}
+        onClose={() => setDeckWordDetail(null)}
+        onDelete={(w) => {
+          setDeckWordDetail(null);
+          setPendingDelete(w);
         }}
+      />
+
+      {/* Remove-from-deck confirmation (word stays in your library) */}
+      <ConfirmDialog
+        visible={pendingRemove != null}
+        icon={<IconTrash size={22} color={theme.color.danger} />}
+        title={t('wordList.removeTitle', { word: pendingRemove?.word.native ?? '' })}
+        body={t('wordList.removeBody')}
+        confirmLabel={t('wordList.removeConfirm')}
+        destructive
+        onConfirm={() => {
+          if (pendingRemove) setRemovedFromDeck((s) => new Set(s).add(`${pendingRemove.deck.id}|${pendingRemove.word.id}`));
+          setPendingRemove(null);
+        }}
+        onClose={() => setPendingRemove(null)}
       />
 
       {/* W-08 — Add to deck */}
@@ -288,10 +328,12 @@ export function WordListScreen() {
         onAdd={(w, d) => {
           setAdded((s) => new Set(s).add(`${d.id}|${w.id}`));
           setAddToDeckWord(null);
+          showToast(t('wordList.addedToDeck', { deck: d.name }));
         }}
         onCreateNew={() => {
+          const w = addToDeckWord;
           setAddToDeckWord(null);
-          setCreateOpen(true);
+          openCreate(w); // pre-select + pin this word in the New Deck sheet
         }}
         onClose={() => setAddToDeckWord(null)}
       />
@@ -392,55 +434,16 @@ function FilterSortSheet({
   );
 }
 
-// W-03 — Word detail bottom sheet.
-function WordDetailSheet({ word, onClose, onDelete }: { word: WordListItem | null; onClose: () => void; onDelete: (w: WordListItem) => void }) {
-  const { theme } = useUnistyles();
+// Shared "Create new deck…" row (dashed tile + label) — Custom Decks (sticky) + Add-to-Deck.
+function CreateNewDeckRow({ onPress }: { onPress: () => void }) {
   const { t } = useTranslation();
-  const tier = word ? getTierByStability(word.stability) : null;
   return (
-    <Sheet visible={word != null} onClose={onClose}>
-      {word != null && tier != null && (
-        <View>
-          <View style={styles.detailHead}>
-            <RawText style={styles.detailWord}>{word.native}</RawText>
-            <RawText style={styles.detailTarget}>{word.target}</RawText>
-          </View>
-          <View style={styles.detailMetaRow}>
-            <View style={styles.posPill}>
-              <RawText style={styles.posPillText}>{word.pos}</RawText>
-            </View>
-            <TierBadge tier={tier.id} variant="pill" size="md" />
-          </View>
-          <View style={[styles.memoryCard, { backgroundColor: tier.bg, borderColor: tier.border }]}>
-            <View style={styles.memoryTop}>
-              <RawText style={[styles.memoryTier, { color: tier.text }]}>{t(`tier.${tier.id}.name`)}</RawText>
-              <RawText style={[styles.memoryDays, { color: tier.text }]}>{t('wordList.memoryStrengthDays', { count: Math.round(word.stability) })}</RawText>
-            </View>
-            <RawText style={[styles.memoryDesc, { color: tier.text }]}>{t(`tier.${tier.id}.desc`)}</RawText>
-            <RawText style={[styles.memoryHint, { color: tier.text, borderTopColor: tier.border }]}>{t('wordList.memoryHint')}</RawText>
-          </View>
-          <RawText style={styles.detailSectionLabel}>{t('wordList.example')}</RawText>
-          <RawText style={styles.detailExample}>&ldquo;{word.example}&rdquo;</RawText>
-          <View style={styles.detailGrid}>
-            <DetailMeta label={t('wordList.nextReview')} value={dueLabel(word.dueAt, t)} />
-            <DetailMeta label={t('wordList.reviews')} value={t('wordList.reviewsValue', { count: word.reps })} />
-            <DetailMeta label={t('wordList.addedLabel')} value={addedLabel(word.createdAt, t)} />
-          </View>
-          <Pressable onPress={() => onDelete(word)} accessibilityRole="button" style={({ pressed }) => [styles.detailDelete, pressed && { opacity: 0.85 }]}>
-            <IconTrash size={17} color={theme.color.danger} />
-            <RawText style={styles.detailDeleteText}>{t('wordList.deleteWord')}</RawText>
-          </Pressable>
-        </View>
-      )}
-    </Sheet>
-  );
-}
-function DetailMeta({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.detailMeta}>
-      <RawText style={styles.detailMetaLabel}>{label}</RawText>
-      <RawText style={styles.detailMetaValue}>{value}</RawText>
-    </View>
+    <Pressable style={({ pressed }) => [styles.createNewRow, pressed && { opacity: 0.6 }]} onPress={onPress} accessibilityRole="button">
+      <View style={styles.createNewTile}>
+        <RawText style={styles.createNewPlus}>+</RawText>
+      </View>
+      <RawText style={styles.createNewText}>{t('wordList.createNewDeck')}</RawText>
+    </Pressable>
   );
 }
 
@@ -469,12 +472,10 @@ function WordPicker({
   words,
   selected,
   onToggle,
-  selectable = true,
 }: {
   words: WordListItem[];
-  selected?: Set<string>;
-  onToggle?: (id: string) => void;
-  selectable?: boolean;
+  selected: Set<string>;
+  onToggle: (id: string) => void;
 }) {
   const { t } = useTranslation();
   const [pickerQuery, setPickerQuery] = useState('');
@@ -482,6 +483,26 @@ function WordPicker({
     const q = pickerQuery.trim().toLowerCase();
     return q === '' ? words : words.filter((w) => w.native.toLowerCase().includes(q) || w.target.toLowerCase().includes(q));
   }, [words, pickerQuery]);
+  // Selected-gutter: selected items rise to the top, separated from the rest.
+  const gutter = filtered.filter((w) => selected.has(w.id));
+  const rest = filtered.filter((w) => !selected.has(w.id));
+  const renderItem = (w: WordListItem) => {
+    const tier = getTierByStability(w.stability);
+    return (
+      <ListItem
+        key={w.id}
+        checkbox
+        checked={selected.has(w.id)}
+        checkColor={tier.color}
+        leading={<TierBadge tier={tier.id} variant="pill" size="sm" />}
+        title={w.native}
+        subtitle={w.target}
+        subtitleInline
+        compact
+        onPress={() => onToggle(w.id)}
+      />
+    );
+  };
   return (
     <>
       <SearchBar value={pickerQuery} onChange={setPickerQuery} placeholder={t('wordList.filterPlaceholder')} style={styles.pickerSearch} />
@@ -492,31 +513,16 @@ function WordPicker({
         emptyTitle={words.length === 0 ? t('wordList.pickerEmptyTitle') : t('wordList.noMatch')}
         emptyBody={words.length === 0 ? t('wordList.pickerEmptyBody') : undefined}
       >
-        {filtered.map((w, i) => {
-          const tier = getTierByStability(w.stability);
-          return (
-            <ListItem
-              key={w.id}
-              checkbox={selectable}
-              checked={selected?.has(w.id) ?? false}
-              checkColor={tier.color}
-              leading={<TierBadge tier={tier.id} variant="pill" size="sm" />}
-              title={w.native}
-              subtitle={w.target}
-              subtitleInline
-              compact
-              onPress={selectable && onToggle ? () => onToggle(w.id) : undefined}
-              last={i === filtered.length - 1}
-            />
-          );
-        })}
+        {gutter.map(renderItem)}
+        {gutter.length > 0 && <View style={styles.gutterDivider} />}
+        {rest.map(renderItem)}
       </List>
     </>
   );
 }
 
-// W-05 — Create custom deck: name + word selection.
-function CreateDeckSheet({ visible, words, onClose, onCreate }: { visible: boolean; words: WordListItem[]; onClose: () => void; onCreate: (name: string, ids: string[]) => void }) {
+// W-05 — Create custom deck: name + word selection (initialWord pre-selects + pins).
+function CreateDeckSheet({ visible, words, initialWord, onClose, onCreate }: { visible: boolean; words: WordListItem[]; initialWord: WordListItem | null; onClose: () => void; onCreate: (name: string, ids: string[]) => void }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const [name, setName] = useState('');
@@ -526,7 +532,7 @@ function CreateDeckSheet({ visible, words, onClose, onCreate }: { visible: boole
     setWasVisible(visible);
     if (visible) {
       setName('');
-      setSelected(new Set());
+      setSelected(new Set(initialWord ? [initialWord.id] : []));
     }
   }
   const toggle = (id: string) =>
@@ -555,25 +561,66 @@ function CreateDeckSheet({ visible, words, onClose, onCreate }: { visible: boole
   );
 }
 
-// W-06 — Deck detail: word list + Delete/Study footer (no name field). Membership isn't
-// modeled in the mock, so it shows a slice of the library as stand-in contents.
-function DeckDetailSheet({ deck, words, onClose, onStudy, onDelete }: { deck: DeckSummary | null; words: WordListItem[]; onClose: () => void; onStudy: () => void; onDelete: (d: DeckSummary) => void }) {
+// W-06 — Deck detail: stats (Words · Reviews · Created) + tier-ordered word list (press →
+// word detail, swipe → remove) + Delete/Study footer. Membership isn't modeled in the mock,
+// so it shows a tier-sorted slice of the library as stand-in contents.
+function DeckDetailSheet({
+  deck,
+  words,
+  removedFromDeck,
+  onClose,
+  onStudy,
+  onDelete,
+  onWordPress,
+  onRemoveWord,
+}: {
+  deck: DeckSummary | null;
+  words: WordListItem[];
+  removedFromDeck: Set<string>;
+  onClose: () => void;
+  onStudy: () => void;
+  onDelete: (d: DeckSummary) => void;
+  onWordPress: (w: WordListItem) => void;
+  onRemoveWord: (deck: DeckSummary, w: WordListItem) => void;
+}) {
   const { t } = useTranslation();
-  const deckWords = deck ? words.slice(0, deck.wordCount) : [];
+  const deckWords = useMemo(() => {
+    if (deck == null) return [];
+    return words
+      .slice(0, deck.wordCount)
+      .filter((w) => !removedFromDeck.has(`${deck.id}|${w.id}`))
+      .sort((a, b) => a.stability - b.stability); // tier low → high
+  }, [deck, words, removedFromDeck]);
   return (
     <Sheet visible={deck != null} onClose={onClose} title={deck?.name}>
-      <RawText style={styles.pickerLabel}>{t('deckRow.words', { count: deck?.wordCount ?? 0 })}</RawText>
-      <WordPicker words={deckWords} selectable={false} />
-      <ButtonRow
-        style={styles.pickerCta}
-        left={{ title: t('wordList.deleteDeck'), variant: 'destructive', onPress: () => deck && onDelete(deck) }}
-        right={{ title: t('wordList.studyDeck'), variant: 'primary', onPress: onStudy }}
-      />
+      {deck != null && (
+        <>
+          <DetailStats
+            style={styles.deckStats}
+            items={[
+              { label: t('wordList.deckWordsLabel'), value: String(deck.wordCount) },
+              { label: t('wordList.deckReviewsLabel'), value: String(deck.reviews) },
+              { label: t('wordList.deckCreatedLabel'), value: shortDate(deck.createdAt, t) },
+            ]}
+          />
+          <List scroll style={styles.deckWordScroll} isEmpty={deckWords.length === 0} emptyTitle={t('wordList.deckEmptyTitle')} emptyBody={t('wordList.deckEmptyBody')}>
+            {deckWords.map((w) => (
+              <WordRow key={w.id} word={{ native: w.native, target: w.target, stability: w.stability }} onPress={() => onWordPress(w)} onRemoveFromDeck={() => onRemoveWord(deck, w)} />
+            ))}
+          </List>
+          <ButtonRow
+            style={styles.pickerCta}
+            left={{ title: t('wordList.deleteDeck'), variant: 'destructive', onPress: () => onDelete(deck) }}
+            right={{ title: t('wordList.studyDeck'), variant: 'primary', onPress: onStudy }}
+          />
+        </>
+      )}
     </Sheet>
   );
 }
 
-// W-08 — Add a word to a deck (icon-slot deck rows + create-new-deck).
+// W-08 — Add a word to a deck (icon-slot deck rows). "Create new deck…" shows only when
+// the user has no decks yet.
 function AddToDeckSheet({
   word,
   decks,
@@ -596,41 +643,30 @@ function AddToDeckSheet({
       {word != null && (
         <>
           <RawText style={styles.addToDeckSub}>{`${word.native} · ${word.target}`}</RawText>
-          <List
-            isEmpty={decks.length === 0}
-            emptyState={<RawText style={styles.addToDeckEmpty}>{t('wordList.addToDeckEmpty')}</RawText>}
-          >
-            {decks.map((d) => {
-              const inDeck = added.has(`${d.id}|${word.id}`);
-              return (
-                <ListItem
-                  key={d.id}
-                  leading={
-                    <View style={styles.deckIconTile}>
-                      <IconList size={16} color={theme.color.brand} />
-                    </View>
-                  }
-                  title={d.name}
-                  subtitle={t('deckRow.words', { count: d.wordCount })}
-                  disabled={inDeck}
-                  onPress={() => onAdd(word, d)}
-                  trailing={
-                    inDeck ? (
-                      <RawText style={styles.alreadyAdded}>{t('wordList.alreadyAdded')}</RawText>
-                    ) : (
-                      <IconChevronRight size={14} color={theme.color.borderStrong} />
-                    )
-                  }
-                />
-              );
-            })}
-          </List>
-          <Pressable style={({ pressed }) => [styles.createNewRow, pressed && { opacity: 0.6 }]} onPress={onCreateNew} accessibilityRole="button">
-            <View style={styles.createNewTile}>
-              <RawText style={styles.createNewPlus}>+</RawText>
-            </View>
-            <RawText style={styles.createNewText}>{t('wordList.createNewDeck')}</RawText>
-          </Pressable>
+          {decks.length === 0 ? (
+            <CreateNewDeckRow onPress={onCreateNew} />
+          ) : (
+            <List>
+              {decks.map((d) => {
+                const inDeck = added.has(`${d.id}|${word.id}`);
+                return (
+                  <ListItem
+                    key={d.id}
+                    leading={
+                      <View style={styles.deckIconTile}>
+                        <IconList size={16} color={theme.color.brand} />
+                      </View>
+                    }
+                    title={d.name}
+                    subtitle={t('deckRow.words', { count: d.wordCount })}
+                    disabled={inDeck}
+                    onPress={() => onAdd(word, d)}
+                    trailing={inDeck ? <RawText style={styles.alreadyAdded}>{t('wordList.alreadyAdded')}</RawText> : undefined}
+                  />
+                );
+              })}
+            </List>
+          )}
         </>
       )}
     </Sheet>
@@ -644,7 +680,7 @@ const styles = StyleSheet.create((theme) => {
     titleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 },
     title: { fontFamily: fonts.sans.extra, fontSize: 22, letterSpacing: -0.3, color: color.textStrong },
     count: { fontFamily: fonts.sans.medium, fontSize: 13, color: color.textMuted },
-    headerSearch: { marginBottom: 10 },
+    searchUnderTabs: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 2 },
 
     listContent: { paddingBottom: 16 },
     empty: { paddingTop: 64 },
@@ -652,9 +688,15 @@ const styles = StyleSheet.create((theme) => {
     proBadgeText: { fontFamily: fonts.sans.bold, fontSize: 9, letterSpacing: 0.3, color: palette.amber[800] },
 
     // decks tab
+    decksBody: { flex: 1 },
+    stickyCreate: { paddingHorizontal: 16, borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.divider },
+    decksList: { paddingBottom: 20 },
     decksContent: { paddingTop: 12, paddingBottom: 20 },
     decksHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 8 },
     decksCount: { fontFamily: fonts.sans.medium, fontSize: 13, color: color.textMuted },
+    gutterDivider: { height: 1.5, backgroundColor: color.borderStrong, marginVertical: 4, marginHorizontal: 16, borderRadius: 1 },
+    deckStats: { marginBottom: 14 },
+    deckWordScroll: { maxHeight: 340 },
     newDeck: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 9, paddingHorizontal: 14, borderRadius: theme.radius.md, backgroundColor: color.brand },
     newDeckText: { fontFamily: fonts.sans.bold, fontSize: 14, color: '#fff' },
     decksEmpty: { alignItems: 'center', paddingTop: 60, paddingHorizontal: 24 },

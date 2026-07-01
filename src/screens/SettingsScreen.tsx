@@ -9,7 +9,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
 import { useEntitlement, useHomeData, useProfile } from '@/query/hooks';
-import { Button, IconBook, IconChevronRight, IconClock, IconInfo, IconMountain, IconTrash, RawText, Screen, Sheet } from '@/ui';
+import { Button, ConfirmDialog, IconBook, IconChevronRight, IconClock, IconInfo, IconMountain, IconTrash, RawText, Screen, Sheet } from '@/ui';
 
 const FREE_WORD_LIMIT = 50;
 type SheetId = 'about' | 'clear' | 'signout' | 'soon' | null;
@@ -108,21 +108,28 @@ export function SettingsScreen() {
         <RawText style={styles.aboutMeta}>{t('settings.version', { version: '1.0.0' })}</RawText>
       </Sheet>
 
-      <Sheet visible={sheet === 'clear'} onClose={() => setSheet(null)} title={t('settings.clearTitle')}>
-        <RawText style={styles.sheetBody}>{t('settings.clearBody')}</RawText>
-        <Button title={t('settings.clearConfirm')} variant="destructive" onPress={() => setSheet(null)} />
-        <View style={styles.sheetCancel}>
-          <Button title={t('settings.cancel')} variant="secondary" onPress={() => setSheet(null)} />
-        </View>
-      </Sheet>
+      <ConfirmDialog
+        visible={sheet === 'clear'}
+        icon={<IconTrash size={22} color={theme.color.danger} />}
+        title={t('settings.clearTitle')}
+        body={t('settings.clearBody')}
+        confirmLabel={t('settings.clearConfirm')}
+        cancelLabel={t('settings.cancel')}
+        destructive
+        onConfirm={() => setSheet(null)}
+        onClose={() => setSheet(null)}
+      />
 
-      <Sheet visible={sheet === 'signout'} onClose={() => setSheet(null)} title={t('settings.signOutTitle')}>
-        <RawText style={styles.sheetBody}>{t('settings.signOutBody')}</RawText>
-        <Button title={t('settings.signOut')} variant="destructive" onPress={() => setSheet(null)} />
-        <View style={styles.sheetCancel}>
-          <Button title={t('settings.cancel')} variant="secondary" onPress={() => setSheet(null)} />
-        </View>
-      </Sheet>
+      <ConfirmDialog
+        visible={sheet === 'signout'}
+        title={t('settings.signOutTitle')}
+        body={t('settings.signOutBody')}
+        confirmLabel={t('settings.signOut')}
+        cancelLabel={t('settings.cancel')}
+        destructive
+        onConfirm={() => setSheet(null)}
+        onClose={() => setSheet(null)}
+      />
 
       <Sheet visible={sheet === 'soon'} onClose={() => setSheet(null)} title={soonLabel}>
         <RawText style={styles.sheetBody}>{t('settings.comingSoon')}</RawText>

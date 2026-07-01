@@ -5,7 +5,8 @@
     "search": "Buscar",
     "closeSearch": "Cerrar búsqueda",
     "clear": "Borrar",
-    "filter": "Filtrar y ordenar"
+    "filter": "Filtrar y ordenar",
+    "cancel": "Cancelar"
   },
   "tabs": {
     "home": "Inicio",
@@ -270,7 +271,19 @@
     "studyDeck": "Estudiar mazo",
     "alreadyAdded": "Ya añadida",
     "addToDeckEmpty": "Aún no hay mazos — crea el primero abajo.",
-    "createNewDeck": "Crear nuevo mazo…"
+    "createNewDeck": "Crear nuevo mazo…",
+    "addedToDeck": "Añadida a {{deck}}",
+    "deckCreated": "Mazo «{{name}}» creado",
+    "deckWordsLabel": "Palabras",
+    "deckReviewsLabel": "Repasos",
+    "deckCreatedLabel": "Creado",
+    "deckEmptyTitle": "Este mazo está vacío",
+    "deckEmptyBody": "Añade palabras a este mazo desde tu biblioteca.",
+    "deleteDeckTitle": "¿Eliminar «{{name}}»?",
+    "deleteDeckBody": "Se elimina el mazo, pero sus palabras permanecen en tu biblioteca e historial.",
+    "removeTitle": "¿Quitar «{{word}}»?",
+    "removeBody": "Esto quita la palabra solo de este mazo. Permanece en tu biblioteca.",
+    "removeConfirm": "Quitar del mazo"
   },
   "progress": {
     "title": "Progreso",

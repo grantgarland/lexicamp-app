@@ -5,7 +5,8 @@
     "search": "Search",
     "closeSearch": "Close search",
     "clear": "Clear",
-    "filter": "Filter and sort"
+    "filter": "Filter and sort",
+    "cancel": "Cancel"
   },
   "tabs": {
     "home": "Home",
@@ -270,7 +271,19 @@
     "studyDeck": "Study Deck",
     "alreadyAdded": "Already added",
     "addToDeckEmpty": "No decks yet — create your first one below.",
-    "createNewDeck": "Create new deck…"
+    "createNewDeck": "Create new deck…",
+    "addedToDeck": "Added to {{deck}}",
+    "deckCreated": "Created {{name}}",
+    "deckWordsLabel": "Words",
+    "deckReviewsLabel": "Reviews",
+    "deckCreatedLabel": "Created",
+    "deckEmptyTitle": "This deck is empty",
+    "deckEmptyBody": "Add words to this deck from your library.",
+    "deleteDeckTitle": "Delete “{{name}}”?",
+    "deleteDeckBody": "The deck is removed, but its words stay in your library and study history.",
+    "removeTitle": "Remove “{{word}}”?",
+    "removeBody": "This removes the word from this deck only. It stays in your library.",
+    "removeConfirm": "Remove from deck"
   },
   "progress": {
     "title": "Progress",

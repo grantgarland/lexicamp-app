@@ -17,6 +17,10 @@ export { SearchBar, type SearchBarProps } from './SearchBar';
 export { SegmentedTabs, type SegmentedTab, type SegmentedTabsProps } from './SegmentedTabs';
 export { ButtonRow, type ButtonRowButton, type ButtonRowProps } from './ButtonRow';
 export { List, ListItem, Checkbox, type ListProps, type ListItemProps } from './List';
+export { ConfirmDialog, type ConfirmDialogProps } from './ConfirmDialog';
+export { Toast } from './Toast';
+export { DetailStats, type DetailStat } from './DetailStats';
+export { WordDetailSheet, type WordDetailSheetProps } from './WordDetailSheet';
 export {
   IconHome,
   IconList,
@@ -44,6 +48,7 @@ export {
   IconMountain,
   IconInfo,
   IconSliders,
+  IconMinus,
   type IconProps,
 } from './icons';
 export { PRESS_OPACITY, pressableOpacity } from './pressable';
