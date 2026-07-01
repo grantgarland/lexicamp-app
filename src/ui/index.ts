@@ -2,6 +2,7 @@
 // Grows through P2 (Sheet, TabBar, icons…).
 export { Text, RawText, FONT_SCALE_MAX, type TextProps, type TextVariant } from './Text';
 export { Screen, SCREEN_MAX_WIDTH, type ScreenProps } from './Screen';
+export { Tooltip, InfoDot, type TooltipProps } from './Tooltip';
 export { Button, type ButtonProps, type ButtonVariant } from './Button';
 export { Card, type CardProps } from './Card';
 export { TierBadge, type TierBadgeProps, type TierBadgeVariant } from './TierBadge';
@@ -33,8 +34,14 @@ export {
   IconCalendar,
   IconSearch,
   IconX,
+  IconArrowUp,
+  IconArrowDown,
+  IconMountain,
+  IconInfo,
   type IconProps,
 } from './icons';
+export { PRESS_OPACITY, pressableOpacity } from './pressable';
+export { ForgettingCurve, IntervalTrack, CardSorter, DailyPractice, SummitScene } from './illustrations';
 
 // ── P3 composed domain components ──
 export { RatingButtons, type RatingButtonsProps, type Rating } from './RatingButtons';

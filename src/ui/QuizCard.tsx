@@ -1,14 +1,26 @@
 // QuizCard — the study card faces, ported from Quiz's CardFrontTier1/Tier3 + CardBack.
 // Front has two modes: `recognition` (tap to reveal) and `recall` (WordCharInput).
 // Colors come from the tier registry; the screen owns the flip between front/back.
+import type { TFunction } from 'i18next';
 import { Pressable, View, type ViewStyle } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { useTranslation } from '@/i18n';
 import { getTier, type Tier, type TierId } from '@/theme/tiers';
 import { IconChevronDown } from './icons';
 import { RawText as RNText } from './Text';
 import { TierBadge } from './TierBadge';
+import { Tooltip } from './Tooltip';
 import { WordCharInput } from './WordCharInput';
+
+/** Pointed, localized help text for a tier badge tooltip (CEFR code stays as-is). */
+function tierTooltip(tier: Tier, translate: TFunction): { title: string; content: string } {
+  const name = translate(`tier.${tier.id}.name`);
+  return {
+    title: `${name} · ${tier.cefr}`,
+    content: `${translate(`tier.${tier.id}.stabilityRange`)}. ${translate(`tier.${tier.id}.desc`)}`,
+  };
+}
 
 export interface QuizCardData {
   frontWord: string;
@@ -35,13 +47,16 @@ export interface QuizCardFrontProps {
 }
 
 export function QuizCardFront({ tier, card, mode = 'recognition', onReveal, autoFocus = true, style }: QuizCardFrontProps) {
-  const t = toTier(tier);
+  const { t: translate } = useTranslation();
+  const tr = toTier(tier);
   const recall = mode === 'recall';
 
   return (
-    <View style={[styles.cardBase, { backgroundColor: t.bg, borderColor: t.border }, style]}>
+    <View style={[styles.cardBase, { backgroundColor: tr.bg, borderColor: tr.border }, style]}>
       <View style={styles.badge}>
-        <TierBadge tier={t} variant="chip" size="sm" />
+        <Tooltip {...tierTooltip(tr, translate)} accessibilityLabel={translate('tier.a11yInfo', { name: translate(`tier.${tr.id}.name`) })}>
+          <TierBadge tier={tr} variant="chip" size="sm" />
+        </Tooltip>
       </View>
 
       <View style={[styles.frontContent, recall && styles.frontContentRecall]}>
@@ -49,13 +64,13 @@ export function QuizCardFront({ tier, card, mode = 'recognition', onReveal, auto
         {card.frontSub != null && (
           <RNText style={[recall ? styles.recallSub : styles.frontSub]}>{card.frontSub}</RNText>
         )}
-        <RNText style={[styles.frontPrompt, { color: t.labelColor }]}>{card.frontPrompt}</RNText>
+        <RNText style={[styles.frontPrompt, { color: tr.labelColor }]}>{card.frontPrompt}</RNText>
 
         {recall && (
           <>
-            <WordCharInput word={card.backWord} accentColor={t.accent} borderColor={t.border} autoFocus={autoFocus} onComplete={onReveal} />
+            <WordCharInput word={card.backWord} accentColor={tr.accent} borderColor={tr.border} backgroundColor={tr.bg} autoFocus={autoFocus} onComplete={onReveal} />
             <RNText style={styles.letterHint}>
-              {card.backWord.replace(/ /g, '').length} letters
+              {translate('quizCard.letters', { count: card.backWord.replace(/ /g, '').length })}
             </RNText>
           </>
         )}
@@ -65,18 +80,18 @@ export function QuizCardFront({ tier, card, mode = 'recognition', onReveal, auto
         <Pressable
           onPress={onReveal}
           accessibilityRole="button"
-          style={({ pressed }) => [styles.revealSolid, { backgroundColor: t.accent }, pressed && styles.pressedOpacity]}
+          style={({ pressed }) => [styles.revealSolid, { backgroundColor: tr.accent }, pressed && styles.pressedOpacity]}
         >
-          <RNText style={styles.revealSolidText}>Reveal</RNText>
+          <RNText style={styles.revealSolidText}>{translate('quizCard.reveal')}</RNText>
         </Pressable>
       ) : (
         <Pressable
           onPress={onReveal}
           accessibilityRole="button"
-          style={({ pressed }) => [styles.revealOutline, { borderColor: t.border }, pressed && styles.pressedScale]}
+          style={({ pressed }) => [styles.revealOutline, { borderColor: tr.border }, pressed && styles.pressedScale]}
         >
-          <RNText style={[styles.revealOutlineText, { color: t.accent }]}>Tap to reveal</RNText>
-          <IconChevronDown size={16} color={t.accent} />
+          <RNText style={[styles.revealOutlineText, { color: tr.accent }]}>{translate('quizCard.tapToReveal')}</RNText>
+          <IconChevronDown size={16} color={tr.accent} />
         </Pressable>
       )}
     </View>
@@ -91,14 +106,17 @@ export interface QuizCardBackProps {
 
 export function QuizCardBack({ tier, card, style }: QuizCardBackProps) {
   const { theme } = useUnistyles();
-  const t = toTier(tier);
+  const { t: translate } = useTranslation();
+  const tr = toTier(tier);
 
   return (
-    <View style={[styles.cardBase, styles.backCard, { borderColor: t.border }, style]}>
+    <View style={[styles.cardBase, styles.backCard, { borderColor: tr.border }, style]}>
       <View style={styles.backHeadRow}>
         <View style={styles.backTierRow}>
-          <TierBadge tier={t} variant="chip" size="sm" />
-          <RNText style={styles.backTierName}>{t.name}</RNText>
+          <Tooltip {...tierTooltip(tr, translate)} accessibilityLabel={translate('tier.a11yInfo', { name: translate(`tier.${tr.id}.name`) })}>
+            <TierBadge tier={tr} variant="chip" size="sm" />
+          </Tooltip>
+          <RNText style={styles.backTierName}>{translate(`tier.${tr.id}.name`)}</RNText>
         </View>
         {card.backPos != null && (
           <View style={styles.posPill}>
@@ -109,7 +127,7 @@ export function QuizCardBack({ tier, card, style }: QuizCardBackProps) {
 
       <RNText style={styles.backWord}>{card.backWord}</RNText>
       {card.backPhonetic != null && (
-        <RNText style={[styles.backIpa, { color: t.labelColor }]}>{card.backPhonetic}</RNText>
+        <RNText style={[styles.backIpa, { color: tr.labelColor }]}>{card.backPhonetic}</RNText>
       )}
 
       <View style={styles.backDivider} />
@@ -118,8 +136,8 @@ export function QuizCardBack({ tier, card, style }: QuizCardBackProps) {
         <RNText style={styles.backExample}>&ldquo;{card.backExample}&rdquo;</RNText>
       )}
 
-      <View style={[styles.echo, { backgroundColor: t.bg }]}>
-        <RNText style={[styles.echoText, { color: t.labelColor }]}>
+      <View style={[styles.echo, { backgroundColor: tr.bg }]}>
+        <RNText style={[styles.echoText, { color: tr.labelColor }]}>
           <RNText style={styles.echoStrong}>{card.frontWord}</RNText>
           <RNText style={{ color: theme.color.textMuted }}>{`  →  ${card.backWord}`}</RNText>
         </RNText>

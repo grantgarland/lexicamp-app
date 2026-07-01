@@ -8,8 +8,11 @@ type AppBreakpoints = typeof breakpoints;
 type AppThemes = { light: typeof lightTheme; dark: typeof darkTheme };
 
 // Make the theme + breakpoints fully typed at every `theme.…` call site.
+// The empty-body `extends` interfaces are Unistyles' required module-augmentation idiom.
 declare module 'react-native-unistyles' {
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   export interface UnistylesThemes extends AppThemes {}
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   export interface UnistylesBreakpoints extends AppBreakpoints {}
 }
 

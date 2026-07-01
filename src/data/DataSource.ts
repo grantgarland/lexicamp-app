@@ -3,6 +3,7 @@
 // the same interface later (supabase-js + expo-sqlite cache), with no changes at
 // the call sites (query hooks). Methods are param-light: under the free tier there
 // is one active deck (03); the source resolves the current user/deck itself.
+import type { BufferedRating, QuizCardItem } from '@/domain/quiz';
 import type { Card, CardFsrsState, Deck, Entitlement, Profile } from '@/domain/types';
 
 export interface DeckCards {
@@ -23,4 +24,8 @@ export interface DataSource {
   getActiveDeck(): Promise<Deck>;
   getDeckCards(): Promise<DeckCards>;
   getEngagement(): Promise<Engagement>;
+  /** The due-now study queue, resolved to quiz view-models (capped per session). */
+  getDueCards(): Promise<QuizCardItem[]>;
+  /** Commit a completed session's buffered ratings (03 batch write). */
+  commitQuizSession(payload: { ratings: BufferedRating[] }): Promise<void>;
 }

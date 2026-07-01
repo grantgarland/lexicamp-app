@@ -1,4 +1,5 @@
 import '@/theme/unistyles'; // Configure Unistyles before any component renders.
+import '@/i18n'; // Initialize i18n (UI locale) before any component renders.
 
 import {
   PlusJakartaSans_400Regular,
@@ -19,6 +20,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 
 import { DevBadge } from '@/dev/DevBadge';
 import { queryClient } from '@/query/queryClient';
@@ -46,13 +48,20 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <BottomSheetModalProvider>
-          <Stack screenOptions={{ headerShown: false }}>
-            {/* Search is a route, presented as a slide-up modal sheet (from the Home FAB). */}
-            <Stack.Screen name="search" options={{ presentation: 'modal' }} />
-          </Stack>
-          {__DEV__ ? <DevBadge /> : null}
-        </BottomSheetModalProvider>
+        {/* SafeAreaProvider feeds insets to Screen/TabBar/DevBadge. Required for
+            fullScreenModal routes (e.g. quiz), which cover the status-bar area and
+            must inset content themselves. initialWindowMetrics avoids a first-frame flash. */}
+        <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+          <BottomSheetModalProvider>
+            <Stack screenOptions={{ headerShown: false }}>
+              {/* Search is a route, presented as a slide-up modal sheet (from the Home FAB). */}
+              <Stack.Screen name="search" options={{ presentation: 'modal' }} />
+              {/* Quiz is an immersive full-screen modal (from Home "Study now"). */}
+              <Stack.Screen name="quiz" options={{ presentation: 'fullScreenModal' }} />
+            </Stack>
+            {__DEV__ ? <DevBadge /> : null}
+          </BottomSheetModalProvider>
+        </SafeAreaProvider>
       </GestureHandlerRootView>
     </QueryClientProvider>
   );

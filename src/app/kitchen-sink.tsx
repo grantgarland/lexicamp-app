@@ -26,6 +26,7 @@ import {
   type TextVariant,
   TierBadge,
   Toggle,
+  Tooltip,
   TranslationCard,
   type TranslationResult,
   WordRow,
@@ -141,6 +142,21 @@ export default function KitchenSink() {
               <Text variant="subheading">Interactive card</Text>
               <Text variant="caption">press → brand border + lift</Text>
             </Card>
+          </View>
+        </Section>
+
+        <Section title="Tooltip (press to reveal)">
+          <View style={styles.row}>
+            <Tooltip title="Summit · C2" content="Stability 30+ days. Mastered — retained for the long haul; fluency vocabulary.">
+              <View style={styles.infoChip}>
+                <Text variant="caption">What is Summit? ⓘ</Text>
+              </View>
+            </Tooltip>
+            <Tooltip content="A short contextual help popup. Tap anywhere to dismiss.">
+              <View style={styles.infoChip}>
+                <Text variant="caption">Help ⓘ</Text>
+              </View>
+            </Tooltip>
           </View>
         </Section>
 
@@ -356,6 +372,14 @@ const styles = StyleSheet.create((theme) => ({
   stack: { gap: theme.space[3] },
   row: { flexDirection: 'row', gap: theme.space[3], alignItems: 'center', flexWrap: 'wrap' },
   toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  infoChip: {
+    borderWidth: theme.borderWidth.thin,
+    borderColor: theme.color.border,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.color.surfaceCard,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
   illusPlaceholder: {
     width: 72,
     height: 72,

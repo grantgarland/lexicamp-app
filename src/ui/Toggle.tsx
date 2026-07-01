@@ -1,6 +1,6 @@
 // Toggle — iOS-style on/off switch, ported from `_shared/toggle.js`.
 // 48×28 track, 22px spring thumb; brand when on, slate-300 off. Self-contained.
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Animated, Pressable } from 'react-native';
 import { useUnistyles } from 'react-native-unistyles';
 
@@ -12,7 +12,9 @@ export interface ToggleProps {
 
 export function Toggle({ value, onValueChange, disabled = false }: ToggleProps) {
   const { theme } = useUnistyles();
-  const anim = useRef(new Animated.Value(value ? 1 : 0)).current;
+  // Lazy `useState` init (not `useRef().current`) so the stable Animated.Value can be
+  // read during render — `.interpolate` below runs at render time. Never re-set.
+  const [anim] = useState(() => new Animated.Value(value ? 1 : 0));
 
   useEffect(() => {
     Animated.spring(anim, {

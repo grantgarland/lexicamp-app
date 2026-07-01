@@ -3,6 +3,7 @@
 // (today/total), due-tomorrow, added-today, word lifecycle, and the per-user
 // mountain tier → CEFR. Screens render these over raw domain entities; the math
 // lives HERE so it stays identical no matter where the data comes from.
+import i18n from '@/i18n';
 import { TIERS, type TierId } from '@/theme/tiers';
 
 import type { Card, CardFsrsState, LanguageCode, Profile, SearchDirection, WordLifecycle } from './types';
@@ -28,15 +29,11 @@ export function wordLifecycle(s: CardFsrsState): WordLifecycle {
 //   native_to_target = nativeLang → learningLang;  target_to_native = the reverse.
 // Every label the search UI shows (chip codes, language names, placeholder)
 // derives from HERE, so a profile with a different pair (e.g. fr→de) just works.
-const LANGUAGE_NAMES: Record<string, string> = {
-  en: 'English',
-  es: 'Spanish',
-  // …extend as translation coverage grows; unknown codes fall back to the code itself.
-};
 
-/** Human-readable name for a BCP-47/ISO code ('es' → 'Spanish'); falls back to the uppercased code. */
+/** Human-readable, UI-localized name for a BCP-47/ISO code ('es' → 'Spanish' / 'Español');
+ *  falls back to the uppercased code when the current locale has no `languages.<code>` key. */
 export function languageName(code: LanguageCode): string {
-  return LANGUAGE_NAMES[code.toLowerCase()] ?? code.toUpperCase();
+  return i18n.t(`languages.${code.toLowerCase()}`, { defaultValue: code.toUpperCase() });
 }
 
 export interface DirectionLangs {

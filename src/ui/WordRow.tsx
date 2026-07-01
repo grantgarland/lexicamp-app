@@ -8,6 +8,7 @@ import ReanimatedSwipeable, {
 } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { useTranslation } from '@/i18n';
 import { getTierByStability } from '@/theme/tiers';
 import { IconChevronRight, IconFolderPlus, IconLock, IconTrash } from './icons';
 import { Text } from './Text';
@@ -36,6 +37,7 @@ const ACTION_W = 76;
 
 export function WordRow({ word, onPress, onDelete, onAddToDeck, isPremium = false, compact = false }: WordRowProps) {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   const ref = useRef<SwipeableMethods>(null);
   const tier = getTierByStability(word.stability);
 
@@ -43,7 +45,7 @@ export function WordRow({ word, onPress, onDelete, onAddToDeck, isPremium = fals
     <View style={styles.tray}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Add to deck"
+        accessibilityLabel={t('wordRow.addToDeckA11y')}
         style={[styles.action, { backgroundColor: isPremium ? theme.color.brand : theme.palette.slate[400] }]}
         onPress={() => {
           ref.current?.close();
@@ -52,12 +54,12 @@ export function WordRow({ word, onPress, onDelete, onAddToDeck, isPremium = fals
       >
         {isPremium ? <IconFolderPlus size={18} color="#fff" /> : <IconLock size={18} color="#fff" />}
         <Text variant="label" style={styles.actionLabel}>
-          Add to Deck
+          {t('wordRow.addToDeck')}
         </Text>
       </Pressable>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Delete word"
+        accessibilityLabel={t('wordRow.deleteA11y')}
         style={[styles.action, { backgroundColor: theme.color.danger }]}
         onPress={() => {
           ref.current?.close();
@@ -66,7 +68,7 @@ export function WordRow({ word, onPress, onDelete, onAddToDeck, isPremium = fals
       >
         <IconTrash size={18} color="#fff" />
         <Text variant="label" style={styles.actionLabel}>
-          Delete
+          {t('wordRow.delete')}
         </Text>
       </Pressable>
     </View>

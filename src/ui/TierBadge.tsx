@@ -8,6 +8,7 @@ import { View, type ViewStyle } from 'react-native';
 import { SvgXml } from 'react-native-svg';
 import { StyleSheet } from 'react-native-unistyles';
 
+import { useTranslation } from '@/i18n';
 import { getTier, type Tier, type TierId } from '@/theme/tiers';
 import { RawText as Text } from './Text';
 import { TIER_BADGE_XML } from './tierBadges';
@@ -27,12 +28,14 @@ export interface TierBadgeProps {
 const toTier = (t: Tier | string): Tier => (typeof t === 'string' ? getTier(t) : t);
 
 export function TierBadge({ tier, variant = 'pill', size = 'md', px = 110, style }: TierBadgeProps) {
-  const t = toTier(tier);
+  const { t: translate } = useTranslation();
+  const tr = toTier(tier);
+  const name = translate(`tier.${tr.id}.name`);
 
   if (variant === 'badge') {
     return (
-      <View style={style} accessibilityLabel={`${t.name} tier badge`}>
-        <SvgXml xml={TIER_BADGE_XML[t.id]} width={px} height={Math.round(px * 1.05)} />
+      <View style={style} accessibilityLabel={translate('tier.a11yBadge', { name })}>
+        <SvgXml xml={TIER_BADGE_XML[tr.id]} width={px} height={Math.round(px * 1.05)} />
       </View>
     );
   }
@@ -41,11 +44,11 @@ export function TierBadge({ tier, variant = 'pill', size = 'md', px = 110, style
     const sz = size === 'md' ? 28 : 22;
     return (
       <View
-        accessibilityLabel={`${t.name} tier`}
-        style={[styles.chip, { width: sz, height: sz, borderRadius: sz / 2, backgroundColor: t.badgeBg }, style]}
+        accessibilityLabel={translate('tier.a11yLabel', { name })}
+        style={[styles.chip, { width: sz, height: sz, borderRadius: sz / 2, backgroundColor: tr.badgeBg }, style]}
       >
-        <Text style={[styles.chipText, { color: t.badgeText, fontSize: size === 'md' ? 13 : 10 }]}>
-          {String(t.chipGlyph)}
+        <Text style={[styles.chipText, { color: tr.badgeText, fontSize: size === 'md' ? 13 : 10 }]}>
+          {String(tr.chipGlyph)}
         </Text>
       </View>
     );
@@ -55,12 +58,12 @@ export function TierBadge({ tier, variant = 'pill', size = 'md', px = 110, style
   const sm = size === 'sm';
   return (
     <View
-      accessibilityLabel={`${t.name} tier`}
+      accessibilityLabel={translate('tier.a11yLabel', { name })}
       style={[
         styles.pill,
         {
-          backgroundColor: t.badgeBg,
-          borderColor: t.badgeBorder,
+          backgroundColor: tr.badgeBg,
+          borderColor: tr.badgeBorder,
           paddingVertical: sm ? 2 : 3,
           paddingHorizontal: sm ? 6 : 8,
           borderRadius: sm ? 4 : 6,
@@ -68,7 +71,7 @@ export function TierBadge({ tier, variant = 'pill', size = 'md', px = 110, style
         style,
       ]}
     >
-      <Text style={[styles.pillText, { color: t.badgeText, fontSize: sm ? 10 : 11 }]}>{t.short}</Text>
+      <Text style={[styles.pillText, { color: tr.badgeText, fontSize: sm ? 10 : 11 }]}>{translate(`tier.${tr.id}.short`)}</Text>
     </View>
   );
 }

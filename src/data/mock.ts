@@ -1,6 +1,7 @@
 // Mock DataSource — seeded with real Card + CardFsrsState fixtures per the dev
 // scenario, so every home/progress number is DERIVED by `derive.ts` (not hardcoded).
 // Swappable for SupabaseDataSource later behind the same interface.
+import type { BufferedRating, QuizCardItem } from '@/domain/quiz';
 import type { Card, CardFsrsState, Deck, Entitlement, Profile } from '@/domain/types';
 import { type DevPlan, type DevUserState, useDevStore } from '@/store/devStore';
 
@@ -88,6 +89,20 @@ function entitlementFor(plan: DevPlan): Entitlement {
     : { status: 'free', plan: null, platform: null, currentPeriodEnd: null };
 }
 
+// Mock study queue — a session of due cards with display content + tier + mode.
+// (mode: lower tiers = recognition / tap-to-reveal; higher = recall / char input.)
+const QUIZ_SESSION: QuizCardItem[] = [
+  { id: 'q_melancolico', tierId: 'bc', mode: 'recognition', content: { frontWord: 'melancólico', frontSub: '/me.laŋˈko.li.ko/', frontPrompt: "What's the translation?", backWord: 'melancholic', backPhonetic: '/ˌmɛl.ənˈkɒl.ɪk/', backPos: 'adjective', backExample: 'A melancholic melody filled the room.' } },
+  { id: 'q_ephemeral', tierId: 'abc', mode: 'recognition', content: { frontWord: 'ephemeral', frontSub: '/ɪˈfɛm.ər.əl/', frontPrompt: 'What is the translation?', backWord: 'efímero', backPhonetic: '/eˈfi.me.ɾo/', backPos: 'adjective', backExample: 'La belleza de las flores es efímera.' } },
+  { id: 'q_nostalgia', tierId: 'bc', mode: 'recognition', content: { frontWord: 'nostalgia', frontSub: '/nos.ˈtal.xja/', frontPrompt: "What's the translation?", backWord: 'nostalgia', backPhonetic: '/nɒˈstæl.dʒə/', backPos: 'noun', backExample: 'A wave of nostalgia washed over her.' } },
+  { id: 'q_grateful', tierId: 'hc', mode: 'recall', content: { frontWord: 'grateful', frontSub: 'Feeling or showing thanks.', frontPrompt: 'Recall the Spanish word.', backWord: 'agradecido', backPhonetic: '/a.ɣɾa.ðeˈθi.ðo/', backPos: 'adjective', backExample: 'Estoy muy agradecido por tu ayuda.' } },
+  { id: 'q_serendipity', tierId: 'sr', mode: 'recall', content: { frontWord: 'serendipity', frontSub: 'A fortunate chance discovery.', frontPrompt: 'Recall the Spanish word.', backWord: 'serendipia', backPhonetic: '/se.ɾen.ˈdi.pja/', backPos: 'noun', backExample: 'Fue pura serendipia que nos encontráramos.' } },
+  { id: 'q_courage', tierId: 'summit', mode: 'recall', content: { frontWord: 'courage', frontSub: 'Bravery in the face of fear.', frontPrompt: 'Recall the Spanish word.', backWord: 'coraje', backPhonetic: '/koˈɾa.xe/', backPos: 'noun', backExample: 'Enfrentó el reto con coraje.' } },
+  // Long + multi-word recall test: RU "speed bump" is literally "lying policeman".
+  // Verifies horizontal scroll + edge fade + focus traversal + spaces (multi-word).
+  { id: 'q_speedbump', tierId: 'summit', mode: 'recall', content: { frontWord: 'speed bump / hump', frontSub: 'A raised ridge in a road to slow traffic.', frontPrompt: 'Recall the Russian phrase.', backWord: 'лежачий полицейский', backPhonetic: '/lʲɪˈʐatɕɪj pəlʲɪˈtsɛjskʲɪj/', backPos: 'noun', backExample: 'Впереди лежачий полицейский — сбавь скорость.' } },
+];
+
 const scenario = () => useDevStore.getState();
 
 export const mockDataSource: DataSource = {
@@ -105,5 +120,12 @@ export const mockDataSource: DataSource = {
   },
   async getEngagement(): Promise<Engagement> {
     return { streakDays: STREAK[scenario().userState] };
+  },
+  async getDueCards(): Promise<QuizCardItem[]> {
+    return QUIZ_SESSION;
+  },
+  async commitQuizSession(_payload: { ratings: BufferedRating[] }): Promise<void> {
+    // TODO(P4 data): batch-write per 03 (update card_fsrs_state via ts-fsrs, append
+    // review_logs, write quiz_completed event) — Supabase + ts-fsrs. No-op in mock.
   },
 };

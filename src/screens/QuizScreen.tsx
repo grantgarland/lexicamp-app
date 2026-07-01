@@ -1,0 +1,403 @@
+// QuizScreen (Q-01…Q-10) — the study session, assembled against quiz/Quiz.html.
+// Reads the due queue through the state layer (`useDueCards`), buffers ratings
+// in-memory, and commits the batch on completion (`useCommitQuizSession`) per 03's
+// quiz write pattern. Composes the kit (QuizCardFront/Back, RatingButtons, TierBadge)
+// + screen-specific phases built inline (top bar, end, stats, tier-promo, exit confirm).
+import { useState } from 'react';
+import { useRouter } from 'expo-router';
+import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
+import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
+
+import type { BufferedRating, QuizCardItem, UiRating } from '@/domain/quiz';
+import { sessionStats } from '@/domain/quiz';
+import { useTranslation } from '@/i18n';
+import { useCommitQuizSession, useDueCards, useHomeData } from '@/query/hooks';
+import {
+  Button,
+  EmptyState,
+  IconArrowDown,
+  IconArrowUp,
+  IconMountain,
+  IconX,
+  QuizCardBack,
+  QuizCardFront,
+  RatingButtons,
+  RawText,
+  Screen,
+  TierBadge,
+} from '@/ui';
+
+type Phase = 'quiz' | 'end' | 'stats' | 'promo';
+
+export function QuizScreen() {
+  const router = useRouter();
+  const { theme } = useUnistyles();
+  const { t } = useTranslation();
+  const { cards, isLoading } = useDueCards();
+  const { streakDays } = useHomeData();
+  const commit = useCommitQuizSession();
+
+  const [phase, setPhase] = useState<Phase>('quiz');
+  const [idx, setIdx] = useState(0);
+  const [revealed, setRevealed] = useState(false);
+  const [ratings, setRatings] = useState<BufferedRating[]>([]);
+  const [showExit, setShowExit] = useState(false);
+
+  const total = cards.length;
+  const card = cards[idx];
+  const stats = sessionStats(ratings);
+
+  const closeAttempt = () => {
+    if (phase === 'quiz' && ratings.length > 0) setShowExit(true);
+    else router.back();
+  };
+
+  const rate = (r: UiRating) => {
+    if (card == null) return; // queue emptied mid-session (e.g. a refetch) — nothing to rate
+    const next = [...ratings, { cardId: card.id, rating: r }];
+    setRatings(next);
+    if (idx + 1 >= total) {
+      commit.mutate({ ratings: next }); // session complete → batch write (03)
+      setPhase('end');
+    } else {
+      setIdx(idx + 1);
+      setRevealed(false);
+    }
+  };
+
+  const done = () => {
+    if (stats.promoted > 0) setPhase('promo');
+    else router.back();
+  };
+  const studyAgain = () => {
+    setPhase('quiz');
+    setIdx(0);
+    setRevealed(false);
+    setRatings([]);
+  };
+
+  if (phase === 'end') {
+    return <EndScreen good={stats.accuracy >= 60} accuracy={stats.accuracy} streak={streakDays} onSeeResults={() => setPhase('stats')} />;
+  }
+  if (phase === 'stats') {
+    return <StatsScreen cards={cards} ratings={ratings} onStudyAgain={studyAgain} onDone={done} />;
+  }
+  if (phase === 'promo') {
+    const masteredWords = ratings
+      .filter((r) => r.rating === 'got_it')
+      .map((r) => cards.find((c) => c.id === r.cardId)?.content.backWord ?? '')
+      .filter(Boolean);
+    return <TierPromoScreen words={masteredWords} onContinue={() => router.back()} />;
+  }
+
+  // Quiz phase but no card to show: still loading the due queue, or nothing is due
+  // (fresh entry with an empty queue, or "Study again" after the commit cleared it).
+  // Without this the screen renders a broken "0 / 0" quiz and rate() crashes on card.id.
+  if (phase === 'quiz' && card == null) {
+    return (
+      <Screen edges={['top', 'bottom']}>
+        {isLoading ? (
+          <View style={styles.centered}>
+            <ActivityIndicator />
+          </View>
+        ) : (
+          <>
+            <QuizTopBar current={0} total={0} onClose={() => router.back()} />
+            <EmptyState
+              style={styles.emptyFill}
+              illustration={<IconMountain size={44} color={theme.color.evergreen} />}
+              title={t('quiz.caughtUpTitle')}
+              body={t('quiz.caughtUpBody')}
+              cta={t('quiz.backToHome')}
+              onCta={() => router.back()}
+            />
+          </>
+        )}
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen edges={['top', 'bottom']}>
+      <QuizTopBar current={idx + (revealed ? 1 : 0)} total={total} onClose={closeAttempt} />
+      {card != null && (
+        <View style={styles.cardArea}>
+          <ScrollView contentContainerStyle={styles.cardScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            {!revealed ? (
+              <QuizCardFront key={card.id} tier={card.tierId} card={card.content} mode={card.mode} onReveal={() => setRevealed(true)} />
+            ) : (
+              <Animated.View key={card.id} entering={FadeIn.duration(220)}>
+                <QuizCardBack tier={card.tierId} card={card.content} />
+              </Animated.View>
+            )}
+          </ScrollView>
+          {revealed && (
+            <Animated.View entering={FadeIn.duration(220)} style={styles.ratingArea}>
+              <RatingButtons onRate={rate} />
+            </Animated.View>
+          )}
+        </View>
+      )}
+
+      {showExit && <ExitConfirmModal cardsRated={ratings.length} total={total} onConfirm={() => router.back()} onCancel={() => setShowExit(false)} />}
+    </Screen>
+  );
+}
+
+// ── Top bar + progress ───────────────────────────────────────────────────────
+function QuizTopBar({ current, total, onClose }: { current: number; total: number; onClose: () => void }) {
+  const { theme } = useUnistyles();
+  const { t } = useTranslation();
+  const pct = total > 0 ? (current / total) * 100 : 0;
+  return (
+    <View>
+      <View style={styles.topRow}>
+        <RawText style={styles.counter}>
+          {current}
+          <RawText style={styles.counterTotal}> / {total}</RawText>
+        </RawText>
+        <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel={t('quiz.closeQuiz')} style={styles.closeBtn}>
+          <IconX size={16} color={theme.color.textMuted} />
+        </Pressable>
+      </View>
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, { width: `${pct}%` }]} />
+      </View>
+    </View>
+  );
+}
+
+// ── End screen (Q-07 / Q-08) ─────────────────────────────────────────────────
+function EndScreen({ good, accuracy, streak, onSeeResults }: { good: boolean; accuracy: number; streak: number; onSeeResults: () => void }) {
+  const { theme } = useUnistyles();
+  const { t } = useTranslation();
+  return (
+    <Screen edges={['top', 'bottom']}>
+      <View style={styles.centered}>
+        {/* Pika pose placeholder — swap for the brand asset when bundled. */}
+        <View style={[styles.pika, { backgroundColor: good ? theme.palette.green[100] : theme.palette.blue[100] }]}>
+          <IconMountain size={48} color={good ? theme.color.evergreen : theme.color.brand} />
+        </View>
+        <RawText style={styles.endTitle}>{good ? t('quiz.endGreat') : t('quiz.endKeepGoing')}</RawText>
+        <RawText style={styles.endSub}>{good ? t('quiz.endStatsSub', { accuracy, streak }) : t('quiz.endEncourage')}</RawText>
+        <View style={styles.endStats}>
+          <EndStat label={t('quiz.accuracy')} value={`${accuracy}%`} />
+          <View style={styles.endStatDivider} />
+          <EndStat label={t('quiz.streak')} value={t('quiz.daysValue', { count: streak })} />
+        </View>
+        <Button title={t('quiz.seeResults')} variant="primary" onPress={onSeeResults} />
+      </View>
+    </Screen>
+  );
+}
+function EndStat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.endStat}>
+      <RawText style={styles.endStatValue}>{value}</RawText>
+      <RawText style={styles.endStatLabel}>{label}</RawText>
+    </View>
+  );
+}
+
+// ── Stats screen (Q-09) ──────────────────────────────────────────────────────
+function StatsScreen({ cards, ratings, onStudyAgain, onDone }: { cards: QuizCardItem[]; ratings: BufferedRating[]; onStudyAgain: () => void; onDone: () => void }) {
+  const { theme } = useUnistyles();
+  const { t } = useTranslation();
+  const s = sessionStats(ratings);
+  return (
+    <Screen edges={['top', 'bottom']}>
+      <View style={styles.statsHeader}>
+        <RawText style={styles.statsTitle}>{t('quiz.sessionResults')}</RawText>
+        <View style={styles.statsSummary}>
+          <View style={styles.statsSummaryItem}>
+            <View style={[styles.statsDot, { backgroundColor: theme.palette.green[100] }]}>
+              <IconArrowUp size={10} color={theme.palette.green[600]} />
+            </View>
+            <RawText style={styles.statsSummaryText}>{t('quiz.promotedCount', { count: s.promoted })}</RawText>
+          </View>
+          <View style={styles.statsSummaryItem}>
+            <View style={[styles.statsDot, { backgroundColor: theme.palette.slate[100] }]}>
+              <IconArrowDown size={10} color={theme.color.textMuted} />
+            </View>
+            <RawText style={styles.statsSummaryText}>{t('quiz.reviewAgainCount', { count: s.again })}</RawText>
+          </View>
+        </View>
+      </View>
+
+      <ScrollView style={styles.statsList} contentContainerStyle={styles.statsListContent}>
+        {cards.map((c, i) => {
+          const rating = ratings[i]?.rating ?? 'again';
+          return (
+            <View key={c.id} style={styles.statRow}>
+              <TierBadge tier={c.tierId} variant="pill" size="sm" />
+              <View style={styles.statRowBody}>
+                <RawText style={styles.statWord}>{c.content.backWord}</RawText>
+                <RawText style={styles.statSource}>{c.content.frontWord}</RawText>
+              </View>
+              <RatingPill rating={rating} />
+            </View>
+          );
+        })}
+      </ScrollView>
+
+      <View style={styles.statsFooter}>
+        <View style={styles.footerBtn}>
+          <Button title={t('quiz.studyAgain')} variant="secondary" onPress={onStudyAgain} />
+        </View>
+        <View style={styles.footerBtn}>
+          <Button title={t('quiz.done')} variant="primary" onPress={onDone} />
+        </View>
+      </View>
+    </Screen>
+  );
+}
+function RatingPill({ rating }: { rating: UiRating }) {
+  const { theme } = useUnistyles();
+  const { t } = useTranslation();
+  if (rating === 'got_it') {
+    return (
+      <View style={[styles.pill, { backgroundColor: theme.palette.green[100] }]}>
+        <IconArrowUp size={11} color={theme.palette.green[600]} />
+        <RawText style={[styles.pillText, { color: theme.palette.green[700] }]}>{t('quiz.pillPromoted')}</RawText>
+      </View>
+    );
+  }
+  if (rating === 'almost') {
+    return (
+      <View style={[styles.pill, { backgroundColor: theme.palette.blue[50] }]}>
+        <IconArrowUp size={11} color={theme.palette.blue[500]} />
+        <RawText style={[styles.pillText, { color: theme.palette.blue[700] }]}>{t('quiz.pillAlmost')}</RawText>
+      </View>
+    );
+  }
+  return (
+    <View style={[styles.pill, { backgroundColor: theme.palette.slate[100] }]}>
+      <IconArrowDown size={11} color={theme.color.textMuted} />
+      <RawText style={[styles.pillText, { color: theme.color.textMuted }]}>{t('quiz.pillReview')}</RawText>
+    </View>
+  );
+}
+
+// ── Tier promotion (Q-10) ────────────────────────────────────────────────────
+function TierPromoScreen({ words, onContinue }: { words: string[]; onContinue: () => void }) {
+  const { theme } = useUnistyles();
+  const { t } = useTranslation();
+  return (
+    <View style={styles.promo}>
+      <View style={styles.promoBadge}>
+        <IconMountain size={36} color={theme.palette.blue[900]} />
+        <RawText style={styles.promoBadgeLabel}>{t('quiz.summitBadge')}</RawText>
+      </View>
+      <RawText style={styles.promoTitle}>
+        {t('quiz.reachedMastery', { count: words.length })}
+      </RawText>
+      <RawText style={styles.promoSub}>{t('quiz.masterySub')}</RawText>
+      <View style={styles.promoList}>
+        {words.map((w) => (
+          <View key={w} style={styles.promoWordRow}>
+            <RawText style={styles.promoStar}>★</RawText>
+            <RawText style={styles.promoWord}>{w}</RawText>
+          </View>
+        ))}
+      </View>
+      <Pressable onPress={onContinue} accessibilityRole="button" style={({ pressed }) => [styles.promoBtn, pressed && { transform: [{ scale: 0.97 }] }]}>
+        <RawText style={styles.promoBtnText}>{t('quiz.keepGoing')}</RawText>
+      </Pressable>
+    </View>
+  );
+}
+
+// ── Exit confirm (Q-06) ──────────────────────────────────────────────────────
+function ExitConfirmModal({ cardsRated, total, onConfirm, onCancel }: { cardsRated: number; total: number; onConfirm: () => void; onCancel: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.exitOverlay}>
+      <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.exitScrim}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} accessibilityLabel={t('common.dismiss')} />
+      </Animated.View>
+      <Animated.View entering={SlideInDown.duration(260)} exiting={SlideOutDown.duration(200)} style={styles.exitSheet}>
+        <View style={styles.exitHandle} />
+        <RawText style={styles.exitTitle}>{t('quiz.exitTitle')}</RawText>
+        <RawText style={styles.exitBody}>
+          {cardsRated > 0
+            ? t('quiz.exitBodyRated', { rated: cardsRated, total })
+            : t('quiz.exitBodyNone')}
+        </RawText>
+        <Pressable onPress={onConfirm} accessibilityRole="button" style={({ pressed }) => [styles.exitConfirm, pressed && { opacity: 0.9 }]}>
+          <RawText style={styles.exitConfirmText}>{t('quiz.exitConfirm')}</RawText>
+        </Pressable>
+        <Button title={t('quiz.keepStudying')} variant="primary" onPress={onCancel} />
+      </Animated.View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create((theme) => {
+  const { color, palette, fonts, radius } = theme;
+  return {
+    // quiz phase
+    topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 10 },
+    counter: { fontFamily: fonts.mono.bold, fontSize: 14, color: color.textStrong, letterSpacing: 0.3 },
+    counterTotal: { fontFamily: fonts.mono.regular, color: color.textMuted },
+    closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: palette.slate[100], alignItems: 'center', justifyContent: 'center' },
+    progressTrack: { height: 3, backgroundColor: palette.slate[100] },
+    progressFill: { height: 3, backgroundColor: color.accent, borderTopRightRadius: 2, borderBottomRightRadius: 2 },
+    cardArea: { flex: 1, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20, gap: 14 },
+    cardScroll: { flexGrow: 1, justifyContent: 'center' },
+    ratingArea: {},
+    emptyFill: { flex: 1, justifyContent: 'center' },
+
+    // end screen
+    centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, gap: 8 },
+    pika: { width: 120, height: 120, borderRadius: 60, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+    endTitle: { fontFamily: fonts.serif.bold, fontSize: 30, color: color.textStrong, textAlign: 'center', letterSpacing: -0.4 },
+    endSub: { fontFamily: fonts.sans.regular, fontSize: 14, lineHeight: 22, color: color.textMuted, textAlign: 'center', maxWidth: 260, marginBottom: 12 },
+    endStats: { flexDirection: 'row', alignSelf: 'stretch', borderWidth: theme.borderWidth.thin, borderColor: color.border, borderRadius: radius.lg, marginBottom: 12 },
+    endStat: { flex: 1, paddingVertical: 14, alignItems: 'center' },
+    endStatValue: { fontFamily: fonts.mono.bold, fontSize: 17, color: color.textStrong },
+    endStatLabel: { fontFamily: fonts.sans.medium, fontSize: 11, color: color.textMuted, marginTop: 3 },
+    endStatDivider: { width: 1, backgroundColor: color.border },
+
+    // stats screen
+    statsHeader: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16, borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.border },
+    statsTitle: { fontFamily: fonts.serif.bold, fontSize: 22, color: color.textStrong, marginBottom: 10 },
+    statsSummary: { flexDirection: 'row', gap: 16 },
+    statsSummaryItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    statsDot: { width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+    statsSummaryText: { fontFamily: fonts.sans.medium, fontSize: 13, color: color.textBody },
+    statsList: { flex: 1 },
+    statsListContent: { paddingVertical: 4 },
+    statRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 20, borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.divider },
+    statRowBody: { flex: 1 },
+    statWord: { fontFamily: fonts.serif.semibold, fontSize: 15, color: color.textStrong },
+    statSource: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted, marginTop: 1 },
+    pill: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: radius.pill, paddingVertical: 3, paddingLeft: 6, paddingRight: 10 },
+    pillText: { fontFamily: fonts.sans.bold, fontSize: 12 },
+    statsFooter: { flexDirection: 'row', gap: 10, paddingHorizontal: 20, paddingTop: 14, paddingBottom: 8, borderTopWidth: theme.borderWidth.thin, borderTopColor: color.border },
+    footerBtn: { flex: 1 },
+
+    // tier promo
+    promo: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, paddingVertical: 32, backgroundColor: palette.blue[900], gap: 6 },
+    promoBadge: { width: 100, height: 100, borderRadius: 50, backgroundColor: palette.pika[300], alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+    promoBadgeLabel: { fontFamily: fonts.mono.bold, fontSize: 10, color: palette.blue[800], letterSpacing: 0.4, marginTop: 2 },
+    promoTitle: { fontFamily: fonts.serif.bold, fontSize: 28, color: '#fff', textAlign: 'center', letterSpacing: -0.4, marginBottom: 8 },
+    promoSub: { fontFamily: fonts.sans.regular, fontSize: 14, lineHeight: 22, color: 'rgba(255,255,255,0.6)', textAlign: 'center', maxWidth: 240, marginBottom: 20 },
+    promoList: { alignSelf: 'center', width: '100%', maxWidth: 240, gap: 6, marginBottom: 28 },
+    promoWordRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: radius.md, paddingVertical: 8, paddingHorizontal: 14 },
+    promoStar: { fontSize: 13, color: palette.pika[300] },
+    promoWord: { fontFamily: fonts.serif.semibold, fontSize: 15, color: '#fff' },
+    promoBtn: { backgroundColor: color.accent, borderRadius: radius.md, paddingVertical: 15, paddingHorizontal: 40, boxShadow: theme.shadow.accent },
+    promoBtnText: { fontFamily: fonts.sans.bold, fontSize: 16, color: '#fff' },
+
+    // exit confirm
+    exitOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', zIndex: 50 },
+    exitScrim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(14, 22, 36, 0.6)' },
+    exitSheet: { backgroundColor: color.surfaceCard, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, gap: 10 },
+    exitHandle: { width: 32, height: 4, borderRadius: 2, backgroundColor: palette.slate[300], alignSelf: 'center', marginBottom: 8 },
+    exitTitle: { fontFamily: fonts.serif.semibold, fontSize: 20, color: color.textStrong },
+    exitBody: { fontFamily: fonts.sans.regular, fontSize: 14, lineHeight: 23, color: color.textMuted, marginBottom: 14 },
+    exitConfirm: { backgroundColor: palette.slate[800], borderRadius: 13, paddingVertical: 14, alignItems: 'center' },
+    exitConfirmText: { fontFamily: fonts.sans.bold, fontSize: 15, color: '#fff' },
+  };
+});

@@ -10,6 +10,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { directionLangs } from '@/domain/derive';
 import type { Profile, SearchDirection } from '@/domain/types';
+import { useTranslation } from '@/i18n';
 import { useProfile } from '@/query/hooks';
 import { usePrefsStore } from '@/store/prefsStore';
 import {
@@ -51,6 +52,7 @@ function mockLookup(q: string, direction: SearchDirection): TranslationResult {
 // SearchView — the search body. Reused both as the modal route (SearchScreen) and
 // as an in-Home overlay (so the bottom nav can stay visible). Closes via `onClose`.
 export function SearchView({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation();
   // Direction + recents are per-device prefs (03) → the prefs store, not local state.
   const direction = usePrefsStore((s) => s.searchDirection);
   const setDirection = usePrefsStore((s) => s.setSearchDirection);
@@ -62,7 +64,7 @@ export function SearchView({ onClose }: { onClose: () => void }) {
   // direction just picks which way to read it. Resolve both into the labels the UI shows.
   const profile = useProfile();
   const langs = profile ? directionLangs(profile, direction) : null;
-  const placeholder = langs ? `Type a word in ${langs.sourceName}…` : 'Type a word…';
+  const placeholder = langs ? t('search.placeholder', { lang: langs.sourceName }) : t('search.placeholderFallback');
 
   const [query, setQuery] = useState('');
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -96,7 +98,7 @@ export function SearchView({ onClose }: { onClose: () => void }) {
     <View style={styles.fill}>
       <View style={styles.handle} />
       <View style={styles.header}>
-        <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close search" style={styles.close}>
+        <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('common.closeSearch')} style={styles.close}>
           <IconXClose />
         </Pressable>
         <DirectionToggle direction={direction} onChange={setDirection} profile={profile} />
@@ -134,9 +136,9 @@ export function SearchView({ onClose }: { onClose: () => void }) {
         {phase === 'noresults' && (
           <Animated.View key="noresults" entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)}>
             <EmptyState
-              title="We couldn't find that one."
-              body="Try checking the spelling, or this language pair may have limited coverage right now."
-              networkNote="If this word should have a result, you may be offline or on a slow connection."
+              title={t('search.noResultsTitle')}
+              body={t('search.noResultsBody')}
+              networkNote={t('search.noResultsNetwork')}
             />
           </Animated.View>
         )}
@@ -172,6 +174,7 @@ function DirectionToggle({
   profile?: Profile;
 }) {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   const opts: SearchDirection[] = ['native_to_target', 'target_to_native'];
   const active = profile ? directionLangs(profile, direction) : null;
   return (
@@ -196,13 +199,14 @@ function DirectionToggle({
           );
         })}
       </View>
-      {active && <RawText style={styles.dirHint}>Translating {active.sourceName} words into {active.targetName}</RawText>}
+      {active && <RawText style={styles.dirHint}>{t('search.dirHint', { source: active.sourceName, target: active.targetName })}</RawText>}
     </View>
   );
 }
 
 function SearchBar({ value, onChange, placeholder }: { value: string; onChange: (s: string) => void; placeholder: string }) {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   const hasValue = value.length > 0;
   return (
     <View style={styles.searchPad}>
@@ -221,7 +225,7 @@ function SearchBar({ value, onChange, placeholder }: { value: string; onChange: 
           style={[styles.searchInput, { fontFamily: hasValue ? theme.fonts.serif.regular : theme.fonts.sans.regular }]}
         />
         {hasValue && (
-          <Pressable onPress={() => onChange('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear" style={styles.clear}>
+          <Pressable onPress={() => onChange('')} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('search.clear')} style={styles.clear}>
             <IconX size={11} color={theme.color.textMuted} />
           </Pressable>
         )}
@@ -232,17 +236,18 @@ function SearchBar({ value, onChange, placeholder }: { value: string; onChange: 
 
 function RecentChips({ recents, onTap, onDismiss }: { recents: string[]; onTap: (w: string) => void; onDismiss: (w: string) => void }) {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   if (recents.length === 0) return null;
   return (
     <View style={styles.recentPad}>
-      <RawText style={styles.recentLabel}>Recent</RawText>
+      <RawText style={styles.recentLabel}>{t('search.recent')}</RawText>
       <View style={styles.chipRow}>
         {recents.map((word, i) => (
           <Animated.View key={word} entering={FadeIn.duration(180).delay(i * 40)} exiting={FadeOut.duration(120)}>
             <Pressable onPress={() => onTap(word)} accessibilityRole="button" style={styles.chip}>
               <IconClock size={12} color={theme.color.textFaint} />
               <RawText style={styles.chipText}>{word}</RawText>
-              <Pressable onPress={() => onDismiss(word)} hitSlop={8} accessibilityLabel={`Remove ${word}`} style={styles.chipX}>
+              <Pressable onPress={() => onDismiss(word)} hitSlop={8} accessibilityLabel={t('search.removeA11y', { word })} style={styles.chipX}>
                 <IconX size={9} color={theme.color.textMuted} />
               </Pressable>
             </Pressable>
@@ -254,11 +259,10 @@ function RecentChips({ recents, onTap, onDismiss }: { recents: string[]; onTap: 
 }
 
 function SkeletonCard({ typed }: { typed: string }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.skelWrap}>
-      <RawText style={styles.skelCaption}>
-        Translating &ldquo;<RawText style={styles.skelTyped}>{typed}</RawText>&rdquo;…
-      </RawText>
+      <RawText style={styles.skelCaption}>{t('search.translating', { typed })}</RawText>
       <View style={styles.skelCard}>
         <View style={styles.skelRow}>
           <View style={[styles.skel, { height: 36, width: '50%' }]} />

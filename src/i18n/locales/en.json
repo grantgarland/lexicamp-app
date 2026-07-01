@@ -1,0 +1,190 @@
+{
+  "common": {
+    "moreInfo": "More info",
+    "dismiss": "Dismiss",
+    "search": "Search",
+    "closeSearch": "Close search"
+  },
+  "tabs": {
+    "home": "Home",
+    "words": "Word List",
+    "progress": "Progress",
+    "settings": "Settings"
+  },
+  "languages": {
+    "en": "English",
+    "es": "Spanish"
+  },
+  "date": {
+    "days": ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+    "months": ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
+    "todayLabel": "{{weekday}}, {{month}} {{day}}"
+  },
+  "tier": {
+    "bc": {
+      "name": "Base Camp",
+      "short": "BC",
+      "stabilityRange": "Stability < 3 days",
+      "desc": "Recently introduced words. Keep reviewing to build memory."
+    },
+    "abc": {
+      "name": "Adv. Base Camp",
+      "short": "ABC",
+      "stabilityRange": "Stability 3 – 7 days",
+      "desc": "Retention is forming. Consistent reviews push words higher."
+    },
+    "hc": {
+      "name": "High Camp",
+      "short": "HC",
+      "stabilityRange": "Stability 7 – 14 days",
+      "desc": "Strong memory forming. These words are getting sticky."
+    },
+    "sr": {
+      "name": "Summit Ridge",
+      "short": "SR",
+      "stabilityRange": "Stability 14 – 30 days",
+      "desc": "Long-term retention. These words rarely slip now."
+    },
+    "summit": {
+      "name": "Summit",
+      "short": "★",
+      "stabilityRange": "Stability 30+ days",
+      "desc": "Mastered. Retained for the long haul — fluency vocabulary."
+    },
+    "a11yBadge": "{{name}} tier badge",
+    "a11yLabel": "{{name}} tier",
+    "a11yInfo": "{{name}} tier info"
+  },
+  "home": {
+    "firstDayOnMountain": "First day on the mountain",
+    "dayStreak": "day streak",
+    "dayStreakA11y_one": "{{count}} day streak",
+    "dayStreakA11y_other": "{{count}} day streak",
+    "ready": "Ready to review",
+    "wordsDueToday": "words due today",
+    "studySub": "Sharpen your memory before they fade.",
+    "studyNow": "Study now",
+    "statNeedRecall": "Need recall",
+    "statNeedRecallTip": "All words past their scheduled review date — today's due words plus any overdue backlog. Drops to zero only when every pending review is completed.",
+    "statAddedToday": "Added today",
+    "statAddedTodayTip": "New words you've saved to your deck today. A steady capture habit keeps your vocabulary growing.",
+    "statDueTomorrow": "Due tomorrow",
+    "statDueTomorrowTip": "Words whose next scheduled review falls within the next 24 hours. Come back tomorrow to keep them on track.",
+    "statInfoA11y": "{{label}} — more info",
+    "emptyTitle": "Add your first word\nto start climbing",
+    "emptyBody": "Tap below to search for a word and save it to your deck.",
+    "addWord": "Add a word +",
+    "addWordA11y": "Add a word",
+    "edu": {
+      "title": "How Lexicamp works",
+      "teaser": "The science behind your climb — tap to learn more.",
+      "s1Title": "Spaced repetition, tuned for vocabulary",
+      "s1Body": "Lexicamp schedules every word with FSRS, a modern spaced-repetition algorithm. It models how your memory of each word strengthens over time and plans the next review for the moment you're about to forget — so you study less and remember more.",
+      "s2Title": "How words reach your queue",
+      "s2Body": "Each saved word carries a predicted recall strength. When that strength drops toward the point of forgetting, the word becomes due and joins your study session. Recalling it correctly pushes the next review further out; missing it brings the word back sooner.",
+      "s3Title": "Getting the most out of it",
+      "s3Body": "Study a little every day instead of cramming, and rate yourself honestly — the schedule is only as good as your feedback. Short, consistent sessions move words up the mountain from Base Camp to Summit."
+    }
+  },
+  "masteryCard": {
+    "eyebrow": "Word Mastery",
+    "tierInfoTitle": "Each word has its own tier",
+    "tierInfoContent": "Every word progresses from Base Camp → Summit upon review, based on its FSRS stability. Tap any tier segment for details.",
+    "tierInfoA11y": "Word Mastery — more info",
+    "subtitleEmpty": "Add words to start climbing",
+    "subtitle_one": "{{count}} word across 5 tiers",
+    "subtitle_other": "{{count}} words across 5 tiers",
+    "segmentA11y_one": "{{name}}: {{count}} word",
+    "segmentA11y_other": "{{name}}: {{count}} words",
+    "tierWordCount_one": "{{count}} word",
+    "tierWordCount_other": "{{count}} words",
+    "saved": "saved",
+    "atSummit": "at Summit",
+    "summitInfoContent": "Words at Summit have ≥ 30-day FSRS stability. They exit your active review queue and count as fully mastered.",
+    "summitInfoA11y": "At Summit — more info"
+  },
+  "search": {
+    "placeholder": "Type a word in {{lang}}…",
+    "placeholderFallback": "Type a word…",
+    "clear": "Clear",
+    "recent": "Recent",
+    "removeA11y": "Remove {{word}}",
+    "dirHint": "Translating {{source}} words into {{target}}",
+    "translating": "Translating “{{typed}}”…",
+    "noResultsTitle": "We couldn't find that one.",
+    "noResultsBody": "Try checking the spelling, or this language pair may have limited coverage right now.",
+    "noResultsNetwork": "If this word should have a result, you may be offline or on a slow connection."
+  },
+  "translationCard": {
+    "currentWord": "Current word",
+    "moreDetails": "More details",
+    "saveWord": "Save word",
+    "saved": "Saved!",
+    "deleteWord": "Delete word"
+  },
+  "quizCard": {
+    "reveal": "Reveal",
+    "tapToReveal": "Tap to reveal",
+    "letters_one": "{{count}} letter",
+    "letters_other": "{{count}} letters"
+  },
+  "rating": {
+    "prompt": "How well did you recall it?",
+    "again": "Again",
+    "againSub": "No recall",
+    "almost": "Almost",
+    "almostSub": "Partial recall",
+    "gotIt": "Got it",
+    "gotItSub": "Clean recall"
+  },
+  "quiz": {
+    "closeQuiz": "Close quiz",
+    "caughtUpTitle": "You're all caught up.",
+    "caughtUpBody": "No cards are due right now. Check back when your next review is scheduled.",
+    "backToHome": "Back to home",
+    "endGreat": "Great session!",
+    "endKeepGoing": "Keep going!",
+    "endStatsSub": "{{accuracy}}% accuracy · {{streak}}-day streak",
+    "endEncourage": "Every session counts. You've got this.",
+    "accuracy": "Accuracy",
+    "streak": "Streak",
+    "daysValue_one": "{{count}} day",
+    "daysValue_other": "{{count}} days",
+    "seeResults": "See results",
+    "sessionResults": "Session results",
+    "promotedCount_one": "{{count}} promoted",
+    "promotedCount_other": "{{count}} promoted",
+    "reviewAgainCount_one": "{{count}} to review again",
+    "reviewAgainCount_other": "{{count}} to review again",
+    "studyAgain": "Study again",
+    "done": "Done",
+    "pillPromoted": "Promoted",
+    "pillAlmost": "Almost",
+    "pillReview": "Review",
+    "summitBadge": "SUMMIT",
+    "reachedMastery_one": "{{count}} word reached Mastery!",
+    "reachedMastery_other": "{{count}} words reached Mastery!",
+    "masterySub": "These words are now in long-term memory. Keep reviewing to maintain them.",
+    "keepGoing": "Keep going →",
+    "exitTitle": "Exit quiz?",
+    "exitBodyRated": "You've rated {{rated}} of {{total}} cards. If you exit now, none of those ratings will be saved — review history only updates when a session completes.",
+    "exitBodyNone": "If you exit now, no progress will be saved. Review history only updates when a session completes.",
+    "exitConfirm": "Exit quiz",
+    "keepStudying": "Keep studying"
+  },
+  "wordRow": {
+    "addToDeckA11y": "Add to deck",
+    "addToDeck": "Add to Deck",
+    "deleteA11y": "Delete word",
+    "delete": "Delete"
+  },
+  "deckRow": {
+    "studyA11y": "Study deck",
+    "study": "Study",
+    "deleteA11y": "Delete deck",
+    "delete": "Delete",
+    "words_one": "{{count}} word",
+    "words_other": "{{count}} words",
+    "addedSuffix": " · Added {{date}}"
+  }
+}

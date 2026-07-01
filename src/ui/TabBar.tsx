@@ -2,22 +2,24 @@
 // 4 tabs (Home / Word List / Progress / Settings) with a central 58px amber FAB
 // (search-plus → blue + rotate-to-× when a sheet is open). Frosted nav surface via
 // expo-glass-effect on liquid-glass devices, opaque-white fallback elsewhere.
-import { type ComponentType, useEffect, useRef } from 'react';
+import { type ComponentType, useEffect, useState } from 'react';
 import { Animated, Pressable, View } from 'react-native';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { useTranslation } from '@/i18n';
 import { IconChart, IconGear, IconHome, IconList, IconSearchPlus, type IconProps } from './icons';
 import { Text } from './Text';
 
 export type TabId = 'home' | 'words' | 'progress' | 'settings';
 
-const TABS: { id: TabId; label: string; Icon: ComponentType<IconProps> }[] = [
-  { id: 'home', label: 'Home', Icon: IconHome },
-  { id: 'words', label: 'Word List', Icon: IconList },
-  { id: 'progress', label: 'Progress', Icon: IconChart },
-  { id: 'settings', label: 'Settings', Icon: IconGear },
+// Labels resolve from i18n (`tabs.<id>`) at render — the registry only fixes id + icon.
+const TABS: { id: TabId; Icon: ComponentType<IconProps> }[] = [
+  { id: 'home', Icon: IconHome },
+  { id: 'words', Icon: IconList },
+  { id: 'progress', Icon: IconChart },
+  { id: 'settings', Icon: IconGear },
 ];
 
 export interface TabBarProps {
@@ -29,13 +31,14 @@ export interface TabBarProps {
 
 function TabButton({ tab, active, onPress }: { tab: (typeof TABS)[number]; active: boolean; onPress?: () => void }) {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   const color = active ? theme.color.brand : theme.color.textMuted;
   const { Icon } = tab;
   return (
     <Pressable style={styles.tab} onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: active }}>
       <Icon size={22} color={color} />
       <Text style={[styles.tabLabel, { color, fontFamily: active ? theme.fonts.sans.semibold : theme.fonts.sans.regular }]}>
-        {tab.label}
+        {t(`tabs.${tab.id}`)}
       </Text>
     </Pressable>
   );
@@ -43,8 +46,10 @@ function TabButton({ tab, active, onPress }: { tab: (typeof TABS)[number]; activ
 
 export function TabBar({ activeTab, onTabChange, sheetOpen = false, onFabPress }: TabBarProps) {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const rot = useRef(new Animated.Value(sheetOpen ? 1 : 0)).current;
+  // Lazy `useState` init (not `useRef().current`) so the stable Animated.Value can be used
+  const [rot] = useState(() => new Animated.Value(sheetOpen ? 1 : 0));
 
   useEffect(() => {
     Animated.timing(rot, { toValue: sheetOpen ? 1 : 0, duration: 320, useNativeDriver: true }).start();
@@ -69,7 +74,7 @@ export function TabBar({ activeTab, onTabChange, sheetOpen = false, onFabPress }
       <View style={styles.fabWrap} pointerEvents="box-none">
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={sheetOpen ? 'Close search' : 'Search'}
+          accessibilityLabel={sheetOpen ? t('common.closeSearch') : t('common.search')}
           onPress={onFabPress}
           style={({ pressed }) => [
             styles.fab,

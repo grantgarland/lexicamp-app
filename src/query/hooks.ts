@@ -2,10 +2,11 @@
 // or derivations directly). Each keys on the dev scenario so DevBadge toggles
 // invalidate + refetch automatically. Mutations (save word, commit quiz) land here
 // as `useMutation` when those screens are built.
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { dataSource as ds } from '@/data';
 import { type HomeSnapshot, homeSnapshot } from '@/domain/derive';
+import type { BufferedRating } from '@/domain/quiz';
 import { type Entitlement, isPaid } from '@/domain/types';
 import { useDevStore } from '@/store/devStore';
 
@@ -35,4 +36,23 @@ export function useHomeData(): HomeData {
   const eng = useQuery({ queryKey: ['engagement', userState], queryFn: () => ds.getEngagement() });
   const snapshot = deck.data != null ? homeSnapshot(deck.data.cards, deck.data.states) : null;
   return { snapshot, streakDays: eng.data?.streakDays ?? 0, isLoading: deck.isLoading || eng.isLoading };
+}
+
+/** The study-session due queue (read). */
+export function useDueCards() {
+  const userState = useDevStore((s) => s.userState);
+  const q = useQuery({ queryKey: ['dueCards', userState], queryFn: () => ds.getDueCards() });
+  return { cards: q.data ?? [], isLoading: q.isLoading };
+}
+
+/** Commit a completed quiz session (write) — invalidates home/due reads on success. */
+export function useCommitQuizSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { ratings: BufferedRating[] }) => ds.commitQuizSession(payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['deckCards'] });
+      qc.invalidateQueries({ queryKey: ['dueCards'] });
+    },
+  });
 }

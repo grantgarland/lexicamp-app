@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { type DevPlan, type DevUserState, USER_STATE_LABELS, useDevStore } from '@/store/devStore';
+import { type DevPlan, USER_STATE_LABELS, useDevStore } from '@/store/devStore';
 
 const PLANS: { value: DevPlan; label: string }[] = [
   { value: 'free', label: 'Free' },

@@ -1,0 +1,190 @@
+{
+  "common": {
+    "moreInfo": "Más información",
+    "dismiss": "Cerrar",
+    "search": "Buscar",
+    "closeSearch": "Cerrar búsqueda"
+  },
+  "tabs": {
+    "home": "Inicio",
+    "words": "Palabras",
+    "progress": "Progreso",
+    "settings": "Ajustes"
+  },
+  "languages": {
+    "en": "Inglés",
+    "es": "Español"
+  },
+  "date": {
+    "days": ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"],
+    "months": ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"],
+    "todayLabel": "{{weekday}}, {{day}} de {{month}}"
+  },
+  "tier": {
+    "bc": {
+      "name": "Campo base",
+      "short": "CB",
+      "stabilityRange": "Estabilidad < 3 días",
+      "desc": "Palabras introducidas hace poco. Sigue repasando para afianzar la memoria."
+    },
+    "abc": {
+      "name": "Campo base av.",
+      "short": "CBA",
+      "stabilityRange": "Estabilidad 3 – 7 días",
+      "desc": "La retención se está formando. Los repasos constantes elevan las palabras."
+    },
+    "hc": {
+      "name": "Campo alto",
+      "short": "CA",
+      "stabilityRange": "Estabilidad 7 – 14 días",
+      "desc": "Se está formando una memoria fuerte. Estas palabras se están fijando."
+    },
+    "sr": {
+      "name": "Cresta de la cumbre",
+      "short": "CC",
+      "stabilityRange": "Estabilidad 14 – 30 días",
+      "desc": "Retención a largo plazo. Estas palabras ya casi no se olvidan."
+    },
+    "summit": {
+      "name": "Cumbre",
+      "short": "★",
+      "stabilityRange": "Estabilidad 30+ días",
+      "desc": "Dominada. Retenida a largo plazo: vocabulario de fluidez."
+    },
+    "a11yBadge": "insignia del nivel {{name}}",
+    "a11yLabel": "nivel {{name}}",
+    "a11yInfo": "información del nivel {{name}}"
+  },
+  "home": {
+    "firstDayOnMountain": "Primer día en la montaña",
+    "dayStreak": "días de racha",
+    "dayStreakA11y_one": "racha de {{count}} día",
+    "dayStreakA11y_other": "racha de {{count}} días",
+    "ready": "Listo para repasar",
+    "wordsDueToday": "palabras para hoy",
+    "studySub": "Refuerza tu memoria antes de que se desvanezcan.",
+    "studyNow": "Estudiar ahora",
+    "statNeedRecall": "Por repasar",
+    "statNeedRecallTip": "Todas las palabras que ya pasaron su fecha de repaso: las de hoy más cualquier atraso pendiente. Baja a cero solo cuando completas todos los repasos pendientes.",
+    "statAddedToday": "Añadidas hoy",
+    "statAddedTodayTip": "Palabras nuevas que has guardado hoy en tu mazo. Un hábito de captura constante mantiene tu vocabulario en crecimiento.",
+    "statDueTomorrow": "Para mañana",
+    "statDueTomorrowTip": "Palabras cuyo próximo repaso programado cae dentro de las próximas 24 horas. Vuelve mañana para mantenerlas al día.",
+    "statInfoA11y": "{{label}} — más información",
+    "emptyTitle": "Añade tu primera palabra\npara empezar a escalar",
+    "emptyBody": "Toca abajo para buscar una palabra y guardarla en tu mazo.",
+    "addWord": "Añadir palabra +",
+    "addWordA11y": "Añadir palabra",
+    "edu": {
+      "title": "Cómo funciona Lexicamp",
+      "teaser": "La ciencia detrás de tu ascenso — toca para saber más.",
+      "s1Title": "Repetición espaciada, adaptada al vocabulario",
+      "s1Body": "Lexicamp programa cada palabra con FSRS, un algoritmo moderno de repetición espaciada. Modela cómo se refuerza tu memoria de cada palabra con el tiempo y planifica el próximo repaso para el momento justo antes de que la olvides, así estudias menos y recuerdas más.",
+      "s2Title": "Cómo llegan las palabras a tu cola",
+      "s2Body": "Cada palabra guardada tiene una fuerza de recuerdo prevista. Cuando esa fuerza cae hacia el punto de olvido, la palabra vence y se suma a tu sesión de estudio. Recordarla bien aleja el próximo repaso; fallarla la trae de vuelta antes.",
+      "s3Title": "Cómo aprovecharlo al máximo",
+      "s3Body": "Estudia un poco cada día en lugar de amontonar, y evalúate con honestidad: el programa es tan bueno como tu retroalimentación. Las sesiones cortas y constantes hacen subir las palabras por la montaña, del Campo base a la Cumbre."
+    }
+  },
+  "masteryCard": {
+    "eyebrow": "Dominio de palabras",
+    "tierInfoTitle": "Cada palabra tiene su propio nivel",
+    "tierInfoContent": "Cada palabra avanza de Campo base → Cumbre con cada repaso, según su estabilidad FSRS. Toca cualquier segmento de nivel para ver detalles.",
+    "tierInfoA11y": "Dominio de palabras — más información",
+    "subtitleEmpty": "Añade palabras para empezar a escalar",
+    "subtitle_one": "{{count}} palabra en 5 niveles",
+    "subtitle_other": "{{count}} palabras en 5 niveles",
+    "segmentA11y_one": "{{name}}: {{count}} palabra",
+    "segmentA11y_other": "{{name}}: {{count}} palabras",
+    "tierWordCount_one": "{{count}} palabra",
+    "tierWordCount_other": "{{count}} palabras",
+    "saved": "guardadas",
+    "atSummit": "en la Cumbre",
+    "summitInfoContent": "Las palabras en la Cumbre tienen una estabilidad FSRS ≥ 30 días. Salen de tu cola de repaso activa y cuentan como totalmente dominadas.",
+    "summitInfoA11y": "En la Cumbre — más información"
+  },
+  "search": {
+    "placeholder": "Escribe una palabra en {{lang}}…",
+    "placeholderFallback": "Escribe una palabra…",
+    "clear": "Borrar",
+    "recent": "Recientes",
+    "removeA11y": "Quitar {{word}}",
+    "dirHint": "Traduciendo palabras de {{source}} a {{target}}",
+    "translating": "Traduciendo «{{typed}}»…",
+    "noResultsTitle": "No encontramos esa palabra.",
+    "noResultsBody": "Revisa la ortografía, o puede que este par de idiomas tenga poca cobertura ahora mismo.",
+    "noResultsNetwork": "Si esta palabra debería tener resultado, puede que estés sin conexión o con una conexión lenta."
+  },
+  "translationCard": {
+    "currentWord": "Palabra actual",
+    "moreDetails": "Más detalles",
+    "saveWord": "Guardar palabra",
+    "saved": "¡Guardada!",
+    "deleteWord": "Eliminar palabra"
+  },
+  "quizCard": {
+    "reveal": "Mostrar",
+    "tapToReveal": "Toca para mostrar",
+    "letters_one": "{{count}} letra",
+    "letters_other": "{{count}} letras"
+  },
+  "rating": {
+    "prompt": "¿Qué tan bien la recordaste?",
+    "again": "Otra vez",
+    "againSub": "Sin recuerdo",
+    "almost": "Casi",
+    "almostSub": "Recuerdo parcial",
+    "gotIt": "La sé",
+    "gotItSub": "Recuerdo claro"
+  },
+  "quiz": {
+    "closeQuiz": "Cerrar cuestionario",
+    "caughtUpTitle": "Estás al día.",
+    "caughtUpBody": "No hay tarjetas pendientes ahora mismo. Vuelve cuando toque tu próximo repaso.",
+    "backToHome": "Volver al inicio",
+    "endGreat": "¡Buena sesión!",
+    "endKeepGoing": "¡Sigue así!",
+    "endStatsSub": "{{accuracy}}% de acierto · racha de {{streak}} días",
+    "endEncourage": "Cada sesión cuenta. Tú puedes.",
+    "accuracy": "Acierto",
+    "streak": "Racha",
+    "daysValue_one": "{{count}} día",
+    "daysValue_other": "{{count}} días",
+    "seeResults": "Ver resultados",
+    "sessionResults": "Resultados de la sesión",
+    "promotedCount_one": "{{count}} promovida",
+    "promotedCount_other": "{{count}} promovidas",
+    "reviewAgainCount_one": "{{count}} para repasar de nuevo",
+    "reviewAgainCount_other": "{{count}} para repasar de nuevo",
+    "studyAgain": "Estudiar de nuevo",
+    "done": "Listo",
+    "pillPromoted": "Promovida",
+    "pillAlmost": "Casi",
+    "pillReview": "Repasar",
+    "summitBadge": "CUMBRE",
+    "reachedMastery_one": "¡{{count}} palabra alcanzó el Dominio!",
+    "reachedMastery_other": "¡{{count}} palabras alcanzaron el Dominio!",
+    "masterySub": "Estas palabras ya están en tu memoria a largo plazo. Sigue repasando para mantenerlas.",
+    "keepGoing": "Seguir →",
+    "exitTitle": "¿Salir del cuestionario?",
+    "exitBodyRated": "Has calificado {{rated}} de {{total}} tarjetas. Si sales ahora, no se guardará ninguna de esas calificaciones: el historial de repaso solo se actualiza al completar una sesión.",
+    "exitBodyNone": "Si sales ahora, no se guardará ningún progreso. El historial de repaso solo se actualiza al completar una sesión.",
+    "exitConfirm": "Salir del cuestionario",
+    "keepStudying": "Seguir estudiando"
+  },
+  "wordRow": {
+    "addToDeckA11y": "Añadir al mazo",
+    "addToDeck": "Añadir al mazo",
+    "deleteA11y": "Eliminar palabra",
+    "delete": "Eliminar"
+  },
+  "deckRow": {
+    "studyA11y": "Estudiar mazo",
+    "study": "Estudiar",
+    "deleteA11y": "Eliminar mazo",
+    "delete": "Eliminar",
+    "words_one": "{{count}} palabra",
+    "words_other": "{{count}} palabras",
+    "addedSuffix": " · Añadido {{date}}"
+  }
+}

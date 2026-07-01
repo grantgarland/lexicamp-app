@@ -2,11 +2,12 @@
 // TranslationCard + TranslationItem. A headword header (direction chips · POS ·
 // headword · phonetic) over an accordion of translations; the expanded ("current")
 // item shows an example, optional details, and a save / saved / delete action.
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { useTranslation } from '@/i18n';
 import { Card } from './Card';
 import { IconArrowRight, IconBook, IconCheck, IconChevronDown, IconChevronUp, IconTrash } from './icons';
 import { RawText as RNText } from './Text';
@@ -122,11 +123,17 @@ function TranslationItem({
   onDelete: () => void;
 }) {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   const [showDetails, setShowDetails] = useState(false);
 
-  useEffect(() => {
+  // Reset the details disclosure whenever this row collapses. Done during render (the
+  // lint-clean equivalent of a reset effect): React re-renders immediately on the
+  // guarded setState, before paint. See react.dev "adjusting state on prop change".
+  const [wasExpanded, setWasExpanded] = useState(isExpanded);
+  if (wasExpanded !== isExpanded) {
+    setWasExpanded(isExpanded);
     if (!isExpanded) setShowDetails(false);
-  }, [isExpanded]);
+  }
 
   // Layout-animated shell: height animates as the current word changes; the
   // collapsed row and the expanded "current word" block crossfade in/out.
@@ -145,7 +152,7 @@ function TranslationItem({
       ) : (
         <Animated.View key="expanded" entering={FadeIn.duration(220)} exiting={FadeOut.duration(120)} style={styles.expanded}>
           <View style={styles.expandedHead}>
-            <RNText style={styles.eyebrow}>Current word</RNText>
+            <RNText style={styles.eyebrow}>{t('translationCard.currentWord')}</RNText>
             <RNText style={styles.expandedWord}>{translation.word}</RNText>
             <RNText style={[styles.expandedPos, { marginBottom: translation.example ? 12 : 0 }]}>{translation.pos}</RNText>
           </View>
@@ -165,7 +172,7 @@ function TranslationItem({
                 ) : (
                   <IconChevronDown size={13} color={theme.color.textMuted} />
                 )}
-                <RNText style={styles.detailsToggleText}>More details</RNText>
+                <RNText style={styles.detailsToggleText}>{t('translationCard.moreDetails')}</RNText>
               </Pressable>
               {showDetails && (
                 <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.detailsList}>
@@ -187,19 +194,19 @@ function TranslationItem({
             {buttonState === 'save' && (
               <Pressable onPress={onSave} style={[styles.action, styles.actionSave]} accessibilityRole="button">
                 <IconBook size={16} color="#fff" />
-                <RNText style={styles.actionTextLight}>Save word</RNText>
+                <RNText style={styles.actionTextLight}>{t('translationCard.saveWord')}</RNText>
               </Pressable>
             )}
             {buttonState === 'saved' && (
               <Animated.View key="saved" entering={FadeIn.duration(200)} style={[styles.action, styles.actionSaved]}>
                 <IconCheck size={17} color="#fff" />
-                <RNText style={styles.actionTextLight}>Saved!</RNText>
+                <RNText style={styles.actionTextLight}>{t('translationCard.saved')}</RNText>
               </Animated.View>
             )}
             {buttonState === 'delete' && (
               <Pressable onPress={onDelete} style={[styles.action, styles.actionDelete]} accessibilityRole="button">
                 <IconTrash size={15} color={theme.color.danger} />
-                <RNText style={styles.actionTextDanger}>Delete word</RNText>
+                <RNText style={styles.actionTextDanger}>{t('translationCard.deleteWord')}</RNText>
               </Pressable>
             )}
           </View>

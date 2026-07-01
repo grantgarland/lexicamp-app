@@ -172,10 +172,44 @@ export function IconCalendar({ size = 15, color = STROKE }: IconProps) {
   );
 }
 
+export function IconArrowUp({ size = 12, color = STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M12 19V5M6 11l6-6 6 6" />
+    </Svg>
+  );
+}
+
+export function IconArrowDown({ size = 12, color = STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M12 5v14M18 13l-6 6-6-6" />
+    </Svg>
+  );
+}
+
+export function IconMountain({ size = 36, color = STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke="none">
+      <Path d="M3 20l6-11 3.5 6 2.5-4 6 9z" />
+    </Svg>
+  );
+}
+
 export function IconPlay({ size = 18, color = STROKE }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke="none">
       <Path d="M7 5v14l11-7z" />
+    </Svg>
+  );
+}
+
+export function IconInfo({ size = 13, color = STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="12" cy="12" r="9" />
+      <Path d="M12 11v5" />
+      <Path d="M12 8h.01" />
     </Svg>
   );
 }

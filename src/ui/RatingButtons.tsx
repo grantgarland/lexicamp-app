@@ -3,23 +3,27 @@
 import { Pressable, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { useTranslation } from '@/i18n';
 import { Text } from './Text';
 
 export type Rating = 'again' | 'almost' | 'got_it';
 
-const ITEMS: { id: Rating; label: string; sublabel: string }[] = [
-  { id: 'again', label: 'Again', sublabel: 'No recall' },
-  { id: 'almost', label: 'Almost', sublabel: 'Partial recall' },
-  { id: 'got_it', label: 'Got it', sublabel: 'Clean recall' },
+// Rating ids + their i18n key stems (label = `rating.<key>`, sublabel = `rating.<key>Sub`).
+const ITEMS: { id: Rating; key: 'again' | 'almost' | 'gotIt' }[] = [
+  { id: 'again', key: 'again' },
+  { id: 'almost', key: 'almost' },
+  { id: 'got_it', key: 'gotIt' },
 ];
 
 export interface RatingButtonsProps {
   onRate: (rating: Rating) => void;
+  /** Prompt override; defaults to the localized "How well did you recall it?". */
   prompt?: string;
 }
 
-export function RatingButtons({ onRate, prompt = 'How well did you recall it?' }: RatingButtonsProps) {
+export function RatingButtons({ onRate, prompt }: RatingButtonsProps) {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   const { color: c, palette: p } = theme;
 
   const cfg: Record<Rating, { bg: string; border: string; text: string; sub: string }> = {
@@ -30,7 +34,7 @@ export function RatingButtons({ onRate, prompt = 'How well did you recall it?' }
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.prompt}>{prompt}</Text>
+      <Text style={styles.prompt}>{prompt ?? t('rating.prompt')}</Text>
       {ITEMS.map((r) => {
         const s = cfg[r.id];
         return (
@@ -44,8 +48,8 @@ export function RatingButtons({ onRate, prompt = 'How well did you recall it?' }
               pressed && styles.pressed,
             ]}
           >
-            <Text style={[styles.label, { color: s.text }]}>{r.label}</Text>
-            <Text style={[styles.sub, { color: s.sub }]}>{r.sublabel}</Text>
+            <Text style={[styles.label, { color: s.text }]}>{t(`rating.${r.key}`)}</Text>
+            <Text style={[styles.sub, { color: s.sub }]}>{t(`rating.${r.key}Sub`)}</Text>
           </Pressable>
         );
       })}

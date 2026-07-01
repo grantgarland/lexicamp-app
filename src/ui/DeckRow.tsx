@@ -7,6 +7,7 @@ import ReanimatedSwipeable, {
 } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { useTranslation } from '@/i18n';
 import { IconChevronRight, IconList, IconPlay, IconTrash } from './icons';
 import { Text } from './Text';
 
@@ -27,13 +28,14 @@ const ACTION_W = 76;
 
 export function DeckRow({ deck, wordCount, onPress, onStudy, onDelete }: DeckRowProps) {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   const ref = useRef<SwipeableMethods>(null);
 
   const renderRightActions = () => (
     <View style={styles.tray}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Study deck"
+        accessibilityLabel={t('deckRow.studyA11y')}
         style={[styles.action, { backgroundColor: theme.color.accent }]}
         onPress={() => {
           ref.current?.close();
@@ -42,12 +44,12 @@ export function DeckRow({ deck, wordCount, onPress, onStudy, onDelete }: DeckRow
       >
         <IconPlay size={18} color="#fff" />
         <Text variant="label" style={styles.actionLabel}>
-          Study
+          {t('deckRow.study')}
         </Text>
       </Pressable>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Delete deck"
+        accessibilityLabel={t('deckRow.deleteA11y')}
         style={[styles.action, { backgroundColor: theme.color.danger }]}
         onPress={() => {
           ref.current?.close();
@@ -56,7 +58,7 @@ export function DeckRow({ deck, wordCount, onPress, onStudy, onDelete }: DeckRow
       >
         <IconTrash size={18} color="#fff" />
         <Text variant="label" style={styles.actionLabel}>
-          Delete
+          {t('deckRow.delete')}
         </Text>
       </Pressable>
     </View>
@@ -80,8 +82,8 @@ export function DeckRow({ deck, wordCount, onPress, onStudy, onDelete }: DeckRow
             {deck.name}
           </Text>
           <Text variant="caption" style={styles.sub}>
-            {wordCount} word{wordCount !== 1 ? 's' : ''}
-            {deck.created != null ? ` · Added ${deck.created}` : ''}
+            {t('deckRow.words', { count: wordCount })}
+            {deck.created != null ? t('deckRow.addedSuffix', { date: deck.created }) : ''}
           </Text>
         </View>
         <IconChevronRight size={14} color={theme.color.borderStrong} />
