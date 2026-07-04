@@ -1,0 +1,33 @@
+# CI-4 smoke flow — boots the app and traverses all four tabs, asserting each
+# screen's headline text (en locale). Catches the highest-value regression
+# classes: boot crashes, dead screens after navigation, and broken tab wiring.
+# Uses the mock DataSource (default in dev builds), summit/paid scenario, with
+# onboardingComplete=true → boots straight to Home.
+#
+# Run locally:  maestro test .maestro/smoke.yaml   (app installed on a booted
+# emulator/simulator; https://maestro.mobile.dev for CLI install)
+appId: com.lexicamp.app
+---
+- launchApp:
+    clearState: true
+
+# ── Home ─────────────────────────────────────────────────────────────────────
+- extendedWaitUntil:
+    visible: 'Word Mastery'
+    timeout: 20000
+
+# ── Word List ────────────────────────────────────────────────────────────────
+- tapOn: 'Word List'
+- assertVisible: 'My Words'
+
+# ── Progress ─────────────────────────────────────────────────────────────────
+- tapOn: 'Progress'
+- assertVisible: 'You are here'
+
+# ── Settings ─────────────────────────────────────────────────────────────────
+- tapOn: 'Settings'
+- assertVisible: 'Account'
+
+# ── Back to Home (round trip — catches the dead-screen-after-nav class) ──────
+- tapOn: 'Home'
+- assertVisible: 'Word Mastery'

@@ -25,7 +25,6 @@ import {
   DeckRow,
   DetailStats,
   EmptyState,
-  IconFolderPlus,
   IconList,
   IconLock,
   IconTrash,

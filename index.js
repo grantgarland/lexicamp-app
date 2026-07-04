@@ -7,4 +7,10 @@
 import './src/theme/unistyles';
 import './src/i18n';
 
+// Crash reporting (CI-3). No-op in dev or until EXPO_PUBLIC_SENTRY_DSN /
+// extra.sentryDsn is configured — see src/observability/sentry.ts.
+import { initSentry } from './src/observability/sentry';
+
+initSentry();
+
 import 'expo-router/entry';

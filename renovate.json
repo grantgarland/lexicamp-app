@@ -1,0 +1,44 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "CI-5 dependency automation (lexicamp-project/08 CI track). Mechanical tier of the remediation model: patch bumps auto-merge when CI is green; everything Expo/RN-native is grouped + manual because native changes require a new build (02 release policy). Activate by installing the free Renovate GitHub App on this repo.",
+  "extends": ["config:recommended", ":semanticCommits", ":prHourlyLimitNone"],
+  "timezone": "America/New_York",
+  "schedule": ["before 6am on saturday"],
+  "prConcurrentLimit": 5,
+  "labels": ["deps"],
+  "rangeStrategy": "bump",
+  "lockFileMaintenance": { "enabled": true, "schedule": ["before 6am on the first day of the month"] },
+  "packageRules": [
+    {
+      "description": "Patch-level updates auto-merge once CI (CI-2) is green — Renovate waits for checks itself (platformAutomerge would need branch protection, unavailable on Free private repos). Pure-JS risk tier only — native packages are excluded below.",
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "platformAutomerge": false
+    },
+    {
+      "description": "Expo SDK + React Native + native modules: grouped, never auto-merged — these require `npx expo install` alignment, a native rebuild, and an on-device pass. Upgrade deliberately, one session.",
+      "groupName": "Expo SDK / native modules",
+      "matchPackageNames": [
+        "expo",
+        "react-native",
+        "react",
+        "react-dom",
+        "/^expo-/",
+        "/^@expo//",
+        "/^@expo-google-fonts//",
+        "/^react-native-/",
+        "/^@react-native/",
+        "@gorhom/bottom-sheet",
+        "@shopify/flash-list"
+      ],
+      "automerge": false,
+      "matchUpdateTypes": ["minor", "major", "patch"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Minor/major for everything else: PRs to review manually, grouped weekly.",
+      "matchUpdateTypes": ["minor", "major"],
+      "automerge": false
+    }
+  ]
+}

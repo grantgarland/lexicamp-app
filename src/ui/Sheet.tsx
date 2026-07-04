@@ -30,11 +30,16 @@ export function Sheet({ visible, onClose, title, children }: SheetProps) {
   const [sheetH, setSheetH] = useState(0);
   const p = useSharedValue(visible ? 1 : 0);
 
+  // Mount synchronously when opening — the React-endorsed "adjust state during
+  // render" pattern (avoids a setState-in-effect cascade; react-hooks/set-state-in-effect).
+  if (visible && !mounted) setMounted(true);
+
   useEffect(() => {
     if (visible) {
-      setMounted(true);
       p.value = withTiming(1, { duration: 260, easing: Easing.out(Easing.cubic) });
     } else {
+      // Unmount only after the close animation completes (animation callback,
+      // not an effect-body setState).
       p.value = withTiming(0, { duration: 200, easing: Easing.in(Easing.cubic) }, (finished) => {
         if (finished) runOnJS(setMounted)(false);
       });

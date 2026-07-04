@@ -58,3 +58,38 @@ jobs:
       - name: expo-doctor (advisory)
         continue-on-error: true
         run: npx expo-doctor
+
+  # CI-6 remediation loop, sensor half: a red run on main files (or updates) a
+  # `ci-failure` issue so the next operator/Claude session starts from it — per
+  # 07's session protocol, these issues outrank the backlog. PR failures are
+  # visible on the PR itself, so only main is escalated. One rolling issue per
+  # workflow (deduped by title) to avoid issue spam.
+  escalate-failure:
+    needs: checks
+    if: failure() && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'CI failure on main';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              `**Run:** ${runUrl}`,
+              `**Commit:** ${context.sha} — ${context.payload.head_commit?.message?.split('\n')[0] ?? ''}`,
+              `**When:** ${new Date().toISOString()}`,
+              '',
+              'CI is red on main. Per `07-ai-operating-model.md`, fixing this outranks the backlog.',
+              'Check the run logs, fix, and close this issue in the same session.',
+            ].join('\n');
+            const { data: open } = await github.rest.issues.listForRepo({
+              ...context.repo, state: 'open', labels: 'ci-failure',
+            });
+            const existing = open.find((i) => i.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: existing.number, body });
+            } else {
+              await github.rest.issues.create({ ...context.repo, title, body, labels: ['ci-failure'] });
+            }

@@ -1,0 +1,113 @@
+# CI-4 — nightly E2E smoke: build the Android debug APK and run the Maestro
+# flows on a GitHub-hosted emulator. Free tier: Linux minutes only (~25–35 min
+# per run ≈ well inside 2,000 min/mo alongside per-PR CI).
+#
+# ⚠️ MANUAL-TRIGGER ONLY until the flows are proven against a verified build —
+# run it once from the Actions tab after the on-device pass; when green,
+# uncomment the `schedule:` block to make it nightly. (A red nightly from
+# unproven flows would spam the ci-failure issue with noise, not signal.)
+name: Nightly smoke (Maestro)
+
+on:
+  workflow_dispatch:
+  # Uncomment after the first successful manual run:
+  # schedule:
+  #   - cron: '0 8 * * *' # 08:00 UTC ≈ 3–4am ET, before the workday
+
+concurrency:
+  group: nightly-smoke
+  cancel-in-progress: true
+
+env:
+  EXPO_NO_TELEMETRY: '1'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Prebuild Android project
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Install Maestro
+        run: |
+          curl -fsSL https://get.maestro.mobile.dev | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      # KVM is available on GitHub-hosted Linux runners; this action manages the
+      # emulator lifecycle and caches the AVD snapshot between runs.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run smoke flows on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            adb install android/app/build/outputs/apk/debug/app-debug.apk
+            maestro test .maestro/ --format junit --output maestro-report.xml
+
+      - name: Upload Maestro artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro-results
+          path: |
+            maestro-report.xml
+            ~/.maestro/tests/**
+          if-no-files-found: ignore
+
+  # Same sensor as ci.yml: a red nightly files/updates the rolling ci-failure
+  # issue (only meaningful once the schedule is enabled and flows are proven).
+  escalate-failure:
+    needs: smoke
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'Nightly smoke failure';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              `**Run:** ${runUrl}`,
+              `**When:** ${new Date().toISOString()}`,
+              '',
+              'The nightly Maestro smoke is red. Per `07-ai-operating-model.md`, fixing this outranks the backlog.',
+            ].join('\n');
+            const { data: open } = await github.rest.issues.listForRepo({
+              ...context.repo, state: 'open', labels: 'ci-failure',
+            });
+            const existing = open.find((i) => i.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: existing.number, body });
+            } else {
+              await github.rest.issues.create({ ...context.repo, title, body, labels: ['ci-failure'] });
+            }

@@ -5,7 +5,7 @@
 // (a second sheet slides over the first, which stays mounted behind it) and unmount
 // cleanly. `PortalHost` is mounted once in the root layout, inside the app's providers +
 // GestureHandlerRootView, so gestures/theme/i18n all work inside portalled content.
-import { Fragment, type ReactNode, useEffect, useRef } from 'react';
+import { Fragment, type ReactNode, useEffect, useId } from 'react';
 import { create } from 'zustand';
 
 interface PortalStore {
@@ -27,23 +27,21 @@ const usePortalStore = create<PortalStore>((set) => ({
   remove: (id) => set((s) => ({ items: s.items.filter((i) => i.id !== id) })),
 }));
 
-let counter = 0;
-
 /** Renders `children` into the root PortalHost (on top of the app). */
 export function Portal({ children }: { children: ReactNode }) {
-  const idRef = useRef('');
-  if (idRef.current === '') idRef.current = `portal-${(counter += 1)}`;
+  // Stable per-instance id (replaces the old module counter + lazy ref, which
+  // violated react-hooks purity rules — refs/global writes during render).
+  const id = useId();
   const upsert = usePortalStore((s) => s.upsert);
   const remove = usePortalStore((s) => s.remove);
 
   // Keep the portalled node in sync on every render; remove on unmount.
   useEffect(() => {
-    upsert(idRef.current, children);
-  }, [children, upsert]);
+    upsert(id, children);
+  }, [id, children, upsert]);
   useEffect(() => {
-    const id = idRef.current;
     return () => remove(id);
-  }, [remove]);
+  }, [id, remove]);
 
   return null;
 }
