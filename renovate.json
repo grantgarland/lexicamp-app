@@ -4,6 +4,7 @@
   "extends": ["config:recommended", ":semanticCommits", ":prHourlyLimitNone"],
   "timezone": "America/New_York",
   "schedule": ["before 6am on saturday"],
+  "automergeSchedule": ["at any time"],
   "prConcurrentLimit": 5,
   "labels": ["deps"],
   "rangeStrategy": "bump",

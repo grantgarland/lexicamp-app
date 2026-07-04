@@ -62,5 +62,10 @@
     "test:watch": "jest --watch",
     "prepare": "git config core.hooksPath .githooks || true"
   },
-  "private": true
+  "private": true,
+  "allowScripts": {
+    "@sentry/cli@2.58.4": true,
+    "fsevents@2.3.3": true,
+    "unrs-resolver@1.12.2": true
+  }
 }
