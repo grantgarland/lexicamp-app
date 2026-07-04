@@ -1,0 +1,60 @@
+# CI-2 — the free-tier verification gate (lexicamp-project/08 CI track,
+# policy in 02 § CI & release/OTA policy). Linux-only on purpose: GitHub Free
+# gives 2,000 Linux min/mo on private repos; macOS bills at 10×. Never run EAS
+# builds here — builds happen on release tags only (15 iOS + 15 Android/mo cap).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  EXPO_NO_TELEMETRY: '1'
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npx jest --ci
+
+      # Token drift guard — needs the sibling design-system repo. Clones it with
+      # DESIGN_SYSTEM_PAT if set (required while that repo is private); skips with
+      # a warning otherwise so the pipeline stays green until the secret is added.
+      - name: Token drift check
+        env:
+          DS_PAT: ${{ secrets.DESIGN_SYSTEM_PAT }}
+        run: |
+          if git clone --depth 1 "https://${DS_PAT:+x-access-token:${DS_PAT}@}github.com/grantgarland/lexicamp-design-system.git" /tmp/lexicamp-design-system 2>/dev/null; then
+            TOKENS_DIR=/tmp/lexicamp-design-system/project/tokens npm run sync:tokens:check
+          else
+            echo "::warning::lexicamp-design-system not accessible — token drift check skipped (add a DESIGN_SYSTEM_PAT repo secret with read access)"
+          fi
+
+      # Dependency/compat guard. Non-blocking for now (some checks need network
+      # or flag false positives); tighten to blocking once it's proven quiet.
+      - name: expo-doctor (advisory)
+        continue-on-error: true
+        run: npx expo-doctor
