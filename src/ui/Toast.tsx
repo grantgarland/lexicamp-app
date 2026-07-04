@@ -8,6 +8,7 @@ import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { useTranslation } from '@/i18n';
 import { useUiStore, type ToastVariant } from '@/store/uiStore';
 import { IconX } from './icons';
 import { RawText as Text } from './Text';
@@ -29,6 +30,7 @@ function variantColor(variant: ToastVariant, theme: ReturnType<typeof useUnistyl
 
 export function Toast() {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   const toast = useUiStore((s) => s.toast);
   const hide = useUiStore((s) => s.hideToast);
   const insets = useSafeAreaInsets();
@@ -55,14 +57,22 @@ export function Toast() {
               hide();
             }}
             accessibilityRole="button"
-            hitSlop={8}
+            // Asymmetric hitSlop: grow the tap target outward but NOT toward the × so the
+            // two targets can't overlap under a thumb.
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 2 }}
             style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
           >
             <Text style={styles.actionText}>{toast.action.label}</Text>
           </Pressable>
         )}
-        <Pressable onPress={hide} accessibilityRole="button" hitSlop={8} style={({ pressed }) => [styles.close, pressed && { opacity: 0.6 }]}>
-          <IconX size={14} color="rgba(255,255,255,0.85)" />
+        <Pressable
+          onPress={hide}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.dismiss')}
+          hitSlop={{ top: 12, bottom: 12, left: 2, right: 12 }}
+          style={({ pressed }) => [styles.close, pressed && { opacity: 0.6 }]}
+        >
+          <IconX size={16} color="rgba(255,255,255,0.85)" />
         </Pressable>
       </Animated.View>
     </View>
@@ -74,7 +84,7 @@ const styles = StyleSheet.create((theme) => ({
   toast: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
     marginHorizontal: 10,
     borderRadius: 14,
     paddingVertical: 12,
@@ -88,7 +98,8 @@ const styles = StyleSheet.create((theme) => ({
   body: { flex: 1 },
   title: { fontFamily: theme.fonts.sans.bold, fontSize: 14, color: '#fff', marginBottom: 1 },
   message: { fontFamily: theme.fonts.sans.regular, fontSize: 13, lineHeight: 18, color: 'rgba(255,255,255,0.92)' },
-  action: { paddingHorizontal: 4, paddingVertical: 2 },
-  actionText: { fontFamily: theme.fonts.sans.bold, fontSize: 13, color: '#fff', textDecorationLine: 'underline' },
-  close: { padding: 2 },
+  // Sized for thumbs and visually separated from the × so they aren't mistaken for one target.
+  action: { minHeight: 36, paddingHorizontal: 10, justifyContent: 'center', borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.14)' },
+  actionText: { fontFamily: theme.fonts.sans.bold, fontSize: 13, color: '#fff' },
+  close: { width: 36, height: 36, marginLeft: 4, alignItems: 'center', justifyContent: 'center' },
 }));

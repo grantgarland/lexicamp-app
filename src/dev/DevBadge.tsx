@@ -1,6 +1,7 @@
 // DevBadge — a small floating "DEV" pill (overlaid above the whole app) that opens
 // a panel to flip core app states (plan, user tier) for testing screen variants.
 // NOT part of the app UI: dark, system-font styled, and gated to __DEV__ by the caller.
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,6 +15,7 @@ const PLANS: { value: DevPlan; label: string }[] = [
 
 export function DevBadge() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const plan = useDevStore((s) => s.plan);
   const userState = useDevStore((s) => s.userState);
@@ -53,6 +55,15 @@ export function DevBadge() {
                 />
               ))}
             </View>
+
+            <Text style={styles.label} allowFontScaling={false}>
+              Flows
+            </Text>
+            <View style={styles.rowWrap}>
+              <Chip label="Onboarding" active={false} onPress={() => { setOpen(false); router.push('/onboarding'); }} />
+              <Chip label="Auth" active={false} onPress={() => { setOpen(false); router.push('/auth'); }} />
+              <Chip label="Paywall" active={false} onPress={() => { setOpen(false); router.push('/paywall'); }} />
+            </View>
           </View>
         </>
       )}
@@ -86,7 +97,10 @@ const DARK = '#1b2329';
 const styles = StyleSheet.create({
   badge: {
     position: 'absolute',
-    right: 8,
+    // Left-anchored: the top-right corner holds real controls (quiz close ×, toast dismiss),
+    // and this zIndex:9999 pill was intercepting their taps. Top-left only overlaps
+    // non-interactive header text.
+    left: 8,
     zIndex: 9999,
     backgroundColor: 'rgba(20, 28, 34, 0.92)',
     borderRadius: 999,
@@ -99,7 +113,7 @@ const styles = StyleSheet.create({
   scrim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9998 },
   panel: {
     position: 'absolute',
-    right: 8,
+    left: 8,
     width: 250,
     zIndex: 9999,
     backgroundColor: DARK,

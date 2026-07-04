@@ -5,13 +5,14 @@
 //   • opening the search FAB overlays search ABOVE the scenes but the nav stays visible.
 // The navigator's built-in tab bar is replaced by a same-height spacer so scene content
 // still reserves room for the absolute bar. Quiz stays a root full-screen modal.
-import { Tabs, usePathname, useRouter } from 'expo-router';
+import { Redirect, Tabs, usePathname, useRouter } from 'expo-router';
 import Animated, { SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
 
 import { SearchView } from '@/screens/SearchScreen';
+import { useProfile } from '@/query/hooks';
 import { useUiStore } from '@/store/uiStore';
 import { TAB_BAR_CORE_HEIGHT, TabBar, type TabId } from '@/ui';
 
@@ -19,8 +20,16 @@ export default function TabsLayout() {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
+  const profile = useProfile();
   const searchOpen = useUiStore((s) => s.searchOpen);
   const setSearchOpen = useUiStore((s) => s.setSearchOpen);
+
+  // First-run gate: a user who hasn't finished onboarding is routed into the narrative
+  // arc (→ auth) before ever reaching the tabs. Once real auth lands, `onboardingComplete`
+  // comes from the account; the mock ships it `true`, so returning users boot to Home.
+  if (profile != null && !profile.onboardingComplete) {
+    return <Redirect href="/onboarding" />;
+  }
 
   const active: TabId = pathname.startsWith('/words')
     ? 'words'

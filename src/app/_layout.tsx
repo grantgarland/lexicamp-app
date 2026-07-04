@@ -59,6 +59,11 @@ export default function RootLayout() {
               <Stack.Screen name="search" options={{ presentation: 'modal' }} />
               {/* Quiz is an immersive full-screen modal (from Home "Study now"). */}
               <Stack.Screen name="quiz" options={{ presentation: 'fullScreenModal' }} />
+              {/* Paywall is a modal, pushed from every Upgrade / Unlock CTA. */}
+              <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
+              {/* First-run + auth flows (no header, no back-swipe out). */}
+              <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
+              <Stack.Screen name="auth" options={{ gestureEnabled: false }} />
             </Stack>
             {/* In-app overlays (sheets/dialogs) + toasts render above everything, on top
                 of the persistent nav — see ui/Portal + ui/Sheet + ui/Toast. */}

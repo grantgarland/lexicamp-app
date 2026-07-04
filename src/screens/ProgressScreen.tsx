@@ -8,11 +8,12 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import type { WordListItem } from '@/data/DataSource';
+import { MOUNTAIN_TIERS, mountainTier } from '@/domain/derive';
 import { useTranslation } from '@/i18n';
 import { dueLabel } from '@/lib/relativeTime';
 import { useProgressData, useWords } from '@/query/hooks';
 import { getTierByStability, TIERS } from '@/theme/tiers';
-import { EmptyState, IconBook, IconChart, IconCheck, IconFire, IconInfo, IconLock, IconMountain, RawText, Screen, SegmentedTabs, Sheet } from '@/ui';
+import { EmptyState, IconBook, IconChart, IconCheck, IconFire, IconInfo, IconLock, IconMountain, IconStar, RawText, Screen, SegmentedTabs, Sheet } from '@/ui';
 
 type SubTab = 'route' | 'inventory' | 'pace';
 type InfoKey = 'cefr' | 'fsrs';
@@ -27,16 +28,13 @@ function wordHealth(dueAt: Date): 'due' | 'soon' | 'ok' {
   return 'ok';
 }
 
-// The user's current CEFR tier = the highest tier they hold any words at (drives the
-// "You are here" position). Mock-scale word bounds (real thresholds are 100s–1000s) so the
-// per-tier progress bar reads sensibly with the demo's ~12–60 saved words.
-const MOCK_MAX = [20, 40, 46, 55, Number.POSITIVE_INFINITY]; // upper word bound per tier
-const tierMin = (i: number) => (i === 0 ? 0 : MOCK_MAX[i - 1]);
-const tierMax = (i: number) => MOCK_MAX[i];
-function highestTierIndex(tierCounts: number[]): number {
-  for (let i = tierCounts.length - 1; i >= 0; i -= 1) if ((tierCounts[i] ?? 0) > 0) return i;
-  return 0;
-}
+// ── Mountain-tier thresholds — SOURCE OF TRUTH is domain/derive.ts MOUNTAIN_TIERS
+// (mastered-word thresholds → CEFR) + tiers.ts TIERS (registry names/colors). The
+// user's position is mountainTier(masteredCount); a tier's window is [masteredMin,
+// nextTier.masteredMin). Registry visuals are looked up by the shared tier id.
+const masteredMinAt = (i: number) => MOUNTAIN_TIERS[i].masteredMin;
+const masteredMaxAt = (i: number) => (i + 1 < MOUNTAIN_TIERS.length ? MOUNTAIN_TIERS[i + 1].masteredMin : Number.POSITIVE_INFINITY);
+const tierRegistry = (i: number) => TIERS[i]; // MOUNTAIN_TIERS and TIERS share id order
 
 export function ProgressScreen() {
   const { t } = useTranslation();
@@ -82,72 +80,91 @@ type TabProps = {
 // ── Route ────────────────────────────────────────────────────────────────────
 function RouteTab({ data, t, onInfo }: TabProps) {
   const { theme } = useUnistyles();
-  const count = data.totalSaved;
+  const saved = data.totalSaved;
 
-  if (count === 0) {
+  if (saved === 0) {
     return <EmptyState style={styles.empty} illustration={<IconMountain size={52} color={theme.color.evergreen} />} title={t('progress.emptyRouteTitle')} body={t('progress.emptyRouteBody')} />;
   }
 
-  const cur = highestTierIndex(data.tierCounts);
-  const curTier = TIERS[cur];
-  const next = TIERS[cur + 1];
-  const min = tierMin(cur);
-  const max = tierMax(cur);
-  const pctInTier = Math.max(0, Math.min(100, Math.round(((count - min) / (max - min)) * 100)));
+  // SOURCE OF TRUTH: mountain rank derives from mastered-word count (03 / derive.ts),
+  // not saved words or the FSRS distribution.
+  const mastered = data.totalMastered;
+  const curTierId = mountainTier(mastered).id;
+  const cur = MOUNTAIN_TIERS.findIndex((x) => x.id === curTierId);
+  const curReg = tierRegistry(cur);
+  const next = MOUNTAIN_TIERS[cur + 1];
+  const min = masteredMinAt(cur);
+  const max = masteredMaxAt(cur);
+  const pctInTier = Number.isFinite(max) ? Math.max(0, Math.min(100, Math.round(((mastered - min) / (max - min)) * 100))) : 100;
 
   return (
     <View style={styles.pad}>
       {/* You are here */}
-      <View style={[styles.hereCard, { backgroundColor: curTier.bg, borderColor: curTier.border }]}>
+      <View style={[styles.hereCard, { backgroundColor: curReg.bg, borderColor: curReg.border }]}>
         <View style={styles.hereTop}>
           <View style={styles.hereTopText}>
             <RawText style={styles.hereLabel}>{t('progress.youAreHere')}</RawText>
-            <RawText style={styles.hereTier}>{t(`tier.${curTier.id}.name`)}</RawText>
-            <RawText style={[styles.hereCefr, { color: curTier.color }]}>{t('progress.cefr', { level: curTier.cefr })}</RawText>
+            <RawText style={styles.hereTier}>{t(`tier.${curReg.id}.name`)}</RawText>
+            <RawText style={[styles.hereCefr, { color: curReg.color }]}>{t('progress.cefr', { level: curReg.cefr })}</RawText>
           </View>
-          <Pressable onPress={() => onInfo?.('cefr')} accessibilityRole="button" accessibilityLabel={t('progress.aboutCefr')} hitSlop={8} style={({ pressed }) => [styles.hereInfo, { borderColor: curTier.border }, pressed && { opacity: 0.6 }]}>
-            <IconInfo size={13} color={curTier.color} />
+          <Pressable onPress={() => onInfo?.('cefr')} accessibilityRole="button" accessibilityLabel={t('progress.aboutCefr')} hitSlop={8} style={({ pressed }) => [styles.hereInfo, { borderColor: curReg.border }, pressed && { opacity: 0.6 }]}>
+            <IconInfo size={13} color={curReg.color} />
           </Pressable>
         </View>
         <View style={styles.hereRow}>
           <RawText style={styles.hereMastered}>
-            {count}
+            {mastered.toLocaleString()}
             <RawText style={styles.hereMasteredSuffix}> {t('progress.wordsSuffix')}</RawText>
           </RawText>
-          <RawText style={styles.hereToNext}>{next ? t('progress.toNext', { count: Math.max(0, max - count), tier: t(`tier.${next.id}.name`) }) : t('progress.summitReached')}</RawText>
+          <RawText style={styles.hereToNext}>{next ? t('progress.toNext', { count: Math.max(0, max - mastered), tier: t(`tier.${next.id}.name`) }) : t('progress.summitReached')}</RawText>
         </View>
         <View style={styles.hereTrack}>
-          <View style={[styles.hereFill, { width: `${pctInTier}%`, backgroundColor: curTier.color }]} />
+          <View style={[styles.hereFill, { width: `${pctInTier}%`, backgroundColor: curReg.color }]} />
         </View>
-        <RawText style={styles.herePct}>{t('progress.pctThrough', { pct: pctInTier, tier: t(`tier.${curTier.id}.name`) })}</RawText>
+        <RawText style={styles.herePct}>{t('progress.pctThrough', { pct: pctInTier, tier: t(`tier.${curReg.id}.name`) })}</RawText>
+
+        {/* 0-mastered hint — the climb hasn't registered a mastered word yet */}
+        {mastered === 0 && (
+          <View style={[styles.hereHint, { borderColor: curReg.border }]}>
+            <RawText style={styles.hereHintText}>{t('progress.masteredZeroHint')}</RawText>
+          </View>
+        )}
       </View>
 
       {/* Full route ladder (Summit at top) */}
       <RawText style={styles.sectionTitle}>{t('progress.fullRoute')}</RawText>
       <RawText style={styles.sectionSub}>{t('progress.fullRouteSub')}</RawText>
       <View style={styles.ladder}>
-        {[...TIERS].reverse().map((tier) => {
-            const origIdx = TIERS.findIndex((x) => x.id === tier.id);
+        {/* Connecting route line behind the nodes */}
+        <View style={styles.ladderLine} />
+        {[...MOUNTAIN_TIERS].reverse().map((mt) => {
+            const origIdx = MOUNTAIN_TIERS.findIndex((x) => x.id === mt.id);
+            const tier = tierRegistry(origIdx);
             const completed = origIdx < cur;
             const current = origIdx === cur;
             const locked = origIdx > cur;
+            const finiteMax = Number.isFinite(masteredMaxAt(origIdx));
+            const rowPct = current && finiteMax ? Math.max(0, Math.min(100, Math.round(((mastered - masteredMinAt(origIdx)) / (masteredMaxAt(origIdx) - masteredMinAt(origIdx))) * 100))) : 0;
             const node = completed
               ? { backgroundColor: theme.palette.green[500], borderColor: theme.palette.green[400] }
               : current
                 ? { backgroundColor: theme.color.brand, borderColor: theme.color.brand }
                 : { backgroundColor: theme.color.surfaceCard, borderColor: theme.palette.slate[200] };
             return (
-              <View key={tier.id} style={[styles.ladderRow, locked && { opacity: 0.5 }]}>
-                <View style={[styles.node, node]}>
+              <View key={tier.id} style={styles.ladderRow}>
+                {/* Node stays fully opaque so the route line never bleeds through a locked tier;
+                    only the text body is dimmed for locked rows. */}
+                <View style={[styles.node, node, current && styles.nodeCurrent, locked && styles.nodeLocked]}>
                   {completed && <IconCheck size={14} color="#fff" />}
                   {current && <RawText style={styles.nodeNum}>{origIdx + 1}</RawText>}
                   {locked && <IconLock size={12} color={theme.palette.slate[300]} />}
                 </View>
-                <View style={styles.ladderBody}>
+                <View style={[styles.ladderBody, locked && { opacity: 0.5 }]}>
                   <View style={styles.ladderTitleRow}>
                     <RawText style={[styles.ladderTier, { color: completed ? theme.palette.green[800] : current ? theme.color.textStrong : theme.palette.slate[400] }]}>
                       {t(`tier.${tier.id}.name`)}
                     </RawText>
+                    {tier.id === 'summit' && <IconStar size={13} color={theme.palette.amber[400]} />}
                     {current && <RawText style={styles.badgeCurrent}>{t('progress.current')}</RawText>}
                     {completed && <RawText style={styles.badgeDone}>{t('progress.done')}</RawText>}
                   </View>
@@ -155,10 +172,21 @@ function RouteTab({ data, t, onInfo }: TabProps) {
                     {t('progress.cefr', { level: tier.cefr })}
                   </RawText>
                   <RawText style={styles.ladderStatus}>
-                    {locked && t('progress.unlockAt', { count: tierMin(origIdx) })}
-                    {completed && t('progress.masteredPlus', { count: tierMin(origIdx) })}
-                    {current && (Number.isFinite(tierMax(origIdx)) ? t('progress.ofWords', { count, max: tierMax(origIdx) }) : t('progress.atSummitWords', { count }))}
+                    {locked && t('progress.unlockAt', { count: masteredMinAt(origIdx).toLocaleString() })}
+                    {completed && t('progress.masteredPlus', { count: masteredMinAt(origIdx).toLocaleString() })}
+                    {current && (finiteMax ? t('progress.ofWords', { count: mastered.toLocaleString(), max: masteredMaxAt(origIdx).toLocaleString() }) : t('progress.atSummitWords', { count: mastered.toLocaleString() }))}
                   </RawText>
+                  {current && finiteMax && (
+                    <View style={styles.ladderProgress}>
+                      <View style={styles.ladderProgressRow}>
+                        <RawText style={styles.ladderProgressLabel}>{t('progress.wordsToNext', { count: Math.max(0, masteredMaxAt(origIdx) - mastered) })}</RawText>
+                        <RawText style={styles.ladderProgressPct}>{rowPct}%</RawText>
+                      </View>
+                      <View style={styles.ladderTrack}>
+                        <View style={[styles.ladderFill, { width: `${rowPct}%` }]} />
+                      </View>
+                    </View>
+                  )}
                 </View>
               </View>
             );
@@ -216,7 +244,7 @@ function InventoryTab({ data, t, onInfo, onOpenTier }: TabProps) {
                   <RawText style={styles.invCount}>{c}</RawText>
                 </View>
                 <View style={styles.invRowBottom}>
-                  <RawText style={styles.invRange}>{t(`tier.${tier.id}.stabilityRange`)}</RawText>
+                  <RawText style={styles.invRange} numberOfLines={1}>{t(`tier.${tier.id}.shortDesc`)} · {t(`tier.${tier.id}.stabilityRange`)}</RawText>
                   <RawText style={styles.invPct}>{pct}%</RawText>
                 </View>
               </View>
@@ -234,12 +262,14 @@ function PaceTab({ data, t }: TabProps) {
   if (data.totalSaved === 0 || data.sessionsTotal === 0) {
     return <EmptyState style={styles.empty} illustration={<IconChart size={48} color={theme.color.brand} />} title={t('progress.emptyPaceTitle')} body={t('progress.emptyPaceBody')} />;
   }
-  const count = data.totalSaved;
-  const cur = highestTierIndex(data.tierCounts);
-  const next = TIERS[cur + 1];
-  const masteryRate = data.daysActive > 0 ? count / data.daysActive : 0;
-  const canProject = count > 0 && data.daysActive > 0 && next != null && Number.isFinite(tierMax(cur));
-  const wordsToNext = canProject ? Math.max(0, tierMax(cur) - count) : 0;
+  // SOURCE OF TRUTH: projection is driven by mastered-word pace vs MOUNTAIN_TIERS.
+  const mastered = data.totalMastered;
+  const curId = mountainTier(mastered).id;
+  const cur = MOUNTAIN_TIERS.findIndex((x) => x.id === curId);
+  const next = MOUNTAIN_TIERS[cur + 1];
+  const masteryRate = data.daysActive > 0 ? mastered / data.daysActive : 0;
+  const canProject = mastered > 0 && data.daysActive > 0 && next != null;
+  const wordsToNext = canProject ? Math.max(0, masteredMaxAt(cur) - mastered) : 0;
   const daysToNext = canProject && masteryRate > 0 ? Math.ceil(wordsToNext / masteryRate) : null;
   const reviewsPerDay = data.daysActive > 0 ? Math.round((data.sessionsTotal * 20) / data.daysActive) : 0;
 
@@ -260,7 +290,7 @@ function PaceTab({ data, t }: TabProps) {
             <View>
               <RawText style={styles.projSmall}>{t('progress.estDaysToReach')}</RawText>
               <RawText style={styles.projTier}>
-                {t(`tier.${next.id}.name`)} <RawText style={styles.projCefr}>{next.cefr}</RawText>
+                {t(`tier.${next.id}.name`)} <RawText style={styles.projCefr}>{t('progress.cefr', { level: next.cefr })}</RawText>
               </RawText>
             </View>
           </View>
@@ -269,6 +299,13 @@ function PaceTab({ data, t }: TabProps) {
             <RawText style={styles.projDaysLabel}>{t('progress.days')}</RawText>
           </View>
           <RawText style={styles.projDetail}>{t('progress.paceDetail', { words: wordsToNext, rate: masteryRate.toFixed(1) })}</RawText>
+          <View style={styles.projTrack}>
+            <View style={[styles.projFill, { width: `${Math.max(0, Math.min(100, Math.round(((mastered - masteredMinAt(cur)) / (masteredMaxAt(cur) - masteredMinAt(cur))) * 100)))}%` }]} />
+          </View>
+          <View style={styles.projScaleRow}>
+            <RawText style={styles.projScale}>{t('progress.paceNow', { count: mastered.toLocaleString() })}</RawText>
+            <RawText style={styles.projScale}>{next != null ? `${t(`tier.${next.id}.name`)} · ${masteredMaxAt(cur).toLocaleString()}` : ''}</RawText>
+          </View>
         </View>
       ) : (
         <View style={styles.projLocked}>
@@ -316,14 +353,14 @@ function InfoSheet({ infoKey, t, onClose }: { infoKey: InfoKey | null; t: TFunct
     <Sheet visible={infoKey != null} onClose={onClose} title={t(isCefr ? 'progress.cefrTitle' : 'progress.fsrsTitle')}>
       <RawText style={styles.infoIntro}>{t(isCefr ? 'progress.cefrIntro' : 'progress.fsrsIntro')}</RawText>
       <View style={styles.infoList}>
-        {TIERS.map((tier) => (
+        {TIERS.map((tier, i) => (
           <View key={tier.id} style={[styles.infoRow, { backgroundColor: isCefr ? tier.bg : theme.palette.slate[50], borderColor: isCefr ? tier.border : theme.color.border }]}>
             <View style={[isCefr ? styles.infoDotRound : styles.infoDotSquare, { backgroundColor: tier.color }]} />
             <View style={styles.infoRowBody}>
               <RawText style={styles.infoTier}>{t(`tier.${tier.id}.name`)}</RawText>
-              <RawText style={styles.infoDesc}>{isCefr ? `${tier.wordCount}+ ${t('progress.wordsSuffix')}` : t(`tier.${tier.id}.desc`)}</RawText>
+              <RawText style={styles.infoDesc}>{isCefr ? t('progress.masteredThreshold', { count: masteredMinAt(i).toLocaleString() }) : t(`tier.${tier.id}.desc`)}</RawText>
             </View>
-            <RawText style={styles.infoMeta}>{isCefr ? t('progress.cefr', { level: tier.cefr }) : t(`tier.${tier.id}.stabilityRange`)}</RawText>
+            <RawText style={styles.infoMeta}>{isCefr ? t('progress.cefr', { level: MOUNTAIN_TIERS[i].cefr }) : t(`tier.${tier.id}.stabilityRange`)}</RawText>
           </View>
         ))}
       </View>
@@ -372,7 +409,7 @@ function TierWordsSheet({ tierIdx, words, t, onClose }: { tierIdx: number | null
 const styles = StyleSheet.create((theme) => {
   const { color, palette, fonts, radius } = theme;
   return {
-    header: { paddingHorizontal: 16, paddingTop: 4 },
+    header: { backgroundColor: color.surfaceCard, borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.border, paddingHorizontal: 16, paddingTop: 6 },
     title: { fontFamily: fonts.sans.extra, fontSize: 22, letterSpacing: -0.3, color: color.textStrong, marginBottom: 8 },
 
     scroll: { paddingBottom: 20 },
@@ -397,15 +434,28 @@ const styles = StyleSheet.create((theme) => {
     hereTrack: { height: 8, backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 6, overflow: 'hidden' },
     hereFill: { height: '100%', borderRadius: 6 },
     herePct: { fontFamily: fonts.sans.regular, fontSize: 11, color: color.textMuted, marginTop: 5, textAlign: 'right' },
+    hereHint: { marginTop: 12, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: theme.borderWidth.thin, backgroundColor: 'rgba(255,255,255,0.55)' },
+    hereHintText: { fontFamily: fonts.sans.regular, fontSize: 12, lineHeight: 18, color: color.textMuted, textAlign: 'center' },
 
     // Route — ladder
-    ladder: { marginTop: 12, gap: 20 },
+    ladder: { marginTop: 12, gap: 20, position: 'relative' },
+    ladderLine: { position: 'absolute', left: 18, top: 19, bottom: 19, width: 2, backgroundColor: palette.slate[200], borderRadius: 1 },
     ladderRow: { flexDirection: 'row', gap: 14, alignItems: 'flex-start' },
-    node: { width: 38, height: 38, borderRadius: 19, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
+    node: { width: 38, height: 38, borderRadius: 19, borderWidth: 3, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+    nodeCurrent: { boxShadow: `0 0 0 5px ${palette.blue[100]}` },
+    // Opaque muted fill for locked nodes — hides the route line behind them without using
+    // row opacity (which would let the line show through).
+    nodeLocked: { backgroundColor: palette.slate[50], borderColor: palette.slate[200] },
     nodeNum: { fontFamily: fonts.sans.bold, fontSize: 12, color: '#fff' },
     ladderBody: { flex: 1, paddingTop: 4 },
     ladderTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 },
     ladderTier: { fontFamily: fonts.sans.semibold, fontSize: 15 },
+    ladderProgress: { marginTop: 8 },
+    ladderProgressRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
+    ladderProgressLabel: { fontFamily: fonts.sans.regular, fontSize: 11, color: color.textMuted },
+    ladderProgressPct: { fontFamily: fonts.sans.bold, fontSize: 11, color: color.brand },
+    ladderTrack: { height: 7, backgroundColor: palette.blue[100], borderRadius: 6, overflow: 'hidden' },
+    ladderFill: { height: '100%', borderRadius: 6, backgroundColor: color.brand },
     badgeCurrent: { fontFamily: fonts.sans.bold, fontSize: 10, letterSpacing: 0.5, textTransform: 'uppercase', color: color.brand, backgroundColor: palette.blue[100], paddingVertical: 2, paddingHorizontal: 7, borderRadius: 4, overflow: 'hidden' },
     badgeDone: { fontFamily: fonts.sans.bold, fontSize: 10, letterSpacing: 0.5, textTransform: 'uppercase', color: palette.green[700], backgroundColor: palette.green[100], paddingVertical: 2, paddingHorizontal: 7, borderRadius: 4, overflow: 'hidden' },
     ladderCefr: { fontFamily: fonts.sans.semibold, fontSize: 11, letterSpacing: 0.4, marginBottom: 4 },
@@ -425,8 +475,8 @@ const styles = StyleSheet.create((theme) => {
     invTier: { fontFamily: fonts.sans.bold, fontSize: 13, color: color.textStrong },
     invCount: { fontFamily: fonts.mono.bold, fontSize: 17, color: color.textStrong },
     invRowBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 },
-    invRange: { fontFamily: fonts.sans.regular, fontSize: 11, color: color.textMuted },
-    invPct: { fontFamily: fonts.sans.regular, fontSize: 11, color: color.textMuted },
+    invRange: { flex: 1, fontFamily: fonts.sans.regular, fontSize: 11, color: color.textMuted },
+    invPct: { fontFamily: fonts.sans.regular, fontSize: 11, color: color.textMuted, marginLeft: 8 },
 
     // Pace
     projCard: { backgroundColor: palette.blue[50], borderWidth: 1.5, borderColor: palette.blue[200], borderRadius: radius.lg, padding: 18, marginTop: 12 },
@@ -437,7 +487,11 @@ const styles = StyleSheet.create((theme) => {
     projBig: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginBottom: 6 },
     projDays: { fontFamily: fonts.serif.bold, fontSize: 44, color: color.brand },
     projDaysLabel: { fontFamily: fonts.sans.semibold, fontSize: 18, color: color.textMuted, paddingBottom: 5 },
-    projDetail: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted },
+    projDetail: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted, marginBottom: 14 },
+    projTrack: { height: 6, backgroundColor: palette.blue[100], borderRadius: 4, overflow: 'hidden' },
+    projFill: { height: '100%', backgroundColor: color.brand, borderRadius: 4 },
+    projScaleRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
+    projScale: { fontFamily: fonts.sans.regular, fontSize: 10, color: color.textMuted },
     projLocked: { backgroundColor: palette.slate[50], borderWidth: theme.borderWidth.base, borderColor: palette.slate[200], borderStyle: 'dashed', borderRadius: radius.lg, padding: 20, alignItems: 'center', marginTop: 12 },
     projLockedTitle: { fontFamily: fonts.sans.semibold, fontSize: 14, color: color.textMuted, marginTop: 10, marginBottom: 6 },
     projLockedBody: { fontFamily: fonts.sans.regular, fontSize: 12, lineHeight: 18, color: color.textMuted, textAlign: 'center', maxWidth: 220 },

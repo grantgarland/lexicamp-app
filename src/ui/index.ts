@@ -22,6 +22,7 @@ export { ConfirmDialog, type ConfirmDialogProps } from './ConfirmDialog';
 export { Portal, PortalHost } from './Portal';
 export { Toast } from './Toast';
 export { DetailStats, type DetailStat } from './DetailStats';
+export { PremiumBadge, type PremiumBadgeProps } from './PremiumBadge';
 export { WordDetailSheet, type WordDetailSheetProps } from './WordDetailSheet';
 export {
   IconHome,
@@ -51,6 +52,12 @@ export {
   IconInfo,
   IconSliders,
   IconMinus,
+  IconBell,
+  IconMail,
+  IconUser,
+  IconStar,
+  IconGlobe,
+  IconInfinity,
   type IconProps,
 } from './icons';
 export { PRESS_OPACITY, pressableOpacity } from './pressable';

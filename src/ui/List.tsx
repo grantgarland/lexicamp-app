@@ -40,6 +40,8 @@ export interface ListItemProps {
   compact?: boolean;
   /** Omit the bottom divider (last row / standalone). */
   last?: boolean;
+  /** Override the title colour (e.g. danger for a destructive row). */
+  titleColor?: string;
   accessibilityLabel?: string;
 }
 
@@ -56,6 +58,7 @@ export function ListItem({
   disabled = false,
   compact = false,
   last = false,
+  titleColor,
   accessibilityLabel,
 }: ListItemProps) {
   const base = [
@@ -77,7 +80,7 @@ export function ListItem({
           </Text>
         ) : (
           <>
-            <Text numberOfLines={1} style={styles.title}>
+            <Text numberOfLines={1} style={[styles.title, titleColor != null && { color: titleColor }]}>
               {title}
             </Text>
             {subtitle != null && (

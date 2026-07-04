@@ -1,36 +1,52 @@
 // SettingsScreen (SE-01) — the settings hub, assembled against settings/Settings.html.
 // Account · Study Preferences · Subscription · Data & Support, over real profile +
-// entitlement state. Destructive Clear-data / Sign-out and About open confirm sheets;
-// the deeper editors (profile, reminders, quiz length, language) open a placeholder
-// sheet for now. Bottom nav is the persistent tab layout.
+// entitlement state. Rows compose the shared ListItem with a colored icon tile;
+// PremiumBadge is the shared amber pill. Destructive Clear-data / Sign-out and About
+// open confirm sheets; the deeper editors open a placeholder sheet for now.
+import { useRouter } from 'expo-router';
 import { type ReactNode, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
 import { useEntitlement, useHomeData, useProfile } from '@/query/hooks';
-import { Button, ConfirmDialog, IconBook, IconChevronRight, IconClock, IconInfo, IconMountain, IconTrash, RawText, Screen, Sheet } from '@/ui';
+import { AboutSheet, EditProfileSheet, NotificationSheet, QuizLengthSheet, SupportSheet } from './settings/sheets';
+import {
+  Button,
+  ConfirmDialog,
+  IconBell,
+  IconBook,
+  IconChevronRight,
+  IconCheck,
+  IconInfo,
+  IconMail,
+  IconStar,
+  IconTrash,
+  ListItem,
+  PremiumBadge,
+  RawText,
+  Screen,
+} from '@/ui';
 
 const FREE_WORD_LIMIT = 50;
-type SheetId = 'about' | 'clear' | 'signout' | 'soon' | null;
+const FREE_FEATURES = ['featureUnlimited', 'featureDecks', 'featureLanguages'] as const;
+type SheetId = 'about' | 'clear' | 'signout' | 'editProfile' | 'notifications' | 'quizLength' | 'support' | null;
 
 export function SettingsScreen() {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
+  const router = useRouter();
   const profile = useProfile();
   const { isPaid } = useEntitlement();
   const { snapshot } = useHomeData();
   const wordsSaved = snapshot?.wordsSaved ?? 0;
 
   const [sheet, setSheet] = useState<SheetId>(null);
-  const [soonLabel, setSoonLabel] = useState('');
-  const openSoon = (label: string) => {
-    setSoonLabel(label);
-    setSheet('soon');
-  };
+  const openPaywall = () => router.push('/paywall');
 
   const initial = (profile?.displayName ?? 'L').charAt(0).toUpperCase();
   const direction = `${t(`languages.${profile?.nativeLang ?? 'en'}`)} → ${t(`languages.${profile?.learningLang ?? 'es'}`)}`;
+  const usagePct = Math.min(100, Math.round((wordsSaved / FREE_WORD_LIMIT) * 100));
 
   return (
     <Screen edges={['top']}>
@@ -40,7 +56,7 @@ export function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Account */}
         <Section label={t('settings.account')}>
-          <Pressable style={styles.profileRow} onPress={() => openSoon(t('settings.editProfile'))} accessibilityRole="button">
+          <Pressable style={({ pressed }) => [styles.profileRow, pressed && styles.rowPressed]} onPress={() => setSheet('editProfile')} accessibilityRole="button">
             <View style={styles.avatar}>
               <RawText style={styles.avatarText}>{initial}</RawText>
             </View>
@@ -54,8 +70,21 @@ export function SettingsScreen() {
 
         {/* Study Preferences */}
         <Section label={t('settings.studyPreferences')}>
-          <Row icon={<IconClock size={16} color={theme.color.textMuted} />} label={t('settings.studyReminders')} value={isPaid ? t('settings.remindersOn') : t('settings.remindersLocked')} pro={!isPaid} onPress={() => openSoon(t('settings.studyReminders'))} />
-          <Row icon={<IconBook size={16} color={theme.color.textMuted} />} label={t('settings.quizLength')} value={t('settings.cardsPerSession', { count: 20 })} pro={!isPaid} onPress={() => openSoon(t('settings.quizLength'))} last />
+          <ListItem
+            leading={<IconTile><IconBell size={16} color={theme.color.brand} /></IconTile>}
+            title={t('settings.studyReminders')}
+            subtitle={isPaid ? t('settings.remindersOn') : t('settings.remindersLocked')}
+            trailing={isPaid ? <Chevron /> : <PremiumBadge small />}
+            onPress={() => setSheet('notifications')}
+          />
+          <ListItem
+            leading={<IconTile><IconBook size={16} color={theme.color.brand} /></IconTile>}
+            title={t('settings.quizLength')}
+            subtitle={t('settings.cardsPerSession', { count: 20 })}
+            trailing={isPaid ? <Chevron /> : <PremiumBadge small />}
+            onPress={() => setSheet('quizLength')}
+            last
+          />
         </Section>
 
         {/* Subscription */}
@@ -65,34 +94,67 @@ export function SettingsScreen() {
               <View style={styles.planCard}>
                 <View style={styles.planTop}>
                   <RawText style={styles.planName}>{t('settings.premiumPlan')}</RawText>
-                  <View style={styles.proBadge}>
-                    <RawText style={styles.proBadgeText}>PRO</RawText>
-                  </View>
+                  <PremiumBadge small />
                 </View>
                 <RawText style={styles.planSub}>{t('settings.renews', { date: t('settings.renewDatePlaceholder') })}</RawText>
               </View>
-              <Row icon={<IconMountain size={15} color={theme.color.accent} />} label={t('settings.manageSubscription')} value={t('settings.viewInStore')} onPress={() => openSoon(t('settings.manageSubscription'))} last />
+              <ListItem
+                leading={<IconTile><IconStar size={15} color={theme.color.brand} /></IconTile>}
+                title={t('settings.manageSubscription')}
+                subtitle={t('settings.viewInStore')}
+                trailing={<Chevron />}
+                onPress={openPaywall}
+                last
+              />
             </>
           ) : (
-            <View style={styles.freeBlock}>
-              <RawText style={styles.planName}>{t('settings.freePlan')}</RawText>
-              <RawText style={styles.usageText}>{t('settings.wordsSavedOf', { count: wordsSaved, limit: FREE_WORD_LIMIT })}</RawText>
-              <View style={styles.usageTrack}>
-                <View style={[styles.usageFill, { width: `${Math.min(100, Math.round((wordsSaved / FREE_WORD_LIMIT) * 100))}%`, backgroundColor: wordsSaved / FREE_WORD_LIMIT > 0.9 ? theme.color.danger : theme.color.brand }]} />
+            <>
+              <View style={styles.planCard}>
+                <RawText style={styles.freePlanName}>{t('settings.freePlan')}</RawText>
+                <RawText style={styles.usageText}>{t('settings.wordsSavedOf', { count: wordsSaved, limit: FREE_WORD_LIMIT })}</RawText>
+                <View style={styles.usageTrack}>
+                  <View style={[styles.usageFill, { width: `${usagePct}%`, backgroundColor: usagePct > 90 ? theme.color.danger : theme.color.brand }]} />
+                </View>
               </View>
-              <View style={styles.upgradeCta}>
-                <Button title={t('settings.upgrade')} variant="primary" onPress={() => openSoon(t('settings.upgrade'))} />
+              <View style={styles.upgradeBlock}>
+                <View style={styles.featureList}>
+                  {FREE_FEATURES.map((key) => (
+                    <View key={key} style={styles.featureRow}>
+                      <IconCheck size={14} color={theme.color.evergreen} />
+                      <RawText style={styles.featureText}>{t(`settings.${key}`)}</RawText>
+                    </View>
+                  ))}
+                </View>
+                <Button title={t('settings.upgrade')} variant="primary" onPress={openPaywall} />
+                <RawText style={styles.pricing}>{t('settings.pricing')}</RawText>
               </View>
-              <RawText style={styles.pricing}>{t('settings.pricing')}</RawText>
-            </View>
+            </>
           )}
         </Section>
 
         {/* Data & Support */}
         <Section label={t('settings.dataSupport')}>
-          <Row icon={<IconTrash size={15} color={theme.color.danger} />} label={t('settings.clearData')} destructive onPress={() => setSheet('clear')} />
-          <Row icon={<IconInfo size={15} color={theme.color.textMuted} />} label={t('settings.contactSupport')} onPress={() => openSoon(t('settings.contactSupport'))} />
-          <Row icon={<IconMountain size={15} color={theme.color.textMuted} />} label={t('settings.about')} value={t('settings.version', { version: '1.0.0' })} onPress={() => setSheet('about')} last />
+          <ListItem
+            leading={<IconTile tone="danger"><IconTrash size={15} color={theme.color.danger} /></IconTile>}
+            title={t('settings.clearData')}
+            titleColor={theme.color.danger}
+            trailing={<Chevron />}
+            onPress={() => setSheet('clear')}
+          />
+          <ListItem
+            leading={<IconTile><IconMail size={15} color={theme.color.brand} /></IconTile>}
+            title={t('settings.contactSupport')}
+            trailing={<Chevron />}
+            onPress={() => setSheet('support')}
+          />
+          <ListItem
+            leading={<IconTile><IconInfo size={15} color={theme.color.brand} /></IconTile>}
+            title={t('settings.about')}
+            subtitle={t('settings.version', { version: '1.0.0' })}
+            trailing={<Chevron />}
+            onPress={() => setSheet('about')}
+            last
+          />
         </Section>
 
         <View style={styles.signOutWrap}>
@@ -102,11 +164,12 @@ export function SettingsScreen() {
         </View>
       </ScrollView>
 
-      {/* Sheets */}
-      <Sheet visible={sheet === 'about'} onClose={() => setSheet(null)} title={t('settings.aboutTitle')}>
-        <RawText style={styles.aboutTagline}>{t('settings.aboutTagline')}</RawText>
-        <RawText style={styles.aboutMeta}>{t('settings.version', { version: '1.0.0' })}</RawText>
-      </Sheet>
+      {/* Deep-editor sheets */}
+      <EditProfileSheet visible={sheet === 'editProfile'} profile={profile} isPaid={isPaid} onClose={() => setSheet(null)} onUpgrade={openPaywall} />
+      <NotificationSheet visible={sheet === 'notifications'} isPaid={isPaid} onClose={() => setSheet(null)} onUpgrade={openPaywall} />
+      <QuizLengthSheet visible={sheet === 'quizLength'} isPaid={isPaid} onClose={() => setSheet(null)} onUpgrade={openPaywall} />
+      <SupportSheet visible={sheet === 'support'} onClose={() => setSheet(null)} />
+      <AboutSheet visible={sheet === 'about'} onClose={() => setSheet(null)} />
 
       <ConfirmDialog
         visible={sheet === 'clear'}
@@ -127,13 +190,9 @@ export function SettingsScreen() {
         confirmLabel={t('settings.signOut')}
         cancelLabel={t('settings.cancel')}
         destructive
-        onConfirm={() => setSheet(null)}
+        onConfirm={() => { setSheet(null); router.replace('/auth'); }}
         onClose={() => setSheet(null)}
       />
-
-      <Sheet visible={sheet === 'soon'} onClose={() => setSheet(null)} title={soonLabel}>
-        <RawText style={styles.sheetBody}>{t('settings.comingSoon')}</RawText>
-      </Sheet>
     </Screen>
   );
 }
@@ -147,76 +206,52 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Row({
-  icon,
-  label,
-  value,
-  pro,
-  destructive,
-  last,
-  onPress,
-}: {
-  icon: ReactNode;
-  label: string;
-  value?: string;
-  pro?: boolean;
-  destructive?: boolean;
-  last?: boolean;
-  onPress: () => void;
-}) {
+// 30×30 rounded icon tile — brand-soft (or danger-soft) background, per the prototype.
+function IconTile({ children, tone = 'brand' }: { children: ReactNode; tone?: 'brand' | 'danger' }) {
   const { theme } = useUnistyles();
-  return (
-    <Pressable style={({ pressed }) => [styles.row, !last && styles.rowBorder, pressed && { opacity: 0.6 }]} onPress={onPress} accessibilityRole="button">
-      <View style={styles.rowIcon}>{icon}</View>
-      <RawText style={[styles.rowLabel, destructive && { color: theme.color.danger }]}>{label}</RawText>
-      {pro && (
-        <View style={styles.proBadgeSmall}>
-          <RawText style={styles.proBadgeText}>PRO</RawText>
-        </View>
-      )}
-      {value != null && <RawText style={styles.rowValue}>{value}</RawText>}
-      <IconChevronRight size={15} color={theme.color.textFaint} />
-    </Pressable>
-  );
+  return <View style={[styles.iconTile, { backgroundColor: tone === 'danger' ? theme.color.dangerSoft : theme.color.brandSoft }]}>{children}</View>;
+}
+
+function Chevron() {
+  const { theme } = useUnistyles();
+  return <IconChevronRight size={15} color={theme.color.textFaint} />;
 }
 
 const styles = StyleSheet.create((theme) => {
-  const { color, palette, fonts, radius } = theme;
+  const { color, fonts, radius } = theme;
   return {
     header: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 10 },
     title: { fontFamily: fonts.sans.extra, fontSize: 22, letterSpacing: -0.3, color: color.textStrong },
     scroll: { paddingHorizontal: 16, paddingBottom: 24 },
 
-    section: { marginBottom: 22 },
-    sectionLabel: { fontFamily: fonts.sans.bold, fontSize: 12, letterSpacing: 0.5, textTransform: 'uppercase', color: color.textMuted, marginBottom: 8, marginLeft: 2 },
+    section: { marginBottom: 24 },
+    sectionLabel: { fontFamily: fonts.sans.bold, fontSize: 11, letterSpacing: 0.9, textTransform: 'uppercase', color: color.textMuted, marginBottom: 6, marginLeft: 4 },
     sectionCard: { backgroundColor: color.surfaceCard, borderWidth: theme.borderWidth.thin, borderColor: color.border, borderRadius: radius.lg, overflow: 'hidden' },
 
-    profileRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
-    avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: palette.blue[50], alignItems: 'center', justifyContent: 'center' },
+    rowPressed: { backgroundColor: color.surfaceSunken },
+    iconTile: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+
+    profileRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14, backgroundColor: color.surfaceCard },
+    avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: color.brandSoft, alignItems: 'center', justifyContent: 'center' },
     avatarText: { fontFamily: fonts.sans.bold, fontSize: 18, color: color.brand },
     profileBody: { flex: 1, minWidth: 0 },
     profileName: { fontFamily: fonts.sans.bold, fontSize: 16, color: color.textStrong },
     profileSub: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted, marginTop: 2 },
 
-    row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 13 },
-    rowBorder: { borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.divider },
-    rowIcon: { width: 20, alignItems: 'center' },
-    rowLabel: { flex: 1, fontFamily: fonts.sans.medium, fontSize: 15, color: color.textStrong },
-    rowValue: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted },
-    proBadgeSmall: { backgroundColor: palette.amber[100], borderRadius: 3, paddingHorizontal: 5, paddingVertical: 1 },
-
     planCard: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.divider },
     planTop: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
     planName: { fontFamily: fonts.sans.bold, fontSize: 15, color: color.textStrong },
+    freePlanName: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.textStrong, marginBottom: 4 },
     planSub: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted },
-    proBadge: { backgroundColor: palette.amber[100], borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1 },
-    proBadgeText: { fontFamily: fonts.sans.bold, fontSize: 9, letterSpacing: 0.3, color: palette.amber[800] },
 
-    freeBlock: { paddingHorizontal: 16, paddingVertical: 14 },
-    usageText: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted, marginTop: 4, marginBottom: 8 },
-    usageTrack: { height: 4, backgroundColor: palette.slate[100], borderRadius: 2, overflow: 'hidden', marginBottom: 14 },
+    usageText: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted, marginBottom: 8 },
+    usageTrack: { height: 4, backgroundColor: color.surfaceSunken, borderRadius: 2, overflow: 'hidden' },
     usageFill: { height: '100%', borderRadius: 2 },
-    upgradeCta: {},
+
+    upgradeBlock: { paddingHorizontal: 16, paddingVertical: 14 },
+    featureList: { gap: 5, marginBottom: 12 },
+    featureRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    featureText: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted },
     pricing: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textFaint, textAlign: 'center', marginTop: 8 },
 
     signOutWrap: { paddingBottom: 12 },
@@ -225,7 +260,6 @@ const styles = StyleSheet.create((theme) => {
 
     // sheets
     sheetBody: { fontFamily: fonts.sans.regular, fontSize: 14, lineHeight: 21, color: color.textMuted, marginBottom: 18 },
-    sheetCancel: { marginTop: 10 },
     aboutTagline: { fontFamily: fonts.serif.semibold, fontSize: 16, lineHeight: 24, color: color.textStrong, marginBottom: 8 },
     aboutMeta: { fontFamily: fonts.mono.regular, fontSize: 12, color: color.textMuted },
   };

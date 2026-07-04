@@ -474,6 +474,7 @@ function CreateNewDeckRow({ onPress }: { onPress: () => void }) {
 function PremiumGate() {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
+  const router = useRouter();
   return (
     <View style={styles.gate}>
       <View style={styles.gateLock}>
@@ -481,7 +482,7 @@ function PremiumGate() {
       </View>
       <RawText style={styles.gateTitle}>{t('wordList.premiumTitle')}</RawText>
       <RawText style={styles.gateBody}>{t('wordList.premiumBody')}</RawText>
-      <Pressable style={({ pressed }) => [styles.gateBtn, pressed && { opacity: 0.9 }]} accessibilityRole="button" onPress={() => { /* TODO: paywall (PW-01) */ }}>
+      <Pressable style={({ pressed }) => [styles.gateBtn, pressed && { opacity: 0.9 }]} accessibilityRole="button" onPress={() => router.push('/paywall')}>
         <RawText style={styles.gateBtnText}>{t('wordList.unlockPremium')}</RawText>
       </Pressable>
       <RawText style={styles.gatePricing}>{t('wordList.premiumPricing')}</RawText>
@@ -725,16 +726,11 @@ const styles = StyleSheet.create((theme) => {
     decksBody: { flex: 1 },
     stickyCreate: { paddingHorizontal: 16, borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.divider },
     decksList: { paddingBottom: 20 },
-    decksContent: { paddingTop: 12, paddingBottom: 20 },
-    decksHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 8 },
-    decksCount: { fontFamily: fonts.sans.medium, fontSize: 13, color: color.textMuted },
     gutter: {},
     gutterScroll: { maxHeight: 190 },
     gutterDivider: { height: 1.5, backgroundColor: color.borderStrong, marginTop: 2, marginBottom: 4, borderRadius: 1 },
     deckStats: { marginBottom: 14 },
     deckWordScroll: { maxHeight: 340 },
-    newDeck: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 9, paddingHorizontal: 14, borderRadius: theme.radius.md, backgroundColor: color.brand },
-    newDeckText: { fontFamily: fonts.sans.bold, fontSize: 14, color: '#fff' },
     decksEmpty: { alignItems: 'center', paddingTop: 60, paddingHorizontal: 24 },
     decksEmptyTitle: { fontFamily: fonts.serif.semibold, fontSize: 18, color: color.textStrong, marginBottom: 6 },
     decksEmptyBody: { fontFamily: fonts.sans.regular, fontSize: 14, color: color.textMuted, textAlign: 'center' },
@@ -753,7 +749,6 @@ const styles = StyleSheet.create((theme) => {
     pickerList: { maxHeight: 320 },
     pickerCta: { marginTop: 14 },
     addToDeckSub: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted, marginBottom: 12, marginTop: -6 },
-    addToDeckEmpty: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted, textAlign: 'center', paddingVertical: 20 },
     deckIconTile: { width: 38, height: 38, borderRadius: 9, backgroundColor: palette.blue[50], borderWidth: theme.borderWidth.thin, borderColor: palette.blue[200], alignItems: 'center', justifyContent: 'center' },
     alreadyAdded: { fontFamily: fonts.sans.semibold, fontSize: 11, color: color.brand },
     createNewRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, paddingHorizontal: 0 },
@@ -773,36 +768,5 @@ const styles = StyleSheet.create((theme) => {
     radioDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: theme.color.brand },
     checkbox: { width: 20, height: 20, borderRadius: 5, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
     sheetActions: { flexDirection: 'row', gap: 10, paddingTop: 16 },
-    sheetActionReset: { flex: 1 },
-    sheetActionApply: { flex: 2 },
-
-    // Word detail sheet
-    detailHead: { marginBottom: 14 },
-    detailWord: { fontFamily: fonts.serif.bold, fontSize: 24, color: color.textStrong, letterSpacing: -0.3 },
-    detailTarget: { fontFamily: fonts.sans.regular, fontSize: 16, color: color.textMuted, marginTop: 3 },
-    detailMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
-    posPill: { backgroundColor: palette.slate[100], borderRadius: 4, paddingVertical: 2, paddingHorizontal: 8 },
-    posPillText: { fontFamily: fonts.sans.semibold, fontSize: 12, color: color.textMuted },
-    memoryCard: { borderWidth: theme.borderWidth.thin, borderRadius: 10, padding: 12, marginBottom: 14 },
-    memoryTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-    memoryTier: { fontFamily: fonts.sans.bold, fontSize: 12 },
-    memoryDays: { fontFamily: fonts.sans.semibold, fontSize: 12 },
-    memoryDesc: { fontFamily: fonts.sans.regular, fontSize: 12, lineHeight: 17, opacity: 0.85 },
-    memoryHint: { fontFamily: fonts.sans.regular, fontSize: 11, lineHeight: 15, opacity: 0.7, marginTop: 8, paddingTop: 8, borderTopWidth: theme.borderWidth.thin },
-    detailSectionLabel: { fontFamily: fonts.sans.bold, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', color: color.textMuted, marginBottom: 6 },
-    detailExample: { fontFamily: fonts.sans.regular, fontSize: 14, fontStyle: 'italic', lineHeight: 21, color: color.textBody, marginBottom: 16 },
-    detailGrid: { flexDirection: 'row', gap: 12, marginBottom: 18 },
-    detailMeta: { flex: 1 },
-    detailMetaLabel: { fontFamily: fonts.sans.bold, fontSize: 10, letterSpacing: 0.5, textTransform: 'uppercase', color: color.textMuted, marginBottom: 3 },
-    detailMetaValue: { fontFamily: fonts.sans.medium, fontSize: 13, color: color.textBody },
-    detailDelete: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(209, 73, 91, 0.12)', borderRadius: 10, paddingVertical: 12 },
-    detailDeleteText: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.danger },
-
-    // Delete confirm sheet
-    confirm: { alignItems: 'center', paddingTop: 4 },
-    confirmIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(209, 73, 91, 0.12)', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
-    confirmTitle: { fontFamily: fonts.sans.bold, fontSize: 17, color: color.textStrong, textAlign: 'center', marginBottom: 8 },
-    confirmBody: { fontFamily: fonts.sans.regular, fontSize: 14, lineHeight: 21, color: color.textMuted, textAlign: 'center', marginBottom: 22 },
-    confirmCancel: { marginTop: 10, alignSelf: 'stretch' },
   };
 });
