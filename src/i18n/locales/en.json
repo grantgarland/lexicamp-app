@@ -220,7 +220,10 @@
     "masteryWordsLabel": "Words mastered",
     "keepClimbing": "Keep climbing →",
     "promptRecognition": "What's the translation?",
-    "promptRecall": "Recall the {{lang}} word."
+    "promptRecall": "Recall the {{lang}} word.",
+    "promoHeadline": "New camp reached!",
+    "promoSubtitle": "These words climbed to a higher camp this session.",
+    "commitError": "Your progress couldn't be saved — check your connection and study these words again."
   },
   "wordRow": {
     "addToDeckA11y": "Add to deck",

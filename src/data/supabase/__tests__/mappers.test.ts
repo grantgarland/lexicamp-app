@@ -9,7 +9,7 @@ import {
   mapProfile,
   mapQuizItem,
   mapWordListItem,
-  toReviewLogInsert,
+  toCommitRow,
   type CardRow,
   type FsrsRow,
   type TranslationJoin,
@@ -37,6 +37,7 @@ const FSRS: FsrsRow = {
   state: 2,
   reps: 3,
   lapses: 0,
+  learning_steps: 0,
 };
 
 const TR: TranslationJoin = {
@@ -150,15 +151,38 @@ describe('mapQuizItem', () => {
   });
 });
 
-describe('toReviewLogInsert', () => {
-  it('builds the review_logs insert row', () => {
-    expect(toReviewLogInsert('c1', 'u1', 3, 2)).toEqual({
+describe('toCommitRow', () => {
+  it('flattens a ReviewComputation into the commit_quiz_session RPC row', () => {
+    const now = new Date('2026-07-06T12:00:00Z');
+    const row = toCommitRow({
+      next: {
+        cardId: 'c1',
+        userId: 'u1',
+        stability: 12.5,
+        difficulty: 4.8,
+        dueAt: new Date('2026-07-19T12:00:00Z'),
+        lastReviewAt: now,
+        state: 2,
+        reps: 4,
+        lapses: 0,
+        learningSteps: 0,
+      },
+      log: { rating: 3, elapsedDays: 10, scheduledDays: 13, stateBefore: 2 },
+    });
+    expect(row).toEqual({
       card_id: 'c1',
-      user_id: 'u1',
+      stability: 12.5,
+      difficulty: 4.8,
+      due_at: '2026-07-19T12:00:00.000Z',
+      last_review_at: '2026-07-06T12:00:00.000Z',
+      state: 2,
+      reps: 4,
+      lapses: 0,
+      learning_steps: 0,
       rating: 3,
+      elapsed_days: 10,
+      scheduled_days: 13,
       state_before: 2,
-      elapsed_days: 0,
-      scheduled_days: 0,
     });
   });
 });

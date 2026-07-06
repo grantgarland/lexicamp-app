@@ -220,7 +220,10 @@
     "masteryWordsLabel": "Palabras dominadas",
     "keepClimbing": "Sigue subiendo →",
     "promptRecognition": "¿Cuál es la traducción?",
-    "promptRecall": "Recuerda la palabra en {{lang}}."
+    "promptRecall": "Recuerda la palabra en {{lang}}.",
+    "promoHeadline": "¡Nuevo campamento alcanzado!",
+    "promoSubtitle": "Estas palabras subieron a un campamento superior en esta sesión.",
+    "commitError": "No se pudo guardar tu progreso — revisa tu conexión y vuelve a estudiar estas palabras."
   },
   "wordRow": {
     "addToDeckA11y": "Añadir al mazo",

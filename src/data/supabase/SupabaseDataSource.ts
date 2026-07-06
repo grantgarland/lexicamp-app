@@ -8,6 +8,7 @@
 //   study_events derivations land.
 // - commitQuizSession: appends review_logs + quiz_completed event; FSRS state
 //   recompute is 2.2 (ts-fsrs).
+import { applyReview } from '@/domain/fsrs';
 import { uiRatingToFsrs, type BufferedRating, type QuizCardItem } from '@/domain/quiz';
 import type { LookupOutcome, UsageExample } from '@/domain/translation';
 import type { Card, CardFsrsState, Deck, Entitlement, Profile, SearchDirection } from '@/domain/types';
@@ -23,7 +24,7 @@ import {
   mapProfile,
   mapQuizItem,
   mapWordListItem,
-  toReviewLogInsert,
+  toCommitRow,
   type CardRow,
   type DeckRowDb,
   type FsrsRow,
@@ -49,7 +50,11 @@ function bail(error: { message: string } | null): void {
 const CARD_JOIN =
   'id, deck_id, user_id, translation_id, user_note, custom_front, custom_back, suspended, created_at, ' +
   'translations_cache ( id, display_source, translation, pos_tag, prefix_word, examples ), ' +
-  'card_fsrs_state ( card_id, user_id, stability, difficulty, due_at, last_review_at, state, reps, lapses )';
+  'card_fsrs_state ( card_id, user_id, stability, difficulty, due_at, last_review_at, state, reps, lapses, learning_steps )';
+
+/** Due-queue variant: `!inner` makes the embedded filter actually EXCLUDE parent
+ *  rows (a plain embed filter only nulls the embed — the cards would all return). */
+const DUE_JOIN = CARD_JOIN.replace('card_fsrs_state (', 'card_fsrs_state!inner (');
 
 interface JoinedCardRow extends CardRow {
   translations_cache: TranslationJoin;
@@ -166,10 +171,10 @@ export const supabaseDataSource: DataSource = {
     const profile = await this.getProfile();
     const { data, error } = await supabase
       .from('cards')
-      .select(CARD_JOIN)
+      .select(DUE_JOIN)
       .eq('suspended', false)
       .lte('card_fsrs_state.due_at', new Date().toISOString())
-      .not('card_fsrs_state', 'is', null)
+      .order('due_at', { referencedTable: 'card_fsrs_state', ascending: true })
       .limit(QUIZ_SESSION_CAP);
     bail(error);
     const rows = (data ?? []) as unknown as JoinedCardRow[];
@@ -180,25 +185,24 @@ export const supabaseDataSource: DataSource = {
 
   async commitQuizSession({ ratings }: { ratings: BufferedRating[] }): Promise<void> {
     if (ratings.length === 0) return;
-    const userId = await uid();
-    // Current FSRS states for state_before (2.2 replaces this with a real recompute).
+    // FSRS recompute is CLIENT-SIDE (02 locked decision; math in domain/fsrs).
+    // Re-read the current states here (not trusted from the screen) so a stale
+    // session can't clobber a fresher state from another device.
     const ids = ratings.map((r) => r.cardId);
-    const { data: states, error: stErr } = await supabase
-      .from('card_fsrs_state')
-      .select('card_id, state')
-      .in('card_id', ids);
+    const { data: rows, error: stErr } = await supabase.from('card_fsrs_state').select('*').in('card_id', ids);
     bail(stErr);
-    const stateOf = new Map((states ?? []).map((s: { card_id: string; state: number }) => [s.card_id, s.state]));
+    const stateOf = new Map(((rows ?? []) as FsrsRow[]).map((r) => [r.card_id, mapFsrsState(r)]));
 
-    const { error: logErr } = await supabase.from('review_logs').insert(
-      ratings.map((r) =>
-        toReviewLogInsert(r.cardId, userId, uiRatingToFsrs(r.rating), (stateOf.get(r.cardId) ?? 0) as 0 | 1 | 2 | 3),
-      ),
-    );
-    bail(logErr);
-    const { error: evErr } = await supabase
-      .from('study_events')
-      .insert({ user_id: userId, event: 'quiz_completed', props: { cards: ratings.length } });
-    bail(evErr);
+    const now = new Date();
+    const commits = ratings.flatMap((r) => {
+      const current = stateOf.get(r.cardId);
+      if (current == null) return []; // card deleted mid-session — skip, don't fail the batch
+      return [toCommitRow(applyReview(current, uiRatingToFsrs(r.rating), now))];
+    });
+    if (commits.length === 0) return;
+
+    // Atomic persist: states + logs + event in one transaction (RPC).
+    const { error } = await supabase.rpc('commit_quiz_session', { p_reviews: commits });
+    bail(error);
   },
 };

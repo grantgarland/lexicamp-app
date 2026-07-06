@@ -3,8 +3,9 @@
 // thin I/O shell around these.
 import i18n from '@/i18n';
 import { languageName } from '@/domain/derive';
+import type { ReviewComputation } from '@/domain/fsrs';
 import type { QuizCardItem, QuizMode } from '@/domain/quiz';
-import type { Card, CardFsrsState, Deck, Entitlement, FsrsStateValue, Profile, Rating } from '@/domain/types';
+import type { Card, CardFsrsState, Deck, Entitlement, FsrsStateValue, Profile } from '@/domain/types';
 import { getTierByStability } from '@/theme/tiers';
 
 import type { WordListItem } from '../DataSource';
@@ -56,6 +57,7 @@ export interface FsrsRow {
   state: number;
   reps: number;
   lapses: number;
+  learning_steps: number;
 }
 
 export interface TranslationJoin {
@@ -127,6 +129,7 @@ export const mapFsrsState = (r: FsrsRow): CardFsrsState => ({
   state: (r.state >= 0 && r.state <= 3 ? r.state : 0) as FsrsStateValue,
   reps: r.reps,
   lapses: r.lapses,
+  learningSteps: r.learning_steps,
 });
 
 /** cards ⋈ translations_cache ⋈ card_fsrs_state → Word List row. */
@@ -155,6 +158,7 @@ export function mapQuizItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow, l
     id: card.id,
     tierId: tier.id,
     mode,
+    fsrs: mapFsrsState(fsrs),
     content: {
       frontWord: card.custom_front ?? tr.display_source,
       frontPrompt:
@@ -171,14 +175,21 @@ export function mapQuizItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow, l
   };
 }
 
-/** Buffered UI rating → review_logs insert row (FSRS recompute lands with 2.2). */
-export function toReviewLogInsert(cardId: string, userId: string, rating: Rating, stateBefore: FsrsStateValue) {
+/** ReviewComputation (domain/fsrs applyReview) → commit_quiz_session RPC row. */
+export function toCommitRow(c: ReviewComputation) {
   return {
-    card_id: cardId,
-    user_id: userId,
-    rating,
-    state_before: stateBefore,
-    elapsed_days: 0,
-    scheduled_days: 0,
+    card_id: c.next.cardId,
+    stability: c.next.stability,
+    difficulty: c.next.difficulty,
+    due_at: c.next.dueAt.toISOString(),
+    last_review_at: c.next.lastReviewAt?.toISOString() ?? null,
+    state: c.next.state,
+    reps: c.next.reps,
+    lapses: c.next.lapses,
+    learning_steps: c.next.learningSteps,
+    rating: c.log.rating,
+    elapsed_days: c.log.elapsedDays,
+    scheduled_days: c.log.scheduledDays,
+    state_before: c.log.stateBefore,
   };
 }

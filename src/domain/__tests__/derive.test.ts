@@ -30,6 +30,7 @@ const state = (over: Partial<CardFsrsState> = {}): CardFsrsState => ({
   state: 2,
   reps: 3,
   lapses: 0,
+  learningSteps: 0,
   ...over,
 });
 

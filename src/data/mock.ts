@@ -79,6 +79,7 @@ function buildDeckCards(userState: DevUserState): DeckCards {
         state: 2, // review
         reps: 3,
         lapses: 0,
+        learningSteps: 0,
       });
     }
   });
@@ -94,7 +95,8 @@ function entitlementFor(plan: DevPlan): Entitlement {
 
 // Mock study queue — a session of due cards with display content + tier + mode.
 // (mode: lower tiers = recognition / tap-to-reveal; higher = recall / char input.)
-const QUIZ_SESSION: QuizCardItem[] = [
+// `fsrs` scheduling state is synthesized per tier at getDueCards() time.
+const QUIZ_SESSION: Omit<QuizCardItem, 'fsrs'>[] = [
   { id: 'q_melancolico', tierId: 'bc', mode: 'recognition', content: { frontWord: 'melancólico', frontSub: '/me.laŋˈko.li.ko/', frontPrompt: "What's the translation?", backWord: 'melancholic', backPhonetic: '/ˌmɛl.ənˈkɒl.ɪk/', backPos: 'adjective', backExample: 'A melancholic melody filled the room.' } },
   { id: 'q_ephemeral', tierId: 'abc', mode: 'recognition', content: { frontWord: 'ephemeral', frontSub: '/ɪˈfɛm.ər.əl/', frontPrompt: 'What is the translation?', backWord: 'efímero', backPhonetic: '/eˈfi.me.ɾo/', backPos: 'adjective', backExample: 'La belleza de las flores es efímera.' } },
   { id: 'q_nostalgia', tierId: 'bc', mode: 'recognition', content: { frontWord: 'nostalgia', frontSub: '/nos.ˈtal.xja/', frontPrompt: "What's the translation?", backWord: 'nostalgia', backPhonetic: '/nɒˈstæl.dʒə/', backPos: 'noun', backExample: 'A wave of nostalgia washed over her.' } },
@@ -326,7 +328,25 @@ export const mockDataSource: DataSource = {
     return buildWords(scenario().userState);
   },
   async getDueCards(): Promise<QuizCardItem[]> {
-    return QUIZ_SESSION;
+    // Synthesize a due, in-band scheduling state per item so the results screen
+    // can compute real FSRS tier transitions (domain/fsrs.tierTransition).
+    const tierIdxOf: Record<string, number> = { bc: 0, abc: 1, hc: 2, sr: 3, summit: 4 };
+    const now = Date.now();
+    return QUIZ_SESSION.map((q) => ({
+      ...q,
+      fsrs: {
+        cardId: q.id,
+        userId: USER_ID,
+        stability: TIER_STABILITY[tierIdxOf[q.tierId] ?? 0],
+        difficulty: 5,
+        dueAt: new Date(now - 2 * HOUR),
+        lastReviewAt: new Date(now - Math.round(TIER_STABILITY[tierIdxOf[q.tierId] ?? 0] * DAY)),
+        state: 2,
+        reps: 3,
+        lapses: 0,
+        learningSteps: 0,
+      },
+    }));
   },
   async commitQuizSession(_payload: { ratings: BufferedRating[] }): Promise<void> {
     // TODO(P4 data): batch-write per 03 (update card_fsrs_state via ts-fsrs, append

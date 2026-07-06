@@ -21,4 +21,14 @@ module.exports = defineConfig([
     files: ['scripts/**/*.js'],
     languageOptions: { sourceType: 'commonjs', globals: globals.node },
   },
+  {
+    // Tests: jest.mock() factories are hoisted above imports, so mocked modules must be
+    // pulled in with require() inside the factory — ESM import can't be referenced there.
+    files: ['**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/*.spec.tsx'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+      // Imports intentionally sit below jest.mock() blocks (which jest hoists anyway).
+      'import/first': 'off',
+    },
+  },
 ]);

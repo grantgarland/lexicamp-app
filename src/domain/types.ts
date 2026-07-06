@@ -76,6 +76,9 @@ export interface CardFsrsState {
   state: FsrsStateValue;
   reps: number;
   lapses: number;
+  /** ts-fsrs v5 learning-step position (0 outside learning/relearning). Needed
+   *  to resume in-learning cards faithfully across sessions. */
+  learningSteps: number;
 }
 
 /** review_logs — rating: 1 again · 2 hard · 3 good · 4 easy */

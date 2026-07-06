@@ -4,7 +4,7 @@
 // session completion (FSRS recompute happens client-side at commit — `ts-fsrs` later).
 import type { TierId } from '@/theme/tiers';
 
-import type { Rating } from './types';
+import type { CardFsrsState, Rating } from './types';
 
 export type QuizMode = 'recognition' | 'recall';
 /** The 3-button self-grade shown in the UI. */
@@ -27,6 +27,9 @@ export interface QuizCardItem {
   tierId: TierId;
   mode: QuizMode;
   content: QuizCardContent;
+  /** Current scheduling state — lets the results screen show the REAL tier
+   *  transition via domain/fsrs.tierTransition (2.2). */
+  fsrs: CardFsrsState;
 }
 
 /** One buffered rating during a session. */

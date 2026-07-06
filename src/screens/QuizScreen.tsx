@@ -11,11 +11,12 @@ import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { sessionPromotions, tierTransition, type PromotedWord } from '@/domain/fsrs';
 import type { BufferedRating, QuizCardItem, UiRating } from '@/domain/quiz';
-import { sessionStats } from '@/domain/quiz';
+import { sessionStats, uiRatingToFsrs } from '@/domain/quiz';
 import { useTranslation } from '@/i18n';
 import { useCommitQuizSession, useDueCards, useHomeData } from '@/query/hooks';
-import { TIERS, type TierId } from '@/theme/tiers';
+import { type TierId } from '@/theme/tiers';
 import {
   Button,
   Confetti,
@@ -44,32 +45,19 @@ type Phase = 'quiz' | 'end' | 'stats' | 'promo';
 // Summit celebration confetti (Q-10) — warm golds + a few accent flecks (milestone spec).
 const SUMMIT_CONFETTI = ['#e87722', '#f7a855', '#f5b91e', '#d97706', '#2f5e7e', '#459a6b', '#f472b6'];
 
-// Per-word review outcome for the results tooltip. A display heuristic until the FSRS
-// recompute (ts-fsrs) lands: only a clean recall promotes (and only below Summit); a
-// reviewed word does NOT necessarily change tier.
-type OutcomeKind = 'promoted' | 'summit' | 'held' | 'limited';
-function reviewOutcome(tierId: TierId, rating: UiRating): { kind: OutcomeKind; toId?: TierId } {
-  const i = TIERS.findIndex((tt) => tt.id === tierId);
-  if (rating === 'got_it') {
-    if (i >= 0 && i < TIERS.length - 1) return { kind: 'promoted', toId: TIERS[i + 1].id };
-    return { kind: 'summit' };
-  }
-  if (rating === 'almost') return { kind: 'held' };
-  return { kind: 'limited' };
-}
-function outcomeTip(t: TFunction, tierId: TierId, rating: UiRating): { title: string; content: string } {
-  const o = reviewOutcome(tierId, rating);
+// Per-word review outcome for the results tooltip — the REAL FSRS tier
+// transition (2.2; replaces the session-29 heuristic). Tiers are stability
+// bands, so promoted/held falls out of the actual recompute the commit persists.
+function outcomeTip(t: TFunction, card: QuizCardItem, rating: UiRating): { title: string; content: string } {
   const name = (id: TierId) => t(`tier.${id}.name`);
-  switch (o.kind) {
-    case 'promoted':
-      return { title: t('quiz.resultPromotedTitle'), content: t('quiz.resultPromoted', { from: name(tierId), to: name(o.toId as TierId) }) };
-    case 'summit':
-      return { title: t('quiz.resultSummitTitle'), content: t('quiz.resultSummit') };
-    case 'held':
-      return { title: t('quiz.resultReviewedTitle'), content: t('quiz.resultHeld', { tier: name(tierId) }) };
-    default:
-      return { title: t('quiz.resultReviewedTitle'), content: t('quiz.resultLimited', { tier: name(tierId) }) };
+  const { from, to, promoted } = tierTransition(card.fsrs, uiRatingToFsrs(rating));
+  if (promoted) {
+    if (to === 'summit') return { title: t('quiz.resultSummitTitle'), content: t('quiz.resultSummit') };
+    return { title: t('quiz.resultPromotedTitle'), content: t('quiz.resultPromoted', { from: name(from), to: name(to) }) };
   }
+  if (rating === 'again')
+    return { title: t('quiz.resultReviewedTitle'), content: t('quiz.resultLimited', { tier: name(to) }) };
+  return { title: t('quiz.resultReviewedTitle'), content: t('quiz.resultHeld', { tier: name(to) }) };
 }
 
 export function QuizScreen() {
@@ -87,8 +75,16 @@ export function QuizScreen() {
   const [ratings, setRatings] = useState<BufferedRating[]>([]);
   const [showExit, setShowExit] = useState(false);
 
-  const total = cards.length;
-  const card = cards[idx];
+  // SNAPSHOT the session's cards once the queue arrives (render-adjust pattern).
+  // Committing invalidates the dueCards query and the refetch comes back EMPTY
+  // (nothing is due anymore — FSRS worked), so the end/stats/promo phases must
+  // render from this frozen list, never the live query.
+  const [sessionCards, setSessionCards] = useState<QuizCardItem[] | null>(null);
+  if (sessionCards == null && cards.length > 0) setSessionCards(cards);
+  const sc = sessionCards ?? cards;
+
+  const total = sc.length;
+  const card = sc[idx];
   const stats = sessionStats(ratings);
 
   const closeAttempt = () => {
@@ -110,8 +106,12 @@ export function QuizScreen() {
     }
   };
 
+  // REAL promotions only (2.2): the milestone screen shows iff ≥1 word actually
+  // climbed a tier band this session — not merely "was rated got_it".
+  const promotions = phase === 'end' || phase === 'stats' || phase === 'promo' ? sessionPromotions(sc, ratings) : [];
+
   const done = () => {
-    if (stats.promoted > 0) setPhase('promo');
+    if (promotions.length > 0) setPhase('promo');
     else router.back();
   };
   const studyAgain = () => {
@@ -119,6 +119,7 @@ export function QuizScreen() {
     setIdx(0);
     setRevealed(false);
     setRatings([]);
+    setSessionCards(null); // re-snapshot whatever is due now
   };
 
   if (phase === 'end') {
@@ -128,20 +129,17 @@ export function QuizScreen() {
         accuracy={stats.accuracy}
         reviewed={ratings.length}
         streak={streakDays}
+        commitError={commit.isError}
         onSeeResults={() => setPhase('stats')}
         onStudyAgain={studyAgain}
       />
     );
   }
   if (phase === 'stats') {
-    return <StatsScreen cards={cards} ratings={ratings} onStudyAgain={studyAgain} onDone={done} />;
+    return <StatsScreen cards={sc} ratings={ratings} onStudyAgain={studyAgain} onDone={done} />;
   }
   if (phase === 'promo') {
-    const masteredWords = ratings
-      .filter((r) => r.rating === 'got_it')
-      .map((r) => cards.find((c) => c.id === r.cardId)?.content.backWord ?? '')
-      .filter(Boolean);
-    return <TierPromoScreen words={masteredWords} onContinue={() => router.back()} />;
+    return <TierPromoScreen promotions={promotions} onContinue={() => router.back()} />;
   }
 
   // Quiz phase but no card to show: still loading the due queue, or nothing is due
@@ -257,6 +255,7 @@ function EndScreen({
   streak,
   onSeeResults,
   onStudyAgain,
+  commitError = false,
 }: {
   good: boolean;
   accuracy: number;
@@ -264,6 +263,8 @@ function EndScreen({
   streak: number;
   onSeeResults: () => void;
   onStudyAgain: () => void;
+  /** The batch write failed — progress for this session wasn't saved. */
+  commitError?: boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -288,6 +289,11 @@ function EndScreen({
           <View style={styles.endStatDivider} />
           <EndStat label={t('quiz.streak')} value={t('quiz.daysValue', { count: streak })} />
         </Animated.View>
+        {commitError && (
+          <Animated.View entering={FadeInDown.duration(300).delay(350)}>
+            <RawText style={styles.commitError}>{t('quiz.commitError')}</RawText>
+          </Animated.View>
+        )}
         <Animated.View entering={FadeInDown.duration(400).delay(400)} style={styles.endCtas}>
           <Button title={t('quiz.seeResults')} variant="primary" onPress={onSeeResults} />
           {!good && (
@@ -337,7 +343,7 @@ function StatsScreen({ cards, ratings, onStudyAgain, onDone }: { cards: QuizCard
       <ScrollView style={styles.statsList} contentContainerStyle={styles.statsListContent}>
         {cards.map((c, i) => {
           const rating = ratings[i]?.rating ?? 'again';
-          const tip = outcomeTip(t, c.tierId, rating);
+          const tip = outcomeTip(t, c, rating);
           return (
             <Tooltip
               key={c.id}
@@ -399,9 +405,15 @@ function RatingPill({ rating }: { rating: UiRating }) {
 }
 
 // ── Mastery / Summit celebration (Q-10) ──────────────────────────────────────
-function TierPromoScreen({ words, onContinue }: { words: string[]; onContinue: () => void }) {
+function TierPromoScreen({ promotions, onContinue }: { promotions: PromotedWord[]; onContinue: () => void }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  // Highest tier reached this session drives the badge + headline: full Summit
+  // mastery celebration only when a word actually crossed into summit;
+  // otherwise the generic tier-up milestone.
+  const order: TierId[] = ['bc', 'abc', 'hc', 'sr', 'summit'];
+  const topTier = promotions.reduce<TierId>((acc, p) => (order.indexOf(p.to) > order.indexOf(acc) ? p.to : acc), 'abc');
+  const summit = topTier === 'summit';
   return (
     <View style={styles.promoRoot}>
       <Confetti colors={SUMMIT_CONFETTI} />
@@ -418,23 +430,26 @@ function TierPromoScreen({ words, onContinue }: { words: string[]; onContinue: (
           ))}
         </Animated.View>
 
-        {/* Summit badge — pops in with a gold glow */}
+        {/* Badge of the highest tier reached — pops in with a gold glow */}
         <Animated.View entering={ZoomIn.duration(560).delay(150)} style={styles.promoBadgeWrap}>
-          <TierBadge tier="summit" variant="badge" px={116} />
+          <TierBadge tier={topTier} variant="badge" px={116} />
         </Animated.View>
 
         <Animated.View entering={FadeInDown.duration(400).delay(320)} style={styles.promoHead}>
-          <RawText style={styles.promoTitle}>{t('quiz.masteryHeadline')}</RawText>
-          <RawText style={styles.promoSub}>{t('quiz.masterySub')}</RawText>
+          <RawText style={styles.promoTitle}>{summit ? t('quiz.masteryHeadline') : t('quiz.promoHeadline')}</RawText>
+          <RawText style={styles.promoSub}>{summit ? t('quiz.masterySub') : t('quiz.promoSubtitle')}</RawText>
         </Animated.View>
 
-        {words.length > 0 && (
+        {promotions.length > 0 && (
           <Animated.View entering={FadeInDown.duration(400).delay(440)} style={styles.promoList}>
             <RawText style={styles.promoWordsLabel}>{t('quiz.masteryWordsLabel')}</RawText>
-            {words.map((w) => (
-              <View key={w} style={styles.promoWordRow}>
+            {promotions.map((p) => (
+              <View key={p.cardId} style={styles.promoWordRow}>
                 <RawText style={styles.promoStar}>★</RawText>
-                <RawText style={styles.promoWord}>{w}</RawText>
+                <RawText style={styles.promoWord}>{p.word}</RawText>
+                <RawText style={styles.promoWordTiers}>
+                  {t(`tier.${p.from}.name`)} → {t(`tier.${p.to}.name`)}
+                </RawText>
               </View>
             ))}
           </Animated.View>
@@ -516,6 +531,8 @@ const styles = StyleSheet.create((theme) => {
     promoWordRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, marginTop: 5 },
     promoStar: { fontSize: 12, color: '#f7a855' },
     promoWord: { fontFamily: fonts.serif.semibold, fontSize: 15, color: '#fff' },
+    promoWordTiers: { fontFamily: fonts.mono.regular, fontSize: 11, color: 'rgba(255,255,255,0.75)', marginLeft: 'auto' },
+    commitError: { fontFamily: fonts.sans.medium, fontSize: 13, color: color.danger, textAlign: 'center', marginTop: 14, paddingHorizontal: 24 },
     promoPika: { width: 148, height: 148, marginBottom: 20 },
     promoCtaWrap: { alignSelf: 'stretch', width: '100%' },
     promoBtn: { alignSelf: 'stretch', backgroundColor: color.accent, borderRadius: 14, paddingVertical: 15, alignItems: 'center', boxShadow: '0 6px 20px rgba(232, 119, 34, 0.35)' },
