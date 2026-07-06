@@ -1,13 +1,18 @@
 // AuthScreen (O-10 / O-11) — account creation + sign-in, assembled against the auth
 // beats in onboarding/Onboarding.html. One screen with a sign-up ↔ sign-in toggle:
-// social continue buttons, email/password, and the mode switch. Real auth lands with
-// Supabase later; submitting currently routes into the app tabs.
+// social continue buttons, email/password, and the mode switch. Email auth is REAL
+// when the Supabase source is active (USE_SUPABASE); mock mode keeps the old
+// route-straight-in behavior so dev flows need no network. Social buttons stay
+// decorative until native OAuth config lands (see src/auth/session.ts).
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { signInWithEmail, signUpWithEmail } from '@/auth/session';
+import { dataSource, USE_SUPABASE } from '@/data';
 import { useTranslation } from '@/i18n';
+import { useOnboardingStore } from '@/store/onboardingStore';
 import { Button, IconStar, Input, RawText, Screen } from '@/ui';
 
 type Mode = 'signup' | 'signin';
@@ -19,9 +24,37 @@ export function AuthScreen() {
   const [mode, setMode] = useState<Mode>('signup');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const isSignup = mode === 'signup';
   const enter = () => router.replace('/');
+
+  const submit = async () => {
+    if (!USE_SUPABASE) return enter(); // mock mode: no network
+    setBusy(true);
+    setError(null);
+    try {
+      if (isSignup) await signUpWithEmail(email.trim(), password);
+      else await signInWithEmail(email.trim(), password);
+      // Materialize the onboarding buffer (03 flow). The RPC is idempotent and
+      // never overwrites, so calling after sign-IN is safe too — it only fills
+      // the gap for accounts that somehow lack a profile.
+      const ob = useOnboardingStore.getState();
+      await dataSource.completeOnboarding({
+        nativeLang: ob.nativeLang,
+        learningLang: ob.learningLang ?? 'es', // O-05 default if the buffer is cold (direct sign-in path)
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC',
+        notificationsEnabled: ob.notificationsEnabled,
+      });
+      ob.reset();
+      enter();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('auth.genericError'));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <Screen edges={['top', 'bottom']}>
@@ -51,8 +84,14 @@ export function AuthScreen() {
           </Pressable>
         )}
 
+        {error != null && <RawText style={styles.error}>{error}</RawText>}
+
         <View style={styles.cta}>
-          <Button title={t(isSignup ? 'auth.createAccount' : 'auth.signIn')} variant="primary" onPress={enter} />
+          <Button
+            title={busy ? t('auth.working') : t(isSignup ? 'auth.createAccount' : 'auth.signIn')}
+            variant="primary"
+            onPress={busy ? undefined : submit}
+          />
         </View>
 
         <View style={styles.switchRow}>
@@ -85,6 +124,7 @@ const styles = StyleSheet.create((theme) => {
     or: { fontFamily: fonts.sans.medium, fontSize: 12, color: color.textMuted },
 
     gap: { height: 14 },
+    error: { fontFamily: fonts.sans.medium, fontSize: 13, color: color.danger, textAlign: 'center', marginTop: 14 },
     forgot: { alignSelf: 'flex-end', marginTop: 10 },
     forgotText: { fontFamily: fonts.sans.semibold, fontSize: 13, color: color.brand },
     cta: { marginTop: 20 },

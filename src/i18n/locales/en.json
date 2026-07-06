@@ -143,7 +143,8 @@
     "translating": "Translating “{{typed}}”…",
     "noResultsTitle": "We couldn't find that one.",
     "noResultsBody": "Try checking the spelling, or this language pair may have limited coverage right now.",
-    "noResultsNetwork": "If this word should have a result, you may be offline or on a slow connection."
+    "noResultsNetwork": "If this word should have a result, you may be offline or on a slow connection.",
+    "alsoTranslates": "also translates"
   },
   "translationCard": {
     "currentWord": "Current word",
@@ -217,7 +218,9 @@
     "pikaCelebrateA11y": "Pika celebrating",
     "masteryHeadline": "You reached the Summit!",
     "masteryWordsLabel": "Words mastered",
-    "keepClimbing": "Keep climbing →"
+    "keepClimbing": "Keep climbing →",
+    "promptRecognition": "What's the translation?",
+    "promptRecall": "Recall the {{lang}} word."
   },
   "wordRow": {
     "addToDeckA11y": "Add to deck",
@@ -579,6 +582,30 @@
     "forgot": "Forgot password?",
     "haveAccount": "Already have an account?",
     "noAccount": "New to Lexicamp?",
-    "legal": "By continuing you agree to our Terms & Privacy Policy."
+    "legal": "By continuing you agree to our Terms & Privacy Policy.",
+    "working": "One moment…",
+    "genericError": "Something went wrong. Please try again."
+  },
+  "capture": {
+    "reason": {
+      "empty": "Type a word or short phrase to look up.",
+      "too_long": "That's a bit long for a card. Try the core word or expression.",
+      "too_many_words": "Lexicamp cards work best with words and short phrases — try trimming to the key expression.",
+      "sentence_like": "That looks like a sentence. Cards stick better as single words or short phrases.",
+      "not_a_word": "That doesn't look like something to study — try a word or short phrase."
+    },
+    "rejectedTitle": "Hmm — that's not quite a card"
+  },
+  "pos": {
+    "ADJ": "adjective",
+    "ADV": "adverb",
+    "CONJ": "conjunction",
+    "DET": "determiner",
+    "MODAL": "modal verb",
+    "NOUN": "noun",
+    "PREP": "preposition",
+    "PRON": "pronoun",
+    "VERB": "verb",
+    "OTHER": "expression"
   }
 }

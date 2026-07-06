@@ -1,0 +1,164 @@
+// Row→domain mapper tests — fixture rows shaped exactly like the PostgREST
+// projections the SupabaseDataSource requests. These are the seams where
+// snake_case/ISO-string data becomes domain objects; a silent mis-map here
+// corrupts every screen, so each field is asserted.
+import {
+  mapCard,
+  mapEntitlement,
+  mapFsrsState,
+  mapProfile,
+  mapQuizItem,
+  mapWordListItem,
+  toReviewLogInsert,
+  type CardRow,
+  type FsrsRow,
+  type TranslationJoin,
+} from '../mappers';
+
+const CARD: CardRow = {
+  id: 'c1',
+  deck_id: 'd1',
+  user_id: 'u1',
+  translation_id: 't1',
+  user_note: null,
+  custom_front: null,
+  custom_back: null,
+  suspended: false,
+  created_at: '2026-07-01T12:00:00Z',
+};
+
+const FSRS: FsrsRow = {
+  card_id: 'c1',
+  user_id: 'u1',
+  stability: 5,
+  difficulty: 5,
+  due_at: '2026-07-06T12:00:00Z',
+  last_review_at: null,
+  state: 2,
+  reps: 3,
+  lapses: 0,
+};
+
+const TR: TranslationJoin = {
+  id: 't1',
+  display_source: 'mosca',
+  translation: 'fly',
+  pos_tag: 'NOUN',
+  prefix_word: 'la',
+  examples: [
+    {
+      sourcePrefix: 'Una ',
+      sourceTerm: 'mosca',
+      sourceSuffix: ' en la sopa.',
+      targetPrefix: 'A ',
+      targetTerm: 'fly',
+      targetSuffix: ' in the soup.',
+    },
+  ],
+};
+
+describe('mapProfile / mapEntitlement', () => {
+  it('maps snake_case profile rows', () => {
+    const p = mapProfile({
+      id: 'u1',
+      display_name: 'Casey',
+      native_lang: 'en',
+      learning_lang: 'es',
+      timezone: 'America/New_York',
+      onboarding_complete: true,
+    });
+    expect(p).toEqual({
+      id: 'u1',
+      displayName: 'Casey',
+      nativeLang: 'en',
+      learningLang: 'es',
+      timezone: 'America/New_York',
+      onboardingComplete: true,
+    });
+  });
+
+  it('absent subscription row → free entitlement', () => {
+    expect(mapEntitlement(null)).toEqual({ status: 'free', plan: null, platform: null, currentPeriodEnd: null });
+  });
+
+  it('active subscription row maps with a Date period end', () => {
+    const e = mapEntitlement({ status: 'active', plan: 'annual', platform: 'ios', current_period_end: '2026-08-01T00:00:00Z' });
+    expect(e.status).toBe('active');
+    expect(e.currentPeriodEnd).toBeInstanceOf(Date);
+  });
+});
+
+describe('mapCard / mapFsrsState', () => {
+  it('converts timestamps to Dates and keeps ids', () => {
+    const c = mapCard(CARD);
+    expect(c.createdAt).toBeInstanceOf(Date);
+    expect(c.translationId).toBe('t1');
+    const s = mapFsrsState(FSRS);
+    expect(s.dueAt.toISOString()).toBe('2026-07-06T12:00:00.000Z');
+    expect(s.lastReviewAt).toBeNull();
+    expect(s.state).toBe(2);
+  });
+
+  it('clamps out-of-range FSRS state to 0 (defensive)', () => {
+    expect(mapFsrsState({ ...FSRS, state: 9 }).state).toBe(0);
+  });
+});
+
+describe('mapWordListItem', () => {
+  it('joins card + translation + fsrs into a Word List row', () => {
+    const w = mapWordListItem(CARD, TR, FSRS);
+    expect(w).toMatchObject({ id: 'c1', translationId: 't1', native: 'mosca', target: 'fly', stability: 5, reps: 3 });
+    expect(w.example).toBe('Una mosca en la sopa.');
+    expect(w.exampleTranslation).toBe('A fly in the soup.');
+    expect(w.pos.length).toBeGreaterThan(0); // i18n-resolved POS label
+  });
+
+  it('no cached example → both example sides are empty strings', () => {
+    const w = mapWordListItem(CARD, { ...TR, examples: null }, FSRS);
+    expect(w.example).toBe('');
+    expect(w.exampleTranslation).toBe('');
+  });
+
+  it('prefers user overrides (custom_front/back)', () => {
+    const w = mapWordListItem({ ...CARD, custom_front: 'la mosca', custom_back: 'housefly' }, TR, FSRS);
+    expect(w.native).toBe('la mosca');
+    expect(w.target).toBe('housefly');
+  });
+});
+
+describe('mapQuizItem', () => {
+  it('low-stability card → recognition mode with tier from the registry', () => {
+    const q = mapQuizItem(CARD, TR, { ...FSRS, stability: 1 }, 'es');
+    expect(q.tierId).toBe('bc');
+    expect(q.mode).toBe('recognition');
+    expect(q.content.frontWord).toBe('mosca');
+    expect(q.content.backWord).toBe('fly');
+    expect(q.content.frontPrompt.length).toBeGreaterThan(0);
+  });
+
+  it('high-stability card → recall mode', () => {
+    const q = mapQuizItem(CARD, TR, { ...FSRS, stability: 20 }, 'es');
+    expect(q.tierId).toBe('sr');
+    expect(q.mode).toBe('recall');
+  });
+
+  it('maps a cached example onto the card back (target-side sentence, no fetch)', () => {
+    const q = mapQuizItem(CARD, TR, FSRS, 'es');
+    expect(q.content.backExample).toBe('A fly in the soup.');
+    const noEx = mapQuizItem(CARD, { ...TR, examples: null }, FSRS, 'es');
+    expect(noEx.content.backExample).toBeUndefined();
+  });
+});
+
+describe('toReviewLogInsert', () => {
+  it('builds the review_logs insert row', () => {
+    expect(toReviewLogInsert('c1', 'u1', 3, 2)).toEqual({
+      card_id: 'c1',
+      user_id: 'u1',
+      rating: 3,
+      state_before: 2,
+      elapsed_days: 0,
+      scheduled_days: 0,
+    });
+  });
+});

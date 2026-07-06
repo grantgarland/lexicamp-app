@@ -84,6 +84,45 @@ export function describeDataSourceContract(name: string, source: DataSource): vo
       await expect(source.commitQuizSession({ ratings })).resolves.toBeUndefined();
     });
 
+    it('lookup: a plain word resolves with confidence-ordered senses (16 §2)', async () => {
+      const out = await source.lookup('fly', 'native_to_target');
+      expect(out.status).toBe('found');
+      if (out.status !== 'found') return;
+      expect(out.result.senses.length).toBeGreaterThan(0);
+      for (let i = 1; i < out.result.senses.length; i += 1) {
+        expect(out.result.senses[i - 1].confidence).toBeGreaterThanOrEqual(out.result.senses[i].confidence);
+      }
+      expect(out.result.entryKind).toBe('word');
+      expect(out.result.normalizedSource).toBe('fly');
+    });
+
+    it('lookup: multi-word expressions are allowed and marked as phrases', async () => {
+      const out = await source.lookup('speed bump', 'native_to_target');
+      expect(out.status).toBe('found');
+      if (out.status === 'found') expect(['phrase', 'phrase_mt']).toContain(out.result.entryKind);
+    });
+
+    it('lookup: sentence-like input is gate-rejected with a reason, never resolved', async () => {
+      const out = await source.lookup('I went to the store, and then I came home.', 'native_to_target');
+      expect(out).toEqual({ status: 'rejected', reason: 'sentence_like' });
+    });
+
+    it('lookup: junk input is gate-rejected (no API/cache cost path)', async () => {
+      expect((await source.lookup('   ', 'native_to_target')).status).toBe('rejected');
+      expect((await source.lookup('https://spam.example.com', 'native_to_target')).status).toBe('rejected');
+    });
+
+    it('completeOnboarding accepts the buffered choices (idempotent by contract)', async () => {
+      await expect(
+        source.completeOnboarding({
+          nativeLang: 'en',
+          learningLang: 'es',
+          timezone: 'America/New_York',
+          notificationsEnabled: true,
+        }),
+      ).resolves.toBeUndefined();
+    });
+
     it('getEngagement / getProgressStats return sane non-negatives', async () => {
       const [eng, stats] = await Promise.all([source.getEngagement(), source.getProgressStats()]);
       expect(eng.streakDays).toBeGreaterThanOrEqual(0);

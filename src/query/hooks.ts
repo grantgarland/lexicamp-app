@@ -7,7 +7,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { dataSource as ds } from '@/data';
 import { type HomeSnapshot, homeSnapshot } from '@/domain/derive';
 import type { BufferedRating } from '@/domain/quiz';
-import { type Entitlement, isPaid } from '@/domain/types';
+import type { LookupOutcome } from '@/domain/translation';
+import { type Entitlement, isPaid, type SearchDirection } from '@/domain/types';
 import { useDevStore } from '@/store/devStore';
 
 export function useProfile() {
@@ -88,6 +89,48 @@ export function useDecks() {
   const userState = useDevStore((s) => s.userState);
   const q = useQuery({ queryKey: ['decks', userState], queryFn: () => ds.getDecks() });
   return { decks: q.data ?? [], isLoading: q.isLoading };
+}
+
+export interface LookupData {
+  outcome: LookupOutcome | null;
+  isLoading: boolean;
+}
+/** Search-capture lookup (2.1). Caller debounces + pre-gates (Tier-0) before
+ *  enabling; the source re-gates authoritatively. Results are cached per
+ *  (direction, query) — the server cache makes repeats free anyway. */
+export function useLookup(query: string, direction: SearchDirection, enabled: boolean): LookupData {
+  const userState = useDevStore((s) => s.userState); // mock reads scenario words
+  const q = useQuery({
+    queryKey: ['lookup', userState, direction, query],
+    queryFn: () => ds.lookup(query, direction),
+    enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+  return { outcome: enabled ? (q.data ?? null) : null, isLoading: enabled && q.isPending };
+}
+
+/** Lazy example sentences (16 §3) — fetched once per translation, cached
+ *  server-side forever. Pass null to disable (nothing to fetch / already have). */
+export function useExamples(translationId: string | null) {
+  const q = useQuery({
+    queryKey: ['examples', translationId],
+    queryFn: () => ds.getExamples(translationId as string),
+    enabled: translationId != null,
+    staleTime: Infinity,
+  });
+  return { examples: q.data ?? null, isLoading: translationId != null && q.isPending };
+}
+
+/** Save a gate-approved translation to the active deck (write → save_card path). */
+export function useSaveCard() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (translationId: string) => ds.saveCard(translationId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['deckCards'] });
+      qc.invalidateQueries({ queryKey: ['words'] });
+    },
+  });
 }
 
 /** Commit a completed quiz session (write) — invalidates home/due reads on success. */

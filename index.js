@@ -11,6 +11,6 @@ import './src/i18n';
 // extra.sentryDsn is configured — see src/observability/sentry.ts.
 import { initSentry } from './src/observability/sentry';
 
-initSentry();
-
 import 'expo-router/entry';
+
+initSentry();

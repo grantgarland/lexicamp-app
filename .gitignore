@@ -46,3 +46,9 @@ example
 .claude/.session_active
 .claude/settings.local.json
 .env.local
+
+# Supabase (local CLI state & function secrets — deno.lock is intentionally committed)
+supabase/.branches
+supabase/.temp
+supabase/.env
+supabase/functions/.env

@@ -7,6 +7,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import type { WordListItem } from '@/data/DataSource';
 import { useTranslation } from '@/i18n';
 import { addedLabel, dueLabel } from '@/lib/relativeTime';
+import { useExamples } from '@/query/hooks';
 import { getTierByStability } from '@/theme/tiers';
 import { DetailStats } from './DetailStats';
 import { IconTrash } from './icons';
@@ -24,6 +25,14 @@ export function WordDetailSheet({ word, onClose, onDelete }: WordDetailSheetProp
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const tier = word ? getTierByStability(word.stability) : null;
+  // W-03 is the "first card view" of 16 §3 — fetch the example lazily when the
+  // row doesn't carry one yet (cached server-side once, free thereafter).
+  const { examples } = useExamples(word != null && word.example === '' ? word.translationId : null);
+  const fetched = examples?.[0];
+  const example = word?.example || (fetched ? `${fetched.sourcePrefix}${fetched.sourceTerm}${fetched.sourceSuffix}` : '');
+  // Target-side line, mirroring the search card's example pair.
+  const exampleTranslation =
+    word?.exampleTranslation || (fetched ? `${fetched.targetPrefix}${fetched.targetTerm}${fetched.targetSuffix}` : '');
   return (
     <Sheet visible={word != null} onClose={onClose}>
       {word != null && tier != null && (
@@ -46,8 +55,13 @@ export function WordDetailSheet({ word, onClose, onDelete }: WordDetailSheetProp
             <Text style={[styles.memoryDesc, { color: tier.text }]}>{t(`tier.${tier.id}.desc`)}</Text>
             <Text style={[styles.memoryHint, { color: tier.text, borderTopColor: tier.border }]}>{t('wordList.memoryHint')}</Text>
           </View>
-          <Text style={styles.sectionLabel}>{t('wordList.example')}</Text>
-          <Text style={styles.example}>&ldquo;{word.example}&rdquo;</Text>
+          {example !== '' && (
+            <>
+              <Text style={styles.sectionLabel}>{t('wordList.example')}</Text>
+              <Text style={[styles.example, exampleTranslation !== '' && styles.exampleTight]}>&ldquo;{example}&rdquo;</Text>
+              {exampleTranslation !== '' && <Text style={styles.exampleTranslation}>{exampleTranslation}</Text>}
+            </>
+          )}
           <DetailStats
             style={styles.stats}
             items={[
@@ -83,6 +97,8 @@ const styles = StyleSheet.create((theme) => {
     memoryHint: { fontFamily: fonts.sans.regular, fontSize: 11, lineHeight: 15, opacity: 0.7, marginTop: 8, paddingTop: 8, borderTopWidth: theme.borderWidth.thin },
     sectionLabel: { fontFamily: fonts.sans.bold, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', color: color.textMuted, marginBottom: 6 },
     example: { fontFamily: fonts.sans.regular, fontSize: 14, fontStyle: 'italic', lineHeight: 21, color: color.textBody, marginBottom: 16 },
+    exampleTight: { marginBottom: 4 },
+    exampleTranslation: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 19, color: color.textMuted, marginBottom: 16 },
     stats: { marginBottom: 18 },
     delete: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(209, 73, 91, 0.12)', borderRadius: 10, paddingVertical: 12 },
     deleteText: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.danger },

@@ -8,6 +8,7 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
+import { useOnboardingStore } from '@/store/onboardingStore';
 import {
   Button,
   ButtonRow,
@@ -54,10 +55,18 @@ export function OnboardingScreen() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [target, setTarget] = useState<string | null>(null);
+  const setLearningLang = useOnboardingStore((s) => s.setLearningLang);
+  const setNotificationsEnabled = useOnboardingStore((s) => s.setNotificationsEnabled);
 
   const next = () => setStep((s) => Math.min(s + 1, NOTIF));
   const back = () => setStep((s) => Math.max(s - 1, 0));
-  const finish = () => router.replace('/auth');
+  // O-06 choice → buffer (with the O-05 pair) → written transactionally by
+  // complete_onboarding after auth succeeds (03 onboarding data flow).
+  const finish = (notificationsEnabled: boolean) => {
+    if (target != null) setLearningLang(target);
+    setNotificationsEnabled(notificationsEnabled);
+    router.replace('/auth');
+  };
 
   if (step === WELCOME) {
     return (
@@ -145,8 +154,8 @@ export function OnboardingScreen() {
         <RawText style={styles.notifBody}>{t('onboarding.notifBody')}</RawText>
       </View>
       <View style={styles.footer}>
-        <Button title={t('onboarding.enableNotif')} variant="primary" onPress={finish} />
-        <Pressable onPress={finish} style={({ pressed }) => [styles.maybeLater, pressed && { opacity: 0.6 }]} accessibilityRole="button">
+        <Button title={t('onboarding.enableNotif')} variant="primary" onPress={() => finish(true)} />
+        <Pressable onPress={() => finish(false)} style={({ pressed }) => [styles.maybeLater, pressed && { opacity: 0.6 }]} accessibilityRole="button">
           <RawText style={styles.maybeLaterText}>{t('onboarding.maybeLater')}</RawText>
         </Pressable>
       </View>

@@ -1,0 +1,184 @@
+// Pure row→domain mappers for the Supabase source. Kept free of supabase-js so
+// they unit-test like any domain code (mappers.test.ts) — the DataSource is a
+// thin I/O shell around these.
+import i18n from '@/i18n';
+import { languageName } from '@/domain/derive';
+import type { QuizCardItem, QuizMode } from '@/domain/quiz';
+import type { Card, CardFsrsState, Deck, Entitlement, FsrsStateValue, Profile, Rating } from '@/domain/types';
+import { getTierByStability } from '@/theme/tiers';
+
+import type { WordListItem } from '../DataSource';
+
+// ── Row shapes (the exact select() projections the source requests) ──────────
+export interface ProfileRow {
+  id: string;
+  display_name: string | null;
+  native_lang: string;
+  learning_lang: string;
+  timezone: string;
+  onboarding_complete: boolean;
+}
+
+export interface SubscriptionRow {
+  status: 'free' | 'trial' | 'active' | 'expired' | 'grace';
+  plan: 'monthly' | 'annual' | null;
+  platform: 'ios' | 'android' | null;
+  current_period_end: string | null;
+}
+
+export interface DeckRowDb {
+  id: string;
+  user_id: string;
+  name: string;
+  source_lang: string;
+  target_lang: string;
+}
+
+export interface CardRow {
+  id: string;
+  deck_id: string;
+  user_id: string;
+  translation_id: string;
+  user_note: string | null;
+  custom_front: string | null;
+  custom_back: string | null;
+  suspended: boolean;
+  created_at: string;
+}
+
+export interface FsrsRow {
+  card_id: string;
+  user_id: string;
+  stability: number;
+  difficulty: number;
+  due_at: string;
+  last_review_at: string | null;
+  state: number;
+  reps: number;
+  lapses: number;
+}
+
+export interface TranslationJoin {
+  id: string;
+  display_source: string;
+  translation: string | null;
+  pos_tag: string | null;
+  prefix_word: string | null;
+  examples:
+    | {
+        sourcePrefix: string;
+        sourceTerm: string;
+        sourceSuffix: string;
+        targetPrefix: string;
+        targetTerm: string;
+        targetSuffix: string;
+      }[]
+    | null;
+}
+
+// ── Mappers ───────────────────────────────────────────────────────────────────
+export const mapProfile = (r: ProfileRow): Profile => ({
+  id: r.id,
+  displayName: r.display_name,
+  nativeLang: r.native_lang,
+  learningLang: r.learning_lang,
+  timezone: r.timezone,
+  onboardingComplete: r.onboarding_complete,
+});
+
+/** Absent subscriptions row = free tier (the row is created by the RevenueCat webhook). */
+export const mapEntitlement = (r: SubscriptionRow | null): Entitlement =>
+  r == null
+    ? { status: 'free', plan: null, platform: null, currentPeriodEnd: null }
+    : {
+        status: r.status,
+        plan: r.plan,
+        platform: r.platform,
+        currentPeriodEnd: r.current_period_end ? new Date(r.current_period_end) : null,
+      };
+
+export const mapDeck = (r: DeckRowDb): Deck => ({
+  id: r.id,
+  userId: r.user_id,
+  name: r.name,
+  sourceLang: r.source_lang,
+  targetLang: r.target_lang,
+});
+
+export const mapCard = (r: CardRow): Card => ({
+  id: r.id,
+  deckId: r.deck_id,
+  userId: r.user_id,
+  translationId: r.translation_id,
+  userNote: r.user_note,
+  customFront: r.custom_front,
+  customBack: r.custom_back,
+  suspended: r.suspended,
+  createdAt: new Date(r.created_at),
+});
+
+export const mapFsrsState = (r: FsrsRow): CardFsrsState => ({
+  cardId: r.card_id,
+  userId: r.user_id,
+  stability: r.stability,
+  difficulty: r.difficulty,
+  dueAt: new Date(r.due_at),
+  lastReviewAt: r.last_review_at ? new Date(r.last_review_at) : null,
+  state: (r.state >= 0 && r.state <= 3 ? r.state : 0) as FsrsStateValue,
+  reps: r.reps,
+  lapses: r.lapses,
+});
+
+/** cards ⋈ translations_cache ⋈ card_fsrs_state → Word List row. */
+export function mapWordListItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow): WordListItem {
+  const ex = tr.examples?.[0];
+  return {
+    id: card.id,
+    translationId: tr.id,
+    native: card.custom_front ?? tr.display_source,
+    target: card.custom_back ?? tr.translation ?? '',
+    pos: tr.pos_tag ? i18n.t(`pos.${tr.pos_tag}`, { defaultValue: tr.pos_tag.toLowerCase() }) : '',
+    example: ex ? `${ex.sourcePrefix}${ex.sourceTerm}${ex.sourceSuffix}` : '',
+    exampleTranslation: ex ? `${ex.targetPrefix}${ex.targetTerm}${ex.targetSuffix}` : '',
+    stability: fsrs.stability,
+    reps: fsrs.reps,
+    createdAt: new Date(card.created_at),
+    dueAt: new Date(fsrs.due_at),
+  };
+}
+
+/** Due card → quiz view-model (mode mirrors the mock: lower tiers = recognition). */
+export function mapQuizItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow, learningLang: string): QuizCardItem {
+  const tier = getTierByStability(fsrs.stability);
+  const mode: QuizMode = tier.id === 'bc' || tier.id === 'abc' ? 'recognition' : 'recall';
+  return {
+    id: card.id,
+    tierId: tier.id,
+    mode,
+    content: {
+      frontWord: card.custom_front ?? tr.display_source,
+      frontPrompt:
+        mode === 'recognition'
+          ? i18n.t('quiz.promptRecognition')
+          : i18n.t('quiz.promptRecall', { lang: languageName(learningLang) }),
+      backWord: card.custom_back ?? tr.translation ?? '',
+      ...(tr.pos_tag ? { backPos: i18n.t(`pos.${tr.pos_tag}`, { defaultValue: tr.pos_tag.toLowerCase() }) } : {}),
+      // Cached example only — display-side; the quiz never adds network calls.
+      ...(tr.examples?.[0]
+        ? { backExample: `${tr.examples[0].targetPrefix}${tr.examples[0].targetTerm}${tr.examples[0].targetSuffix}` }
+        : {}),
+    },
+  };
+}
+
+/** Buffered UI rating → review_logs insert row (FSRS recompute lands with 2.2). */
+export function toReviewLogInsert(cardId: string, userId: string, rating: Rating, stateBefore: FsrsStateValue) {
+  return {
+    card_id: cardId,
+    user_id: userId,
+    rating,
+    state_before: stateBefore,
+    elapsed_days: 0,
+    scheduled_days: 0,
+  };
+}

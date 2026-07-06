@@ -1,8 +1,11 @@
 // Mock DataSource — seeded with real Card + CardFsrsState fixtures per the dev
 // scenario, so every home/progress number is DERIVED by `derive.ts` (not hardcoded).
 // Swappable for SupabaseDataSource later behind the same interface.
+import { evaluateCaptureInput } from '@/domain/capture';
+import { directionLangs } from '@/domain/derive';
 import type { BufferedRating, QuizCardItem } from '@/domain/quiz';
-import type { Card, CardFsrsState, Deck, Entitlement, Profile } from '@/domain/types';
+import type { DictionarySense, LookupOutcome, LookupResult } from '@/domain/translation';
+import type { Card, CardFsrsState, Deck, Entitlement, Profile, SearchDirection } from '@/domain/types';
 import { type DevPlan, type DevUserState, useDevStore } from '@/store/devStore';
 
 import type { DataSource, DeckCards, DeckSummary, Engagement, ProgressStats, WordListItem } from './DataSource';
@@ -139,11 +142,13 @@ const WORD_BANK: { native: string; target: string }[] = [
 ];
 
 const POS_POOL = ['noun', 'adj.', 'verb', 'adv.'];
-const EXAMPLE_FRAMES = [
-  (w: string) => `Uso «${w}» casi todos los días.`,
-  (w: string) => `Esa palabra, «${w}», es muy útil.`,
-  (w: string) => `Aprendí «${w}» en mi última sesión.`,
-  (w: string) => `«${w}» apareció en la lectura de hoy.`,
+// Parallel source/target example frames (source = ES sentence, target = its EN
+// translation) so W-03 can show the pair like the search card does.
+const EXAMPLE_FRAMES: { source: (w: string) => string; target: (w: string) => string }[] = [
+  { source: (w) => `Uso «${w}» casi todos los días.`, target: (w) => `I use "${w}" almost every day.` },
+  { source: (w) => `Esa palabra, «${w}», es muy útil.`, target: (w) => `That word, "${w}", is very useful.` },
+  { source: (w) => `Aprendí «${w}» en mi última sesión.`, target: (w) => `I learned "${w}" in my last session.` },
+  { source: (w) => `«${w}» apareció en la lectura de hoy.`, target: (w) => `"${w}" came up in today's reading.` },
 ];
 
 // Word List fixtures — same per-tier distribution as the deck (so "My Words" count
@@ -164,10 +169,12 @@ function buildWords(userState: DevUserState): WordListItem[] {
         : new Date(now + 5 * DAY);
       out.push({
         id: `w${tierIdx}_${j}`,
+        translationId: `mock-t:${w.native}`,
         native: w.native,
         target: w.target,
         pos: POS_POOL[g % POS_POOL.length],
-        example: EXAMPLE_FRAMES[g % EXAMPLE_FRAMES.length](w.native),
+        example: EXAMPLE_FRAMES[g % EXAMPLE_FRAMES.length].source(w.native),
+        exampleTranslation: EXAMPLE_FRAMES[g % EXAMPLE_FRAMES.length].target(w.target),
         stability: TIER_STABILITY[tierIdx],
         reps: 2 + (g % 9),
         createdAt,
@@ -195,9 +202,104 @@ const DECKS: DeckSummary[] = [
   { id: 'd_favorites', name: 'Favorites', wordCount: 5, reviews: 3, createdAt: new Date(Date.now() - 4 * DAY), lastReviewedAt: null },
 ];
 
+// ── Mock dictionary (Azure dictionary/lookup-shaped, per 16 §1) ───────────────
+// 'fly' senses mirror the real Azure documentation example; the generic path
+// fabricates a single dictionary-shaped sense from WORD_BANK so every gate-
+// passing query resolves (the real source returns not_found on dictionary+
+// fallback miss — exercised via the reserved MISS token below).
+const MOCK_MISS = 'fly123456'; // Azure's own docs miss-example
+const FLY_SENSES: DictionarySense[] = [
+  {
+    normalizedTarget: 'volar',
+    displayTarget: 'volar',
+    posTag: 'VERB',
+    confidence: 0.4081,
+    prefixWord: '',
+    backTranslations: [
+      { normalizedText: 'fly', displayText: 'fly', numExamples: 15, frequencyCount: 4637 },
+      { normalizedText: 'flying', displayText: 'flying', numExamples: 15, frequencyCount: 1365 },
+    ],
+  },
+  {
+    normalizedTarget: 'mosca',
+    displayTarget: 'mosca',
+    posTag: 'NOUN',
+    confidence: 0.2668,
+    prefixWord: 'la',
+    backTranslations: [{ normalizedText: 'fly', displayText: 'fly', numExamples: 15, frequencyCount: 1697 }],
+  },
+];
+
+function mockLookupResult(query: string, direction: SearchDirection): LookupOutcome {
+  const verdict = evaluateCaptureInput(query, 'en');
+  if (!verdict.ok) return { status: 'rejected', reason: verdict.reason };
+  if (verdict.normalized === MOCK_MISS) return { status: 'not_found' };
+
+  const { sourceCode, targetCode } = directionLangs(PROFILE, direction);
+  const isPhrase = verdict.normalized.includes(' ');
+
+  let senses: DictionarySense[];
+  if (verdict.normalized === 'fly') {
+    senses = FLY_SENSES;
+  } else {
+    const hit =
+      WORD_BANK.find((w) => w.native === verdict.normalized) ??
+      WORD_BANK.find((w) => w.target === verdict.normalized);
+    const target = hit ? (hit.native === verdict.normalized ? hit.target : hit.native) : `${verdict.normalized}·es`;
+    senses = [
+      {
+        normalizedTarget: target,
+        displayTarget: target,
+        posTag: isPhrase ? 'OTHER' : 'NOUN',
+        confidence: hit ? 0.7 : 0.35,
+        prefixWord: '',
+        backTranslations: [
+          { normalizedText: verdict.normalized, displayText: verdict.display, numExamples: hit ? 5 : 0, frequencyCount: 100 },
+        ],
+      },
+    ];
+  }
+
+  const result: LookupResult = {
+    translationId: `mock-t:${verdict.normalized}`,
+    normalizedSource: verdict.normalized,
+    displaySource: verdict.display,
+    sourceLang: sourceCode,
+    targetLang: targetCode,
+    senses,
+    entryKind: isPhrase ? 'phrase' : 'word',
+    provider: 'azure_dictionary',
+  };
+  return { status: 'found', result };
+}
+
 const scenario = () => useDevStore.getState();
 
 export const mockDataSource: DataSource = {
+  async completeOnboarding(_input) {
+    // Mock profile ships onboardingComplete=true; nothing to persist.
+  },
+  async lookup(query, direction) {
+    return mockLookupResult(query, direction);
+  },
+  async saveCard(_translationId) {
+    // Mock: screens keep their own optimistic saved-state; nothing to persist.
+  },
+  async getExamples(translationId) {
+    // One canned example so W-03/detail UIs have something to render.
+    return translationId === 'mock-t:fly'
+      ? [
+          {
+            sourcePrefix: 'I mean, for a guy who could ',
+            sourceTerm: 'fly',
+            sourceSuffix: '.',
+            targetPrefix: 'Quiero decir, para un tipo que podía ',
+            targetTerm: 'volar',
+            targetSuffix: '.',
+          },
+        ]
+      : [];
+  },
   async getProfile() {
     return PROFILE;
   },

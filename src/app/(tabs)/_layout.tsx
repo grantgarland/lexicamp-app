@@ -11,6 +11,8 @@ import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
 
+import { useSession } from '@/auth/session';
+import { USE_SUPABASE } from '@/data';
 import { SearchView } from '@/screens/SearchScreen';
 import { useProfile } from '@/query/hooks';
 import { useUiStore } from '@/store/uiStore';
@@ -20,13 +22,19 @@ export default function TabsLayout() {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
+  const { session, isLoading: sessionLoading } = useSession();
   const profile = useProfile();
   const searchOpen = useUiStore((s) => s.searchOpen);
   const setSearchOpen = useUiStore((s) => s.setSearchOpen);
 
-  // First-run gate: a user who hasn't finished onboarding is routed into the narrative
-  // arc (→ auth) before ever reaching the tabs. Once real auth lands, `onboardingComplete`
-  // comes from the account; the mock ships it `true`, so returning users boot to Home.
+  // First-run gate. Live backend: no session → the onboarding arc (→ auth) —
+  // rendering tabs signed-out would just be a wall of failing queries. Wait out
+  // the async session restore before deciding (avoids a flash of onboarding for
+  // returning users). Mock mode keeps the old profile-flag behavior.
+  if (USE_SUPABASE) {
+    if (sessionLoading) return null; // one frame while AsyncStorage restores
+    if (session == null) return <Redirect href="/onboarding" />;
+  }
   if (profile != null && !profile.onboardingComplete) {
     return <Redirect href="/onboarding" />;
   }

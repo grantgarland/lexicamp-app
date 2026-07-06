@@ -1,17 +1,21 @@
 // SearchScreen (S-01…S-04) — the capture flow, assembled against search/Search.html.
 // Full-screen route (pushed from the Home FAB). Composes the kit (Screen,
 // TranslationCard, EmptyState) + Search-specific pieces built inline: DirectionToggle,
-// SearchBar, RecentChips, SkeletonCard. Lookup is mocked behind one seam.
-import { useState } from 'react';
+// SearchBar, RecentChips, SkeletonCard. Lookup flows through DataSource.lookup()
+// (2.1): Tier-0 capture gate client-side for instant feedback → debounced query
+// through the state layer (mock now, translate Edge Function via SupabaseDataSource).
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { captureReasonI18nKey, evaluateCaptureInput } from '@/domain/capture';
 import { directionLangs } from '@/domain/derive';
+import { type LookupResult, posTagI18nKey } from '@/domain/translation';
 import type { Profile, SearchDirection } from '@/domain/types';
 import { useTranslation } from '@/i18n';
-import { useProfile } from '@/query/hooks';
+import { useExamples, useLookup, useProfile, useSaveCard } from '@/query/hooks';
 import { usePrefsStore } from '@/store/prefsStore';
 import {
   EmptyState,
@@ -25,28 +29,47 @@ import {
   type TranslationResult,
 } from '@/ui';
 
-// TODO(P4 data): replace with the real translate/dictionary lookup (returns null when
-// the word isn't found → drives the no-results state).
-function mockLookup(q: string, direction: SearchDirection): TranslationResult {
-  // The translated word is in the TARGET language: native_to_target → learning
-  // lang, target_to_native → native lang. For this profile that's EN→ES vs ES→EN,
-  // so target_to_native is the one that resolves to English.
-  const toEN = direction === 'target_to_native';
+/** Adapt a domain LookupResult (Azure dictionary shape) to the card's view model. */
+function toCardResult(r: LookupResult, t: (k: string, o?: Record<string, unknown>) => string): TranslationResult {
+  const example = r.examples?.[0];
   return {
-    sourceText: q,
-    phonetic: toEN ? '/…/' : '/…/',
-    pos: 'noun',
-    translations: [
-      {
-        id: 't1',
-        word: toEN ? 'translation' : 'traducción',
-        pos: 'noun',
-        example: { source: `Una frase con ${q}.`, target: `A sentence with ${q}.` },
-        details: [{ label: 'gender', value: 'feminine' }],
-      },
-      { id: 't2', word: toEN ? 'rendering' : 'versión', pos: 'noun' },
-    ],
+    sourceText: r.displaySource,
+    phonetic: '', // IPA comes from lexical enrichment (3.6), not the dictionary
+    pos: r.senses[0] ? t(posTagI18nKey(r.senses[0].posTag)) : '',
+    translations: r.senses.map((s, i) => ({
+      id: `${r.normalizedSource}:${s.normalizedTarget}`,
+      word: s.prefixWord ? `${s.prefixWord} ${s.displayTarget}` : s.displayTarget,
+      pos: t(posTagI18nKey(s.posTag)),
+      ...(i === 0 && example
+        ? {
+            example: {
+              source: `${example.sourcePrefix}${example.sourceTerm}${example.sourceSuffix}`,
+              target: `${example.targetPrefix}${example.targetTerm}${example.targetSuffix}`,
+            },
+          }
+        : {}),
+      ...(s.backTranslations.length > 1
+        ? {
+            details: [
+              {
+                label: t('search.alsoTranslates'),
+                value: s.backTranslations.slice(0, 3).map((b) => b.displayText).join(', '),
+              },
+            ],
+          }
+        : {}),
+    })),
   };
+}
+
+/** Small debounce so lookups fire on typing pauses, not every keystroke. */
+function useDebouncedValue<T>(value: T, ms: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), ms);
+    return () => clearTimeout(id);
+  }, [value, ms]);
+  return debounced;
 }
 
 // SearchView — the search body. Reused both as the modal route (SearchScreen) and
@@ -72,17 +95,68 @@ export function SearchView({ onClose }: { onClose: () => void }) {
   const [justSaved, setJustSaved] = useState<string | null>(null);
 
   const q = query.trim();
-  const result = q.length >= 2 ? mockLookup(q, direction) : null;
-  const phase: 'recents' | 'typing' | 'results' | 'noresults' =
-    q === '' ? 'recents' : q.length < 2 ? 'typing' : result ? 'results' : 'noresults';
+  // Tier-0 capture gate, client-side (16 §2): instant feedback, and junk input
+  // never even reaches the data source. The source re-gates authoritatively.
+  const verdict = q.length >= 2 && langs ? evaluateCaptureInput(q, langs.sourceCode) : null;
+  const debouncedQ = useDebouncedValue(q, 250);
+  const { outcome, isLoading } = useLookup(
+    debouncedQ,
+    direction,
+    debouncedQ === q && verdict?.ok === true, // wait out the debounce + the gate
+  );
 
+  // Lazy examples (16 §3): the primary sense is expanded by default in the
+  // result card (per the S-series prototype), so fetch on first found-view when
+  // the cache row doesn't carry examples yet. Cached once, free thereafter.
+  const { examples: fetchedExamples } = useExamples(
+    outcome?.status === 'found' && outcome.result.examples == null ? outcome.result.translationId : null,
+  );
+  const result =
+    outcome?.status === 'found'
+      ? toCardResult(
+          { ...outcome.result, examples: outcome.result.examples ?? fetchedExamples ?? undefined },
+          t,
+        )
+      : null;
+  const rejectReason = verdict != null && !verdict.ok ? verdict.reason : outcome?.status === 'rejected' ? outcome.reason : null;
+  const phase: 'recents' | 'typing' | 'results' | 'noresults' | 'rejected' =
+    q === ''
+      ? 'recents'
+      : rejectReason != null
+        ? 'rejected'
+        : q.length < 2 || isLoading || (verdict?.ok === true && outcome == null)
+          ? 'typing'
+          : result != null
+            ? 'results'
+            : 'noresults';
+
+  // New headword → reset the expanded sense to the primary (render-adjust
+  // pattern, same as Sheet's mount logic — not an effect).
+  const headword = result?.sourceText;
+  const [lastHeadword, setLastHeadword] = useState(headword);
+  if (headword !== lastHeadword) {
+    setLastHeadword(headword);
+    setCurrentIdx(0);
+  }
+
+  const saveCard = useSaveCard();
   const save = (i: number) => {
-    if (result == null) return;
+    if (result == null || outcome?.status !== 'found') return;
     const id = result.translations[i].id;
+    // Optimistic UI on the sense chip; the persisted card references the cache
+    // row (primary sense) via save_card — see DataSource.saveCard.
     setSaved((s) => new Set(s).add(id));
     setJustSaved(id);
     setTimeout(() => setJustSaved(null), 1500);
     addRecent(q);
+    saveCard.mutate(outcome.result.translationId, {
+      onError: () =>
+        setSaved((s) => {
+          const n = new Set(s);
+          n.delete(id);
+          return n;
+        }),
+    });
   };
   const unsave = (i: number) => {
     if (result == null) return;
@@ -140,6 +214,11 @@ export function SearchView({ onClose }: { onClose: () => void }) {
               body={t('search.noResultsBody')}
               networkNote={t('search.noResultsNetwork')}
             />
+          </Animated.View>
+        )}
+        {phase === 'rejected' && rejectReason != null && (
+          <Animated.View key="rejected" entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)}>
+            <EmptyState title={t('capture.rejectedTitle')} body={t(captureReasonI18nKey(rejectReason))} />
           </Animated.View>
         )}
       </ScrollView>

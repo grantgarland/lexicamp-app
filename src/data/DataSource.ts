@@ -4,7 +4,8 @@
 // the call sites (query hooks). Methods are param-light: under the free tier there
 // is one active deck (03); the source resolves the current user/deck itself.
 import type { BufferedRating, QuizCardItem } from '@/domain/quiz';
-import type { Card, CardFsrsState, Deck, Entitlement, Profile } from '@/domain/types';
+import type { LookupOutcome, UsageExample } from '@/domain/translation';
+import type { Card, CardFsrsState, Deck, Entitlement, Profile, SearchDirection } from '@/domain/types';
 
 export interface DeckCards {
   cards: Card[];
@@ -22,12 +23,16 @@ export interface Engagement {
  *  `native` = the learning-language headword (bold), `target` = its translation. */
 export interface WordListItem {
   id: string;
+  /** translations_cache row id — keys the lazy examples fetch (16 §3). */
+  translationId: string;
   native: string;
   target: string;
   /** Part of speech (noun / verb / adj. …). */
   pos: string;
-  /** An example sentence using the word. */
+  /** An example sentence using the word (source-language side). */
   example: string;
+  /** The example's translation (target-language side; '' when absent). */
+  exampleTranslation: string;
   /** FSRS stability (days) → drives the row's tier indicator. */
   stability: number;
   /** Completed reviews so far. */
@@ -57,7 +62,29 @@ export interface ProgressStats {
   daysActive: number;
 }
 
+/** Buffered onboarding choices → complete_onboarding RPC (03 onboarding flow). */
+export interface OnboardingInput {
+  nativeLang: string;
+  learningLang: string;
+  timezone: string;
+  displayName?: string | null;
+  notificationsEnabled: boolean;
+}
+
 export interface DataSource {
+  /** Create profile + first deck + notification prefs after auth (idempotent —
+   *  safe to call after every successful sign-up OR sign-in; an existing
+   *  profile is never overwritten). */
+  completeOnboarding(input: OnboardingInput): Promise<void>;
+  /** Search-capture lookup (16 §2): Tier-0 gate → cache → dictionary →
+   *  fallback. Mock gates + serves fixtures; Supabase calls the translate
+   *  Edge Function. Never resolves ungated content. */
+  lookup(query: string, direction: SearchDirection): Promise<LookupOutcome>;
+  /** Save a gate-approved translation to the active deck (Tier-2: save_card RPC).
+   *  The card references the cache row; the primary sense is the card content. */
+  saveCard(translationId: string): Promise<void>;
+  /** Lazy example sentences for a saved/looked-up translation (16 §3). */
+  getExamples(translationId: string): Promise<UsageExample[]>;
   getProfile(): Promise<Profile>;
   getEntitlement(): Promise<Entitlement>;
   getActiveDeck(): Promise<Deck>;

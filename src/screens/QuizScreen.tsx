@@ -19,7 +19,6 @@ import { TIERS, type TierId } from '@/theme/tiers';
 import {
   Button,
   Confetti,
-  ConfirmDialog,
   EmptyState,
   IconArrowDown,
   IconArrowUp,
@@ -75,6 +74,7 @@ function outcomeTip(t: TFunction, tierId: TierId, rating: UiRating): { title: st
 
 export function QuizScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const { cards, isLoading } = useDueCards();
@@ -194,25 +194,40 @@ export function QuizScreen() {
         </View>
       )}
 
-      <ConfirmDialog
-        visible={showExit}
-        title={t('quiz.exitTitle')}
-        body={ratings.length > 0 ? t('quiz.exitBodyRated', { rated: ratings.length, total }) : t('quiz.exitBodyNone')}
-        confirmLabel={t('quiz.exitConfirm')}
-        cancelLabel={t('quiz.keepStudying')}
-        destructive
-        onConfirm={() => {
-          setShowExit(false);
-          router.back();
-        }}
-        onClose={() => setShowExit(false)}
-      />
+      {/* Exit confirm — rendered IN-TREE (not via the root Portal). The quiz is a
+          fullScreenModal; on iOS the root PortalHost sits BEHIND that modal, so a
+          portalled sheet here would be invisible and the close button would look dead.
+          Keeping this inside the screen guarantees it paints above the quiz. */}
+      {showExit && (
+        <View style={styles.exitOverlay} accessibilityViewIsModal>
+          <Pressable style={styles.exitScrim} onPress={() => setShowExit(false)} accessibilityLabel={t('common.dismiss')} />
+          <View style={[styles.exitSheet, { paddingBottom: insets.bottom + 24 }]}>
+            <View style={styles.exitHandle} />
+            <RawText style={styles.exitTitle}>{t('quiz.exitTitle')}</RawText>
+            <RawText style={styles.exitBody}>
+              {ratings.length > 0 ? t('quiz.exitBodyRated', { rated: ratings.length, total }) : t('quiz.exitBodyNone')}
+            </RawText>
+            <Button
+              title={t('quiz.exitConfirm')}
+              variant="destructive"
+              onPress={() => {
+                setShowExit(false);
+                router.back();
+              }}
+            />
+            <View style={styles.exitCancel}>
+              <Button title={t('quiz.keepStudying')} variant="secondary" onPress={() => setShowExit(false)} />
+            </View>
+          </View>
+        </View>
+      )}
     </Screen>
   );
 }
 
 // ── Top bar + progress ───────────────────────────────────────────────────────
-function QuizTopBar({ current, total, onClose }: { current: number; total: number; onClose: () => void }) {
+// Exported for interaction tests (verifies the close button registers presses).
+export function QuizTopBar({ current, total, onClose }: { current: number; total: number; onClose: () => void }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const pct = total > 0 ? (current / total) * 100 : 0;
@@ -509,11 +524,10 @@ const styles = StyleSheet.create((theme) => {
     // exit confirm
     exitOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', zIndex: 50 },
     exitScrim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(14, 22, 36, 0.6)' },
-    exitSheet: { backgroundColor: color.surfaceCard, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, gap: 10 },
+    exitSheet: { backgroundColor: color.surfaceCard, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingHorizontal: 20, paddingTop: 12, gap: 10 },
     exitHandle: { width: 32, height: 4, borderRadius: 2, backgroundColor: palette.slate[300], alignSelf: 'center', marginBottom: 8 },
     exitTitle: { fontFamily: fonts.serif.semibold, fontSize: 20, color: color.textStrong },
     exitBody: { fontFamily: fonts.sans.regular, fontSize: 14, lineHeight: 23, color: color.textMuted, marginBottom: 14 },
-    exitConfirm: { backgroundColor: palette.slate[800], borderRadius: 13, paddingVertical: 14, alignItems: 'center' },
-    exitConfirmText: { fontFamily: fonts.sans.bold, fontSize: 15, color: '#fff' },
+    exitCancel: { marginTop: 8 },
   };
 });

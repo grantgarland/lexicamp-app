@@ -143,7 +143,8 @@
     "translating": "Traduciendo «{{typed}}»…",
     "noResultsTitle": "No encontramos esa palabra.",
     "noResultsBody": "Revisa la ortografía, o puede que este par de idiomas tenga poca cobertura ahora mismo.",
-    "noResultsNetwork": "Si esta palabra debería tener resultado, puede que estés sin conexión o con una conexión lenta."
+    "noResultsNetwork": "Si esta palabra debería tener resultado, puede que estés sin conexión o con una conexión lenta.",
+    "alsoTranslates": "también se traduce"
   },
   "translationCard": {
     "currentWord": "Palabra actual",
@@ -217,7 +218,9 @@
     "pikaCelebrateA11y": "Pika celebrando",
     "masteryHeadline": "¡Llegaste a la Cumbre!",
     "masteryWordsLabel": "Palabras dominadas",
-    "keepClimbing": "Sigue subiendo →"
+    "keepClimbing": "Sigue subiendo →",
+    "promptRecognition": "¿Cuál es la traducción?",
+    "promptRecall": "Recuerda la palabra en {{lang}}."
   },
   "wordRow": {
     "addToDeckA11y": "Añadir al mazo",
@@ -579,6 +582,30 @@
     "forgot": "¿Olvidaste tu contraseña?",
     "haveAccount": "¿Ya tienes cuenta?",
     "noAccount": "¿Nuevo en Lexicamp?",
-    "legal": "Al continuar aceptas nuestros Términos y Política de privacidad."
+    "legal": "Al continuar aceptas nuestros Términos y Política de privacidad.",
+    "working": "Un momento…",
+    "genericError": "Algo salió mal. Inténtalo de nuevo."
+  },
+  "capture": {
+    "reason": {
+      "empty": "Escribe una palabra o frase corta para buscar.",
+      "too_long": "Es un poco largo para una tarjeta. Prueba con la palabra o expresión principal.",
+      "too_many_words": "Las tarjetas de Lexicamp funcionan mejor con palabras y frases cortas — recorta a la expresión clave.",
+      "sentence_like": "Eso parece una oración. Las tarjetas se aprenden mejor como palabras sueltas o frases cortas.",
+      "not_a_word": "Eso no parece algo para estudiar — prueba con una palabra o frase corta."
+    },
+    "rejectedTitle": "Mmm — eso no encaja en una tarjeta"
+  },
+  "pos": {
+    "ADJ": "adjetivo",
+    "ADV": "adverbio",
+    "CONJ": "conjunción",
+    "DET": "determinante",
+    "MODAL": "verbo modal",
+    "NOUN": "sustantivo",
+    "PREP": "preposición",
+    "PRON": "pronombre",
+    "VERB": "verbo",
+    "OTHER": "expresión"
   }
 }
