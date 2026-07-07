@@ -22,3 +22,9 @@ to 60/hr/user via `study_events`. Secrets used: `AZURE_TRANSLATOR_KEY`,
 
 Known nuance: the `lookup_uncached` rate-limit event insert no-ops for users
 without a `profiles` row (FK) — real users always have one after onboarding.
+
+**Dev scenario accounts** (DevBadge live-mode): `dev-{empty,bc,abc,hc,sr,summit}
+@lexicamp.app`, targets ru/zh-Hans/ar/ko/hi/ru, `profiles.is_dev = true`
+(**exclude from all analytics**: `where not is_dev`). Password in `.env.local`
+(`EXPO_PUBLIC_DEV_SCENARIO_PASSWORD`) — never in EAS env. Self-service RPCs:
+`reset_dev_scenario()` (canonical reshape), `set_dev_plan('free'|'active')`.

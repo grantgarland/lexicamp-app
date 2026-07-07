@@ -10,7 +10,13 @@ import './src/i18n';
 // Crash reporting (CI-3). No-op in dev or until EXPO_PUBLIC_SENTRY_DSN /
 // extra.sentryDsn is configured — see src/observability/sentry.ts.
 import { initSentry } from './src/observability/sentry';
+// Offline outbox (2.4): replay queued quiz commits on start/foreground.
+import { initOutbox } from './src/data/outboxInit';
+// Push (2.5): foreground presentation + tap → deep-link routing.
+import { initNotifications } from './src/notifications/push';
 
 import 'expo-router/entry';
 
 initSentry();
+initOutbox();
+initNotifications();

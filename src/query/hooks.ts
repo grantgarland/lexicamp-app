@@ -5,6 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { dataSource as ds } from '@/data';
+import { commitWithOutbox } from '@/data/outbox';
 import { type HomeSnapshot, homeSnapshot } from '@/domain/derive';
 import type { BufferedRating } from '@/domain/quiz';
 import type { LookupOutcome } from '@/domain/translation';
@@ -133,11 +134,14 @@ export function useSaveCard() {
   });
 }
 
-/** Commit a completed quiz session (write) — invalidates home/due reads on success. */
+/** Commit a completed quiz session (write) — invalidates home/due reads on
+ *  success. Offline-resilient: transport failures queue in the outbox and
+ *  replay on reconnect (2.4); server errors still surface. */
 export function useCommitQuizSession() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { ratings: BufferedRating[] }) => ds.commitQuizSession(payload),
+    mutationFn: (payload: { ratings: BufferedRating[] }) =>
+      commitWithOutbox((p) => ds.commitQuizSession(p), payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['deckCards'] });
       qc.invalidateQueries({ queryKey: ['dueCards'] });

@@ -12,6 +12,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { signInWithEmail, signUpWithEmail } from '@/auth/session';
 import { dataSource, USE_SUPABASE } from '@/data';
 import { useTranslation } from '@/i18n';
+import { registerForPush } from '@/notifications/push';
 import { useOnboardingStore } from '@/store/onboardingStore';
 import { Button, IconStar, Input, RawText, Screen } from '@/ui';
 
@@ -47,6 +48,9 @@ export function AuthScreen() {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC',
         notificationsEnabled: ob.notificationsEnabled,
       });
+      // O-06 opt-in → OS permission prompt + device token registration (2.5).
+      // Fire-and-forget: a denied prompt must not block entry into the app.
+      if (ob.notificationsEnabled) void registerForPush().catch(() => {});
       ob.reset();
       enter();
     } catch (e) {

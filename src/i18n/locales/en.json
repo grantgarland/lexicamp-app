@@ -17,7 +17,12 @@
   },
   "languages": {
     "en": "English",
-    "es": "Spanish"
+    "es": "Spanish",
+    "ru": "Russian",
+    "zh-hans": "Chinese (Simplified)",
+    "ar": "Arabic",
+    "ko": "Korean",
+    "hi": "Hindi"
   },
   "date": {
     "days": [

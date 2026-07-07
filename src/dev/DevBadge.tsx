@@ -1,11 +1,24 @@
 // DevBadge — a small floating "DEV" pill (overlaid above the whole app) that opens
 // a panel to flip core app states (plan, user tier) for testing screen variants.
 // NOT part of the app UI: dark, system-font styled, and gated to __DEV__ by the caller.
+//
+// MODE-AWARE (Casey-approved design 2026-07-06):
+// - Mock mode: the original behavior — devStore knobs drive synthetic fixtures.
+// - Live mode (USE_SUPABASE): scenario chips SIGN INTO real seeded accounts
+//   (dev-<scenario>@lexicamp.app — each with a different target language:
+//   ru/zh-Hans/ar/ko/hi/ru), so every state is real data through the real
+//   pipeline. Plan chips call set_dev_plan; Reset calls reset_dev_scenario
+//   (both is_dev-guarded RPCs). Password from EXPO_PUBLIC_DEV_SCENARIO_PASSWORD
+//   in .env.local — keep it OUT of EAS env so it never reaches store builds.
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { signInWithEmail } from '@/auth/session';
+import { USE_SUPABASE } from '@/data';
+import { supabase } from '@/data/supabase/client';
+import { queryClient } from '@/query/queryClient';
 import { type DevPlan, USER_STATE_LABELS, useDevStore } from '@/store/devStore';
 
 const PLANS: { value: DevPlan; label: string }[] = [
@@ -13,15 +26,53 @@ const PLANS: { value: DevPlan; label: string }[] = [
   { value: 'paid', label: 'Paid' },
 ];
 
+const DEV_PASSWORD = process.env.EXPO_PUBLIC_DEV_SCENARIO_PASSWORD ?? '';
+
 export function DevBadge() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const plan = useDevStore((s) => s.plan);
   const userState = useDevStore((s) => s.userState);
   const setPlan = useDevStore((s) => s.setPlan);
   const setUserState = useDevStore((s) => s.setUserState);
   const top = insets.top + 6;
+
+  // Live mode: swap the whole session to a seeded scenario account, then drop
+  // every cached read so the app rehydrates as that user.
+  const switchScenario = async (scenario: string) => {
+    setBusy(scenario);
+    try {
+      await signInWithEmail(`dev-${scenario}@lexicamp.app`, DEV_PASSWORD);
+      setUserState(scenario as (typeof USER_STATE_LABELS)[number]['value']); // keeps query keys/chip state in sync
+      queryClient.clear();
+      router.replace('/');
+    } finally {
+      setBusy(null);
+    }
+  };
+  const switchPlan = async (p: DevPlan) => {
+    setBusy(p);
+    try {
+      const { error } = await supabase.rpc('set_dev_plan', { p_status: p === 'paid' ? 'active' : 'free' });
+      if (!error) {
+        setPlan(p);
+        queryClient.clear();
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
+  const resetScenario = async () => {
+    setBusy('reset');
+    try {
+      await supabase.rpc('reset_dev_scenario');
+      queryClient.clear();
+    } finally {
+      setBusy(null);
+    }
+  };
 
   return (
     <>
@@ -30,7 +81,7 @@ export function DevBadge() {
           <Pressable style={styles.scrim} onPress={() => setOpen(false)} />
           <View style={[styles.panel, { top: top + 34 }]}>
             <Text style={styles.heading} allowFontScaling={false}>
-              Dev · app state
+              Dev · app state {USE_SUPABASE ? '· LIVE' : '· mock'}
             </Text>
 
             <Text style={styles.label} allowFontScaling={false}>
@@ -38,23 +89,33 @@ export function DevBadge() {
             </Text>
             <View style={styles.row}>
               {PLANS.map((o) => (
-                <Chip key={o.value} label={o.label} active={plan === o.value} onPress={() => setPlan(o.value)} />
+                <Chip
+                  key={o.value}
+                  label={busy === o.value ? '…' : o.label}
+                  active={plan === o.value}
+                  onPress={() => (USE_SUPABASE ? void switchPlan(o.value) : setPlan(o.value))}
+                />
               ))}
             </View>
 
             <Text style={styles.label} allowFontScaling={false}>
-              User
+              {USE_SUPABASE ? 'Scenario account' : 'User'}
             </Text>
             <View style={styles.rowWrap}>
               {USER_STATE_LABELS.map((o) => (
                 <Chip
                   key={o.value}
-                  label={o.label}
+                  label={busy === o.value ? '…' : o.label}
                   active={userState === o.value}
-                  onPress={() => setUserState(o.value)}
+                  onPress={() => (USE_SUPABASE ? void switchScenario(o.value) : setUserState(o.value))}
                 />
               ))}
             </View>
+            {USE_SUPABASE && (
+              <View style={styles.rowWrap}>
+                <Chip label={busy === 'reset' ? '…' : '↺ Reset scenario'} active={false} onPress={() => void resetScenario()} />
+              </View>
+            )}
 
             <Text style={styles.label} allowFontScaling={false}>
               Flows
