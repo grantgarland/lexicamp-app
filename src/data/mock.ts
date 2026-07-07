@@ -4,7 +4,7 @@
 import { evaluateCaptureInput } from '@/domain/capture';
 import { directionLangs } from '@/domain/derive';
 import type { BufferedRating, QuizCardItem } from '@/domain/quiz';
-import type { DictionarySense, LookupOutcome, LookupResult } from '@/domain/translation';
+import { assessResultQuality, type DictionarySense, type LookupOutcome, type LookupResult } from '@/domain/translation';
 import type { Card, CardFsrsState, Deck, Entitlement, NotificationPrefs, Profile, SearchDirection } from '@/domain/types';
 import { type DevPlan, type DevUserState, useDevStore } from '@/store/devStore';
 
@@ -210,6 +210,9 @@ const DECKS: DeckSummary[] = [
 // passing query resolves (the real source returns not_found on dictionary+
 // fallback miss — exercised via the reserved MISS token below).
 const MOCK_MISS = 'fly123456'; // Azure's own docs miss-example
+// Reserved token that resolves to an identity-echo (target === source) so dev/tests
+// can exercise the unsaveable card path (16 §2 result-quality gate).
+const MOCK_ECHO = 'echoword';
 const FLY_SENSES: DictionarySense[] = [
   {
     normalizedTarget: 'volar',
@@ -233,15 +236,29 @@ const FLY_SENSES: DictionarySense[] = [
 ];
 
 function mockLookupResult(query: string, direction: SearchDirection): LookupOutcome {
-  const verdict = evaluateCaptureInput(query, 'en');
+  // Gate against the ACTUAL source language for this direction (real Edge Function
+  // does the same) so the mock exercises script-consistency too — not hardcoded 'en'.
+  const { sourceCode, targetCode } = directionLangs(PROFILE, direction);
+  const verdict = evaluateCaptureInput(query, sourceCode);
   if (!verdict.ok) return { status: 'rejected', reason: verdict.reason };
   if (verdict.normalized === MOCK_MISS) return { status: 'not_found' };
 
-  const { sourceCode, targetCode } = directionLangs(PROFILE, direction);
   const isPhrase = verdict.normalized.includes(' ');
 
   let senses: DictionarySense[];
-  if (verdict.normalized === 'fly') {
+  if (verdict.normalized === MOCK_ECHO) {
+    // Identity-echo: target === source (untranslated pass-through) → unsaveable card.
+    senses = [
+      {
+        normalizedTarget: verdict.normalized,
+        displayTarget: verdict.display,
+        posTag: 'OTHER',
+        confidence: 0.2,
+        prefixWord: '',
+        backTranslations: [],
+      },
+    ];
+  } else if (verdict.normalized === 'fly') {
     senses = FLY_SENSES;
   } else {
     const hit =
@@ -271,6 +288,8 @@ function mockLookupResult(query: string, direction: SearchDirection): LookupOutc
     senses,
     entryKind: isPhrase ? 'phrase' : 'word',
     provider: 'azure_dictionary',
+    // Same result-quality rule the Edge Function applies server-side.
+    ...assessResultQuality({ normalizedSource: verdict.normalized, senses }),
   };
   return { status: 'found', result };
 }

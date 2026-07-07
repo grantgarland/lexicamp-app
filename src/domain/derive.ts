@@ -3,6 +3,7 @@
 // (today/total), due-tomorrow, added-today, word lifecycle, and the per-user
 // mountain tier → CEFR. Screens render these over raw domain entities; the math
 // lives HERE so it stays identical no matter where the data comes from.
+import { findLanguage } from '@/constants';
 import i18n from '@/i18n';
 import { TIERS, type TierId } from '@/theme/tiers';
 
@@ -30,10 +31,13 @@ export function wordLifecycle(s: CardFsrsState): WordLifecycle {
 // Every label the search UI shows (chip codes, language names, placeholder)
 // derives from HERE, so a profile with a different pair (e.g. fr→de) just works.
 
-/** Human-readable, UI-localized name for a BCP-47/ISO code ('es' → 'Spanish' / 'Español');
- *  falls back to the uppercased code when the current locale has no `languages.<code>` key. */
+/** Human-readable name for a BCP-47/ISO code ('es' → 'Spanish'). Prefers the active
+ *  UI locale's `languages.<code>` string, then the canonical language registry's English
+ *  name, and finally the uppercased code for anything unknown. */
 export function languageName(code: LanguageCode): string {
-  return i18n.t(`languages.${code.toLowerCase()}`, { defaultValue: code.toUpperCase() });
+  const localized = i18n.t(`languages.${code.toLowerCase()}`, { defaultValue: '' });
+  if (localized !== '') return localized;
+  return findLanguage(code)?.name ?? code.toUpperCase();
 }
 
 export interface DirectionLangs {

@@ -4,13 +4,17 @@
 // The structural guarantee lives in Tier 2 (cards can only FK gate-approved
 // translations_cache rows); this tier exists to keep junk input from ever
 // costing an API call and to give users a helpful, specific reason.
+import { findLanguage, textHasScript } from '@/constants';
 
 export type CaptureRejectReason =
   | 'empty'
   | 'too_long'
   | 'too_many_words'
   | 'sentence_like'
-  | 'not_a_word';
+  | 'not_a_word'
+  /** Input's script doesn't match the source language — almost always the wrong
+   *  translation direction (e.g. Latin text while translating FROM Arabic). */
+  | 'wrong_script';
 
 export type CaptureVerdict =
   | {
@@ -96,6 +100,15 @@ export function evaluateCaptureInput(raw: string, sourceLang: string): CaptureVe
   // Internal sentence punctuation (wrapping punctuation was already shed):
   // abbreviations like "e.g." are sentence-fragment material, not vocabulary.
   if (SENTENCE_PUNCT.test(normalized)) return { ok: false, reason: 'sentence_like' };
+
+  // Script consistency: if the source language has a known script and the input
+  // carries letters but none in that script, the user is almost certainly typing
+  // the wrong-direction language (e.g. Latin "rat" while translating FROM Arabic).
+  // Catches that class instantly, client-side, before any API call. A single
+  // matching letter passes, so scripts that mix (Japanese kana + Latin) are safe.
+  const sourceScript = findLanguage(sourceLang)?.script;
+  if (sourceScript != null && !textHasScript(normalized, sourceScript))
+    return { ok: false, reason: 'wrong_script' };
 
   if (rules.unspaced) {
     // Grapheme count via Intl.Segmenter when available (Hermes ships it);

@@ -6,6 +6,7 @@ import { type ReactNode, useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { findLanguage, TRANSLATABLE_LANGUAGES } from '@/constants';
 import { languageName } from '@/domain/derive';
 import type { LanguageCode, Profile } from '@/domain/types';
 import { useTranslation } from '@/i18n';
@@ -19,6 +20,7 @@ import {
   IconMail,
   IconStar,
   Input,
+  LanguagePickerSheet,
   ListItem,
   RawText,
   Sheet,
@@ -36,19 +38,6 @@ function formatReminderTime(mins: number): string {
   const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
   return `${h12}:${m.toString().padStart(2, '0')} ${period}`;
 }
-
-// Launch language set for the picker (labels are display-only until fully localized).
-const LANGUAGES: { code: string; label: string }[] = [
-  { code: 'es', label: 'Spanish' },
-  { code: 'fr', label: 'French' },
-  { code: 'de', label: 'German' },
-  { code: 'it', label: 'Italian' },
-  { code: 'pt', label: 'Portuguese' },
-  { code: 'nl', label: 'Dutch' },
-  { code: 'ja', label: 'Japanese' },
-  { code: 'ko', label: 'Korean' },
-  { code: 'zh', label: 'Chinese' },
-];
 
 const QUIZ_OPTIONS = [
   { n: 20, min: 2, max: 7, labelKey: 'quizLabelQuick' },
@@ -75,30 +64,6 @@ function PremiumGate({ title, body, onUpgrade }: { title: string; body: string; 
   );
 }
 
-// ── Language picker (stacks over Edit Profile) ────────────────────────────────
-export function LanguagePickerSheet({ visible, current, onSelect, onClose }: { visible: boolean; current: string; onSelect: (code: string) => void; onClose: () => void }) {
-  const { theme } = useUnistyles();
-  const { t } = useTranslation();
-  const [q, setQ] = useState('');
-  const rows = useMemo(() => LANGUAGES.filter((l) => l.label.toLowerCase().includes(q.trim().toLowerCase())), [q]);
-  return (
-    <Sheet visible={visible} onClose={onClose} title={t('settings.langPickerTitle')}>
-      <Input placeholder={t('settings.searchLanguages')} value={q} onChangeText={setQ} autoCapitalize="none" />
-      <ScrollView style={styles.langScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        {rows.map((l, i) => (
-          <ListItem
-            key={l.code}
-            title={l.label}
-            onPress={() => onSelect(l.code)}
-            trailing={current === l.code ? <IconCheck size={16} color={theme.color.brand} /> : undefined}
-            last={i === rows.length - 1}
-          />
-        ))}
-      </ScrollView>
-    </Sheet>
-  );
-}
-
 // ── SE-01 Edit Profile ────────────────────────────────────────────────────────
 export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade }: { visible: boolean; profile: Profile | undefined; isPaid: boolean; onClose: () => void; onUpgrade: () => void }) {
   const { theme } = useUnistyles();
@@ -108,7 +73,10 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
   const [picker, setPicker] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const learningLabel = LANGUAGES.find((l) => l.code === learning)?.label ?? languageName(learning as LanguageCode);
+  const nativeLang = profile?.nativeLang ?? 'en';
+  const learningLabel = findLanguage(learning)?.name ?? languageName(learning as LanguageCode);
+  // Learning target can be any translatable language except the user's native one.
+  const targetLanguages = useMemo(() => TRANSLATABLE_LANGUAGES.filter((l) => l.code.toLowerCase() !== nativeLang.toLowerCase()), [nativeLang]);
 
   return (
     <>
@@ -143,7 +111,15 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
         </Pressable>
       </Sheet>
 
-      <LanguagePickerSheet visible={visible && picker} current={learning} onSelect={(c) => { setLearning(c); setPicker(false); }} onClose={() => setPicker(false)} />
+      <LanguagePickerSheet
+        visible={visible && picker}
+        current={learning}
+        languages={targetLanguages}
+        title={t('settings.langPickerTitle')}
+        searchPlaceholder={t('settings.searchLanguages')}
+        onSelect={(c) => { setLearning(c); setPicker(false); }}
+        onClose={() => setPicker(false)}
+      />
 
       <ConfirmDialog
         visible={confirmDelete}

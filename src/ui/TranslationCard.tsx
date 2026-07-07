@@ -9,7 +9,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
 import { Card } from './Card';
-import { IconArrowRight, IconBook, IconCheck, IconChevronDown, IconChevronUp, IconTrash } from './icons';
+import { IconArrowRight, IconBook, IconCheck, IconChevronDown, IconChevronUp, IconInfo, IconLock, IconTrash } from './icons';
 import { RawText as RNText } from './Text';
 
 export interface TranslationExample {
@@ -48,6 +48,11 @@ export interface TranslationCardProps {
    *  from the user's profile + search direction. Presentational only. */
   sourceLang?: string;
   targetLang?: string;
+  /** Result-quality gate (16 §2). When false the card is read-only: Save is disabled
+   *  and `noticeText` explains why (e.g. the translation echoes the input). Default true. */
+  saveable?: boolean;
+  /** Inline reason shown when `saveable` is false. */
+  noticeText?: string;
 }
 
 type ButtonState = 'save' | 'saved' | 'delete';
@@ -62,6 +67,8 @@ export function TranslationCard({
   onDelete,
   sourceLang,
   targetLang,
+  saveable = true,
+  noticeText,
 }: TranslationCardProps) {
   const { theme } = useUnistyles();
 
@@ -98,6 +105,8 @@ export function TranslationCard({
             isExpanded={i === currentIdx}
             onExpand={() => onSetCurrent(i)}
             buttonState={buttonState(t)}
+            saveable={saveable}
+            noticeText={noticeText}
             onSave={() => onSave(i)}
             onDelete={() => onDelete(i)}
           />
@@ -112,6 +121,8 @@ function TranslationItem({
   isExpanded,
   onExpand,
   buttonState,
+  saveable,
+  noticeText,
   onSave,
   onDelete,
 }: {
@@ -119,6 +130,8 @@ function TranslationItem({
   isExpanded: boolean;
   onExpand: () => void;
   buttonState: ButtonState;
+  saveable: boolean;
+  noticeText?: string;
   onSave: () => void;
   onDelete: () => void;
 }) {
@@ -191,19 +204,37 @@ function TranslationItem({
           )}
 
           <View style={styles.actionWrap}>
-            {buttonState === 'save' && (
+            {!saveable && (
+              <>
+                {noticeText != null && (
+                  <View style={styles.notice}>
+                    <IconInfo size={15} color={theme.color.textMuted} />
+                    <RNText style={styles.noticeText}>{noticeText}</RNText>
+                  </View>
+                )}
+                <View
+                  style={[styles.action, styles.actionDisabled]}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: true }}
+                >
+                  <IconLock size={15} color={theme.color.textFaint} />
+                  <RNText style={styles.actionTextDisabled}>{t('translationCard.cantSave')}</RNText>
+                </View>
+              </>
+            )}
+            {saveable && buttonState === 'save' && (
               <Pressable onPress={onSave} style={[styles.action, styles.actionSave]} accessibilityRole="button">
                 <IconBook size={16} color="#fff" />
                 <RNText style={styles.actionTextLight}>{t('translationCard.saveWord')}</RNText>
               </Pressable>
             )}
-            {buttonState === 'saved' && (
+            {saveable && buttonState === 'saved' && (
               <Animated.View key="saved" entering={FadeIn.duration(200)} style={[styles.action, styles.actionSaved]}>
                 <IconCheck size={17} color="#fff" />
                 <RNText style={styles.actionTextLight}>{t('translationCard.saved')}</RNText>
               </Animated.View>
             )}
-            {buttonState === 'delete' && (
+            {saveable && buttonState === 'delete' && (
               <Pressable onPress={onDelete} style={[styles.action, styles.actionDelete]} accessibilityRole="button">
                 <IconTrash size={15} color={theme.color.danger} />
                 <RNText style={styles.actionTextDanger}>{t('translationCard.deleteWord')}</RNText>
@@ -308,7 +339,24 @@ const styles = StyleSheet.create((theme) => {
     actionSave: { backgroundColor: color.accent, boxShadow: theme.shadow.accent },
     actionSaved: { backgroundColor: palette.green[500] },
     actionDelete: { backgroundColor: color.dangerSoft, borderColor: palette.red[100] },
+    actionDisabled: { backgroundColor: palette.slate[100], borderColor: color.border },
     actionTextLight: { fontFamily: fonts.sans.bold, fontSize: 15, color: '#fff' },
     actionTextDanger: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.danger },
+    actionTextDisabled: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.textFaint },
+
+    notice: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 8,
+      marginHorizontal: 0,
+      marginBottom: 10,
+      paddingVertical: 9,
+      paddingHorizontal: 11,
+      borderRadius: 10,
+      backgroundColor: palette.amber[50],
+      borderWidth: theme.borderWidth.thin,
+      borderColor: palette.amber[200],
+    },
+    noticeText: { flex: 1, fontFamily: fonts.sans.regular, fontSize: 12.5, lineHeight: 18, color: color.textBody },
   };
 });

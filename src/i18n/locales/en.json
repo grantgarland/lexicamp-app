@@ -156,7 +156,11 @@
     "moreDetails": "More details",
     "saveWord": "Save word",
     "saved": "Saved!",
-    "deleteWord": "Delete word"
+    "deleteWord": "Delete word",
+    "cantSave": "Can't save this",
+    "unsaveable": {
+      "echo": "This translation is the same as what you typed — likely untranslated. Check the direction toggle above and try again."
+    }
   },
   "quizCard": {
     "reveal": "Reveal",
@@ -564,6 +568,9 @@
     "langSub": "Lexicamp uses these to translate and quiz you.",
     "nativeLabel": "Your native language",
     "targetLabel": "Language you're learning",
+    "targetPlaceholder": "Select a language",
+    "langPickerTitle": "Choose a language",
+    "searchLanguages": "Search languages…",
     "langDifferent": "Choose two different languages.",
     "langPremiumNote": "You can add more languages later with Premium.",
     "notifTitle": "Let the system work for you.",
@@ -600,7 +607,8 @@
       "too_long": "That's a bit long for a card. Try the core word or expression.",
       "too_many_words": "Lexicamp cards work best with words and short phrases — try trimming to the key expression.",
       "sentence_like": "That looks like a sentence. Cards stick better as single words or short phrases.",
-      "not_a_word": "That doesn't look like something to study — try a word or short phrase."
+      "not_a_word": "That doesn't look like something to study — try a word or short phrase.",
+      "wrong_script": "That doesn't look like {{lang}}. Check the direction toggle above — you may have it reversed."
     },
     "rejectedTitle": "Hmm — that's not quite a card"
   },

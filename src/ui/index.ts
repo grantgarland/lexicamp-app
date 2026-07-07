@@ -12,6 +12,7 @@ export { EmptyState, type EmptyStateProps } from './EmptyState';
 export { Input, type InputProps } from './Input';
 export { ProgressDots, type ProgressDotsProps } from './ProgressDots';
 export { Sheet, type SheetProps } from './Sheet';
+export { LanguagePickerSheet, type LanguagePickerSheetProps } from './LanguagePickerSheet';
 export { TabBar, TAB_BAR_CORE_HEIGHT, type TabBarProps, type TabId } from './TabBar';
 export { SearchBar, type SearchBarProps } from './SearchBar';
 export { SegmentedTabs, type SegmentedTab, type SegmentedTabsProps } from './SegmentedTabs';

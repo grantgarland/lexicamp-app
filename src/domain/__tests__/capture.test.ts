@@ -35,7 +35,6 @@ describe('evaluateCaptureInput — accepts vocabulary', () => {
     'speed bump',
     'buenos días', // multi-word greeting
     'echar de menos', // 3-token idiom
-    'по большому счёту', // Cyrillic multi-word
     "s'il vous plaît", // internal apostrophe
     'well-being', // hyphenated
   ])('accepts %s', (input) => {
@@ -91,5 +90,31 @@ describe('evaluateCaptureInput — unspaced scripts', () => {
   it('resolves zh-Hans to the zh unspaced rules', () => {
     expect(captureRulesFor('zh-Hans').unspaced).toBe(true);
     expect(captureRulesFor('es').unspaced).toBe(false);
+  });
+});
+
+describe('evaluateCaptureInput — script consistency (wrong_script)', () => {
+  it('rejects wrong-direction input: Latin text while translating FROM a non-Latin language', () => {
+    // The reported bug: AR→EN with an English word. Caught client-side, pre-API.
+    expect(evaluateCaptureInput('rat', 'ar')).toEqual({ ok: false, reason: 'wrong_script' });
+    expect(evaluateCaptureInput('hello', 'ru')).toEqual({ ok: false, reason: 'wrong_script' });
+    expect(evaluateCaptureInput('word', 'ja')).toEqual({ ok: false, reason: 'wrong_script' });
+  });
+
+  it('accepts input written in the source language’s own script', () => {
+    expect(evaluateCaptureInput('قط', 'ar').ok).toBe(true); // Arabic
+    expect(evaluateCaptureInput('по большому счёту', 'ru').ok).toBe(true); // Cyrillic multi-word
+    expect(evaluateCaptureInput('γεια', 'el').ok).toBe(true); // Greek
+    expect(evaluateCaptureInput('猫', 'ja').ok).toBe(true); // Japanese kanji
+  });
+
+  it('does not fire for Latin-script pairs (dictionary is the authority there)', () => {
+    expect(en('perro').ok).toBe(true);
+    expect(evaluateCaptureInput('perro', 'es').ok).toBe(true);
+  });
+
+  it('passes mixed-script input if it contains at least one letter in the source script', () => {
+    // Japanese with an embedded Latin loanword still reads as Japanese.
+    expect(evaluateCaptureInput('猫cafe', 'ja').ok).toBe(true);
   });
 });

@@ -10,6 +10,8 @@ import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persi
 import { QueryClient } from '@tanstack/react-query';
 import { persistQueryClient } from '@tanstack/react-query-persist-client';
 
+import { reviveDates } from './reviveDates';
+
 const DAY = 24 * 60 * 60 * 1000;
 
 export const queryClient = new QueryClient({
@@ -25,7 +27,13 @@ export const queryClient = new QueryClient({
 
 persistQueryClient({
   queryClient,
-  persister: createAsyncStoragePersister({ storage: AsyncStorage, key: 'lexicamp_query_cache_v1' }),
+  persister: createAsyncStoragePersister({
+    storage: AsyncStorage,
+    key: 'lexicamp_query_cache_v1',
+    // Revive domain Date fields the default JSON.parse would leave as strings (see
+    // reviveDates) — without this a cold-launch rehydrate crashes the derivations.
+    deserialize: (cached) => JSON.parse(cached, reviveDates),
+  }),
   maxAge: 7 * DAY,
   // Bump when cached shapes change incompatibly (cheap invalidation lever).
   buster: 'v1',

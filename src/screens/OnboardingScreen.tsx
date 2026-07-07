@@ -3,10 +3,11 @@
 // selection → notification opt-in, then hands off to the auth screen (O-10/O-11).
 // Uses the shared illustrations, ProgressDots, Button, and ButtonRow.
 import { useRouter } from 'expo-router';
-import { type ComponentType, useState } from 'react';
+import { type ComponentType, useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { findLanguage, TRANSLATABLE_LANGUAGES } from '@/constants';
 import { useTranslation } from '@/i18n';
 import { useOnboardingStore } from '@/store/onboardingStore';
 import {
@@ -16,23 +17,19 @@ import {
   DailyPractice,
   ForgettingCurve,
   IconBell,
-  IconCheck,
+  IconChevronRight,
   IconMountain,
   IntervalTrack,
+  LanguagePickerSheet,
   ProgressDots,
   RawText,
   Screen,
   SummitScene,
 } from '@/ui';
 
-const TARGET_LANGS = [
-  { code: 'es', label: 'Spanish' },
-  { code: 'fr', label: 'French' },
-  { code: 'de', label: 'German' },
-  { code: 'it', label: 'Italian' },
-  { code: 'pt', label: 'Portuguese' },
-  { code: 'ja', label: 'Japanese' },
-];
+// Native language is fixed to English at launch (only en/es UI locales exist);
+// the target can be any translatable language except the native one.
+const NATIVE_LANG = 'en';
 
 // Story beats O-02…O-07 → (title, two paragraphs, illustration).
 const STORY: { titleKey: string; aKey: string; bKey: string; Illustration: ComponentType }[] = [
@@ -55,6 +52,9 @@ export function OnboardingScreen() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [target, setTarget] = useState<string | null>(null);
+  const [picker, setPicker] = useState(false);
+  const targetLanguages = useMemo(() => TRANSLATABLE_LANGUAGES.filter((l) => l.code.toLowerCase() !== NATIVE_LANG), []);
+  const targetLang = target != null ? findLanguage(target) : undefined;
   const setLearningLang = useOnboardingStore((s) => s.setLearningLang);
   const setNotificationsEnabled = useOnboardingStore((s) => s.setNotificationsEnabled);
 
@@ -112,34 +112,57 @@ export function OnboardingScreen() {
 
   if (step === LANG) {
     return (
-      <Screen edges={['top', 'bottom']}>
-        <ScrollView contentContainerStyle={styles.pad} showsVerticalScrollIndicator={false}>
-          <RawText style={styles.stepTitle}>{t('onboarding.langTitle')}</RawText>
-          <RawText style={styles.stepSub}>{t('onboarding.langSub')}</RawText>
+      <>
+        <Screen edges={['top', 'bottom']}>
+          <ScrollView contentContainerStyle={styles.pad} showsVerticalScrollIndicator={false}>
+            <RawText style={styles.stepTitle}>{t('onboarding.langTitle')}</RawText>
+            <RawText style={styles.stepSub}>{t('onboarding.langSub')}</RawText>
 
-          <RawText style={styles.fieldLabel}>{t('onboarding.nativeLabel')}</RawText>
-          <View style={styles.nativeRow}>
-            <RawText style={styles.nativeText}>{t('languages.en')}</RawText>
-          </View>
+            <RawText style={styles.fieldLabel}>{t('onboarding.nativeLabel')}</RawText>
+            <View style={styles.nativeRow}>
+              <RawText style={styles.nativeText}>{t('languages.en')}</RawText>
+            </View>
 
-          <RawText style={styles.fieldLabel}>{t('onboarding.targetLabel')}</RawText>
-          <View style={styles.langGrid}>
-            {TARGET_LANGS.map((l) => (
-              <LangChip key={l.code} label={l.label} selected={target === l.code} onPress={() => setTarget(l.code)} />
-            ))}
-          </View>
+            <RawText style={styles.fieldLabel}>{t('onboarding.targetLabel')}</RawText>
+            <Pressable
+              onPress={() => setPicker(true)}
+              accessibilityRole="button"
+              accessibilityLabel={t('onboarding.targetLabel')}
+              style={({ pressed }) => [styles.targetRow, pressed && { opacity: 0.7 }]}
+            >
+              {targetLang != null ? (
+                <View style={styles.targetValueWrap}>
+                  <RawText style={styles.targetValue}>{targetLang.name}</RawText>
+                  <RawText style={styles.targetNative}>{targetLang.nativeName}</RawText>
+                </View>
+              ) : (
+                <RawText style={styles.targetPlaceholder}>{t('onboarding.targetPlaceholder')}</RawText>
+              )}
+              <IconChevronRight size={16} color={theme.color.brand} />
+            </Pressable>
 
-          <View style={styles.premiumNote}>
-            <RawText style={styles.premiumNoteText}>{t('onboarding.langPremiumNote')}</RawText>
+            <View style={styles.premiumNote}>
+              <RawText style={styles.premiumNoteText}>{t('onboarding.langPremiumNote')}</RawText>
+            </View>
+          </ScrollView>
+          <View style={styles.footer}>
+            <ButtonRow
+              left={{ title: t('onboarding.back'), onPress: back }}
+              right={{ title: t('onboarding.continue'), onPress: next, disabled: target == null }}
+            />
           </View>
-        </ScrollView>
-        <View style={styles.footer}>
-          <ButtonRow
-            left={{ title: t('onboarding.back'), onPress: back }}
-            right={{ title: t('onboarding.continue'), onPress: next, disabled: target == null }}
-          />
-        </View>
-      </Screen>
+        </Screen>
+
+        <LanguagePickerSheet
+          visible={picker}
+          current={target ?? ''}
+          languages={targetLanguages}
+          title={t('onboarding.langPickerTitle')}
+          searchPlaceholder={t('onboarding.searchLanguages')}
+          onSelect={(c) => { setTarget(c); setPicker(false); }}
+          onClose={() => setPicker(false)}
+        />
+      </>
     );
   }
 
@@ -160,21 +183,6 @@ export function OnboardingScreen() {
         </Pressable>
       </View>
     </Screen>
-  );
-}
-
-function LangChip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
-  const { theme } = useUnistyles();
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="radio"
-      accessibilityState={{ selected }}
-      style={[styles.langChip, { borderColor: selected ? theme.color.brand : theme.color.border, backgroundColor: selected ? theme.color.brandSoft : theme.color.surfaceCard }]}
-    >
-      <RawText style={[styles.langChipText, { color: selected ? theme.color.brand : theme.color.textStrong }]}>{label}</RawText>
-      {selected && <IconCheck size={14} color={theme.color.brand} />}
-    </Pressable>
   );
 }
 
@@ -203,9 +211,11 @@ const styles = StyleSheet.create((theme) => {
     fieldLabel: { fontFamily: fonts.sans.semibold, fontSize: 12, letterSpacing: 0.5, textTransform: 'uppercase', color: color.textMuted, marginBottom: 8, marginTop: 8 },
     nativeRow: { paddingVertical: 14, paddingHorizontal: 16, borderRadius: radius.md, borderWidth: 1.5, borderColor: color.border, backgroundColor: color.surfaceSunken },
     nativeText: { fontFamily: fonts.sans.medium, fontSize: 15, color: color.textMuted },
-    langGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-    langChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 12, paddingHorizontal: 16, borderRadius: radius.pill, borderWidth: 1.5 },
-    langChipText: { fontFamily: fonts.sans.semibold, fontSize: 15 },
+    targetRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 16, borderRadius: radius.md, borderWidth: 1.5, borderColor: color.border, backgroundColor: color.surfaceCard },
+    targetValueWrap: { flex: 1 },
+    targetValue: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.textStrong },
+    targetNative: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted, marginTop: 1 },
+    targetPlaceholder: { flex: 1, fontFamily: fonts.sans.medium, fontSize: 15, color: color.textMuted },
     premiumNote: { flexDirection: 'row', gap: 8, backgroundColor: theme.palette.blue[50], borderWidth: theme.borderWidth.thin, borderColor: theme.palette.blue[100], borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 12, marginTop: 20 },
     premiumNoteText: { flex: 1, fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 19, color: color.brand },
 

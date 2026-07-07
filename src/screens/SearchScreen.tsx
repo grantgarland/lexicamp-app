@@ -12,7 +12,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { captureReasonI18nKey, evaluateCaptureInput } from '@/domain/capture';
 import { directionLangs } from '@/domain/derive';
-import { type LookupResult, posTagI18nKey } from '@/domain/translation';
+import { type LookupResult, posTagI18nKey, qualityReasonI18nKey } from '@/domain/translation';
 import type { Profile, SearchDirection } from '@/domain/types';
 import { useTranslation } from '@/i18n';
 import { useExamples, useLookup, useProfile, useSaveCard } from '@/query/hooks';
@@ -119,6 +119,13 @@ export function SearchView({ onClose }: { onClose: () => void }) {
           t,
         )
       : null;
+  // Result-quality gate (16 §2): a found result may still be unsaveable (e.g. the
+  // translation echoes the input). Show the card, disable Save, explain why.
+  const saveable = outcome?.status === 'found' ? outcome.result.quality !== 'unsaveable' : true;
+  const noticeText =
+    outcome?.status === 'found' && outcome.result.quality === 'unsaveable'
+      ? t(qualityReasonI18nKey(outcome.result.qualityReason ?? 'echo'))
+      : undefined;
   const rejectReason = verdict != null && !verdict.ok ? verdict.reason : outcome?.status === 'rejected' ? outcome.reason : null;
   const phase: 'recents' | 'typing' | 'results' | 'noresults' | 'rejected' =
     q === ''
@@ -142,7 +149,7 @@ export function SearchView({ onClose }: { onClose: () => void }) {
 
   const saveCard = useSaveCard();
   const save = (i: number) => {
-    if (result == null || outcome?.status !== 'found') return;
+    if (result == null || outcome?.status !== 'found' || !saveable) return;
     const id = result.translations[i].id;
     // Optimistic UI on the sense chip; the persisted card references the cache
     // row (primary sense) via save_card — see DataSource.saveCard.
@@ -207,6 +214,8 @@ export function SearchView({ onClose }: { onClose: () => void }) {
               onSetCurrent={setCurrentIdx}
               savedIds={saved}
               justSavedId={justSaved}
+              saveable={saveable}
+              noticeText={noticeText}
               onSave={save}
               onDelete={unsave}
             />
@@ -223,7 +232,7 @@ export function SearchView({ onClose }: { onClose: () => void }) {
         )}
         {phase === 'rejected' && rejectReason != null && (
           <Animated.View key="rejected" entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)}>
-            <EmptyState title={t('capture.rejectedTitle')} body={t(captureReasonI18nKey(rejectReason))} />
+            <EmptyState title={t('capture.rejectedTitle')} body={t(captureReasonI18nKey(rejectReason), { lang: langs?.sourceName ?? '' })} />
           </Animated.View>
         )}
       </ScrollView>

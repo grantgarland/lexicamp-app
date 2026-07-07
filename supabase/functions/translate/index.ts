@@ -16,7 +16,7 @@ declare const Deno: {
 };
 
 // ── Tier-0 gate (mirror of src/domain/capture.ts) ────────────────────────────
-type RejectReason = 'empty' | 'too_long' | 'too_many_words' | 'sentence_like' | 'not_a_word';
+type RejectReason = 'empty' | 'too_long' | 'too_many_words' | 'sentence_like' | 'not_a_word' | 'wrong_script';
 
 const CONTROL_CHARS = /[\u0000-\u001F\u007F\u200B-\u200D\uFEFF]/g;
 const WRAP_PUNCT = /^["'«»„“”‘’()[\]¿¡]+|["'«»„“”‘’()[\].,!?…;:]+$/g;
@@ -32,6 +32,23 @@ const MAX_WORDS = 5;
 const MAX_GRAPHEMES = 12;
 const MAX_RESULT_WORDS = 8; // phrase_mt heuristic (16 §2)
 const RATE_LIMIT_PER_HOUR = 60; // uncached lookups per user
+
+// Script consistency (mirror of the registry's script map in src/constants/languages.ts).
+// Only non-Latin scripts are listed; everything else defaults to Latin. If input has
+// letters but none in the source language's script → wrong-direction, reject early.
+const LANG_SCRIPT: Record<string, string> = {
+  ar: 'Arab', fa: 'Arab', ur: 'Arab', bg: 'Cyrl', ru: 'Cyrl', uk: 'Cyrl',
+  el: 'Grek', he: 'Hebr', hi: 'Deva', bn: 'Beng', ta: 'Taml', th: 'Thai',
+  ja: 'Jpan', ko: 'Kore', 'zh-Hans': 'Hans',
+};
+const SCRIPT_RE: Record<string, RegExp> = {
+  Latn: /\p{Script=Latin}/u, Arab: /\p{Script=Arabic}/u, Cyrl: /\p{Script=Cyrillic}/u,
+  Grek: /\p{Script=Greek}/u, Hebr: /\p{Script=Hebrew}/u, Deva: /\p{Script=Devanagari}/u,
+  Beng: /\p{Script=Bengali}/u, Taml: /\p{Script=Tamil}/u, Thai: /\p{Script=Thai}/u,
+  Hans: /\p{Script=Han}/u, Kore: /\p{Script=Hangul}/u,
+  Jpan: /\p{Script=Han}|\p{Script=Hiragana}|\p{Script=Katakana}/u,
+};
+const scriptFor = (code: string): string => LANG_SCRIPT[code] ?? LANG_SCRIPT[code.split('-')[0]] ?? 'Latn';
 
 function normalize(raw: string): { normalized: string; display: string } {
   const cleaned = raw
@@ -51,6 +68,8 @@ function gate(raw: string, sourceLang: string): { ok: true; normalized: string; 
   if (URL_LIKE.test(normalized) || EMAIL_LIKE.test(normalized) || HANDLE_LIKE.test(normalized)) return { ok: false, reason: 'not_a_word' };
   if (DIGITS_ONLY.test(normalized) || !HAS_LETTER.test(normalized)) return { ok: false, reason: 'not_a_word' };
   if (SENTENCE_PUNCT.test(normalized)) return { ok: false, reason: 'sentence_like' };
+  const scriptRe = SCRIPT_RE[scriptFor(sourceLang)];
+  if (scriptRe && !scriptRe.test(normalized)) return { ok: false, reason: 'wrong_script' };
   const unspaced = UNSPACED.has(sourceLang) || UNSPACED.has(sourceLang.split('-')[0]);
   if (unspaced) {
     const count = [...new Intl.Segmenter(sourceLang, { granularity: 'grapheme' }).segment(normalized)].length;
@@ -107,7 +126,10 @@ async function mtTranslate(text: string, from: string, to: string): Promise<stri
 // ── Row ↔ response mapping ────────────────────────────────────────────────────
 // deno-lint-ignore no-explicit-any
 function rowToOutcome(row: any): Record<string, unknown> {
-  if (row.gate_status === 'rejected') {
+  // Echo rows are stored rejected (so save_card blocks them) but still carry a
+  // translation — surface them as a found-but-unsaveable card, not an empty state.
+  const isEcho = row.gate_status === 'rejected' && row.gate_reason === 'echo' && row.translation != null;
+  if (row.gate_status === 'rejected' && !isEcho) {
     return row.gate_reason === 'not_found' ? { status: 'not_found' } : { status: 'rejected', reason: row.gate_reason };
   }
   const primary: AzureSense = {
@@ -118,6 +140,10 @@ function rowToOutcome(row: any): Record<string, unknown> {
     prefixWord: row.prefix_word ?? '',
     backTranslations: row.back_translations ?? [],
   };
+  // Result-quality gate: echo (from the rejected-echo path, or a legacy allowed row
+  // whose translation equals the source) renders read-only. Mirror of
+  // src/domain/translation.ts#assessResultQuality.
+  const unsaveable = isEcho || primary.normalizedTarget === row.source_text;
   return {
     status: 'found',
     result: {
@@ -130,6 +156,7 @@ function rowToOutcome(row: any): Record<string, unknown> {
       entryKind: row.entry_kind,
       provider: row.provider,
       ...(row.examples ? { examples: row.examples } : {}),
+      ...(unsaveable ? { quality: 'unsaveable', qualityReason: 'echo' } : {}),
     },
   };
 }
@@ -234,19 +261,19 @@ Deno.serve(async (req: Request) => {
     // Constrained MT fallback (16 §2): compositional phrases the dictionary lacks.
     const mt = await mtTranslate(verdict.display, from, to);
     if (mt === 'error') return json({ error: 'translation service unavailable' }, 503);
-    const resultOk =
+    // Identity-echo, generalized to ANY length (was: only >3-token sources). An MT
+    // result identical to the input is an untranslated pass-through — persist it so
+    // the card can DISPLAY it, but as gate_status='rejected'+reason 'echo' so save_card
+    // structurally blocks it; rowToOutcome surfaces it as a found-but-unsaveable card.
+    const isEcho = mt.normalize('NFC').trim().toLowerCase() === verdict.normalized;
+    const validPhrase =
       mt.trim().length > 0 &&
       mt.split(/\s+/).length <= MAX_RESULT_WORDS &&
-      !SENTENCE_PUNCT.test(mt.replace(WRAP_PUNCT, '')) &&
-      !(verdict.normalized.split(' ').length > 3 && mt.toLowerCase() === verdict.normalized);
-    if (resultOk) {
-      row = {
-        ...row,
-        translation: mt,
-        entry_kind: 'phrase_mt',
-        gate_status: 'allowed',
-        provider: 'azure_mt',
-      };
+      !SENTENCE_PUNCT.test(mt.replace(WRAP_PUNCT, ''));
+    if (isEcho) {
+      row = { ...row, translation: mt, entry_kind: 'phrase_mt', gate_status: 'rejected', gate_reason: 'echo', provider: 'azure_mt' };
+    } else if (validPhrase) {
+      row = { ...row, translation: mt, entry_kind: 'phrase_mt', gate_status: 'allowed', provider: 'azure_mt' };
     } else {
       row = { ...row, gate_status: 'rejected', gate_reason: 'sentence_like', provider: 'azure_mt' };
     }

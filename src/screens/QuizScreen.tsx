@@ -446,10 +446,12 @@ function TierPromoScreen({ promotions, onContinue }: { promotions: PromotedWord[
             {promotions.map((p) => (
               <View key={p.cardId} style={styles.promoWordRow}>
                 <RawText style={styles.promoStar}>★</RawText>
-                <RawText style={styles.promoWord}>{p.word}</RawText>
-                <RawText style={styles.promoWordTiers}>
-                  {t(`tier.${p.from}.name`)} → {t(`tier.${p.to}.name`)}
-                </RawText>
+                <View style={styles.promoWordBody}>
+                  <RawText style={styles.promoWord}>{p.word}</RawText>
+                  <RawText style={styles.promoWordTiers}>
+                    {t(`tier.${p.from}.name`)} → {t(`tier.${p.to}.name`)}
+                  </RawText>
+                </View>
               </View>
             ))}
           </Animated.View>
@@ -526,12 +528,15 @@ const styles = StyleSheet.create((theme) => {
     promoHead: { alignItems: 'center', marginBottom: 14 },
     promoTitle: { fontFamily: fonts.serif.bold, fontSize: 26, color: '#fff', textAlign: 'center', letterSpacing: -0.4, lineHeight: 32 },
     promoSub: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 20, color: 'rgba(255,255,255,0.6)', textAlign: 'center', maxWidth: 250, marginTop: 8 },
-    promoList: { width: '100%', maxWidth: 260, alignSelf: 'center', marginBottom: 16 },
+    promoList: { width: '100%', maxWidth: 320, alignSelf: 'center', marginBottom: 16 },
     promoWordsLabel: { fontFamily: fonts.sans.bold, fontSize: 10, letterSpacing: 0.8, textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', textAlign: 'center', marginBottom: 8 },
-    promoWordRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, marginTop: 5 },
-    promoStar: { fontSize: 12, color: '#f7a855' },
+    // Star pinned to the first line; word + tier transition stack in a flexible column
+    // (minWidth:0 lets long words/expressions wrap instead of overflowing the card).
+    promoWordRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, marginTop: 5 },
+    promoStar: { fontSize: 12, color: '#f7a855', marginTop: 3 },
+    promoWordBody: { flex: 1, minWidth: 0 },
     promoWord: { fontFamily: fonts.serif.semibold, fontSize: 15, color: '#fff' },
-    promoWordTiers: { fontFamily: fonts.mono.regular, fontSize: 11, color: 'rgba(255,255,255,0.75)', marginLeft: 'auto' },
+    promoWordTiers: { fontFamily: fonts.mono.regular, fontSize: 11, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
     commitError: { fontFamily: fonts.sans.medium, fontSize: 13, color: color.danger, textAlign: 'center', marginTop: 14, paddingHorizontal: 24 },
     promoPika: { width: 148, height: 148, marginBottom: 20 },
     promoCtaWrap: { alignSelf: 'stretch', width: '100%' },

@@ -1,5 +1,10 @@
 // Outbox tests (2.4) — the offline-write guarantees: transport failures queue
 // and replay FIFO; server verdicts never queue (they'd fail identically).
+// NB: static import — jest-expo's CJS runtime can't execute dynamic import()
+// without --experimental-vm-modules. AsyncStorage is the in-memory mock from
+// src/test/setup.ts either way.
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { commitWithOutbox, enqueueCommit, flushOutbox, isTransportError, readOutbox } from '../outbox';
 
 const RATINGS = [{ cardId: 'c1', rating: 'got_it' as const }];
@@ -7,7 +12,6 @@ const netErr = () => new Error('Network request failed');
 const serverErr = () => new Error('free_word_cap');
 
 beforeEach(async () => {
-  const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
   await AsyncStorage.clear();
 });
 

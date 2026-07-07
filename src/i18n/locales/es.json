@@ -156,7 +156,11 @@
     "moreDetails": "Más detalles",
     "saveWord": "Guardar palabra",
     "saved": "¡Guardada!",
-    "deleteWord": "Eliminar palabra"
+    "deleteWord": "Eliminar palabra",
+    "cantSave": "No se puede guardar",
+    "unsaveable": {
+      "echo": "Esta traducción es igual a lo que escribiste — probablemente sin traducir. Revisa el selector de dirección arriba e inténtalo de nuevo."
+    }
   },
   "quizCard": {
     "reveal": "Mostrar",
@@ -564,6 +568,9 @@
     "langSub": "Lexicamp los usa para traducir y evaluarte.",
     "nativeLabel": "Tu idioma nativo",
     "targetLabel": "Idioma que aprendes",
+    "targetPlaceholder": "Elige un idioma",
+    "langPickerTitle": "Elige un idioma",
+    "searchLanguages": "Buscar idiomas…",
     "langDifferent": "Elige dos idiomas diferentes.",
     "langPremiumNote": "Puedes añadir más idiomas luego con Premium.",
     "notifTitle": "Deja que el sistema trabaje por ti.",
@@ -600,7 +607,8 @@
       "too_long": "Es un poco largo para una tarjeta. Prueba con la palabra o expresión principal.",
       "too_many_words": "Las tarjetas de Lexicamp funcionan mejor con palabras y frases cortas — recorta a la expresión clave.",
       "sentence_like": "Eso parece una oración. Las tarjetas se aprenden mejor como palabras sueltas o frases cortas.",
-      "not_a_word": "Eso no parece algo para estudiar — prueba con una palabra o frase corta."
+      "not_a_word": "Eso no parece algo para estudiar — prueba con una palabra o frase corta.",
+      "wrong_script": "Eso no parece {{lang}}. Revisa el selector de dirección arriba — quizá esté al revés."
     },
     "rejectedTitle": "Mmm — eso no encaja en una tarjeta"
   },
