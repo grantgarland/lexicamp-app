@@ -1,12 +1,15 @@
-# CI-4 — nightly E2E smoke: build the Android debug APK and run the Maestro
-# flows on a GitHub-hosted emulator. Free tier: Linux minutes only (~25–35 min
-# per run ≈ well inside 2,000 min/mo alongside per-PR CI).
+# CI-4 — nightly E2E smoke: build the Android debug APK via EAS Build (cloud)
+# and run the Maestro flows on a GitHub-hosted emulator. Uses EAS free tier
+# (~1 Android build/night × 30 nights ≈ 30/mo; budget is 15/mo but can batch
+# to 2–3/week if needed). No disk contention with free GitHub runners.
 #
 # ⚠️ MANUAL-TRIGGER ONLY until the flows are proven against a verified build —
 # run it once from the Actions tab after the on-device pass; when green,
 # uncomment the `schedule:` block to make it nightly. (A red nightly from
 # unproven flows would spam the ci-failure issue with noise, not signal.)
-name: Nightly smoke (Maestro)
+#
+# See SMOKE_TEST_DIAGNOSIS.md for rationale.
+name: Nightly smoke (Maestro + EAS)
 
 on:
   workflow_dispatch:
@@ -33,20 +36,31 @@ jobs:
           node-version: 22.23.1
           cache: npm
 
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: 17
-
       - name: Install deps
         run: npm ci
 
-      - name: Prebuild Android project
-        run: npx expo prebuild --platform android --no-install
+      - name: Build Android APK via EAS
+        run: |
+          npx eas build \
+            --platform android \
+            --profile preview \
+            --wait \
+            --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Build debug APK
-        working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+      - name: Download APK from EAS
+        run: |
+          # EAS build with --wait downloads the artifact automatically to ./{platform}-{id}.apk
+          # Find the most recent APK file in the current directory
+          APK_FILE=$(ls -1t *.apk 2>/dev/null | head -1)
+          if [ -z "$APK_FILE" ]; then
+            echo "Error: No APK file found. EAS build may have failed."
+            exit 1
+          fi
+          mkdir -p android/app/build/outputs/apk/debug
+          cp "$APK_FILE" android/app/build/outputs/apk/debug/app-debug.apk
+          echo "Using APK: $APK_FILE"
 
       - name: Install Maestro
         run: |
