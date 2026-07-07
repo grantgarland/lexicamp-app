@@ -94,6 +94,15 @@ export interface ReviewLog {
   stateBefore: FsrsStateValue;
 }
 
+/** notification_prefs (03) — drives the push/quiz scheduler. */
+export interface NotificationPrefs {
+  enabled: boolean;
+  frequency: 'daily' | 'twice_daily' | 'custom';
+  /** e.g. [{ time: '19:00' }] — local times in the user's profile timezone. */
+  windows: { time: string }[];
+  minDueToNotify: number;
+}
+
 // ── Derived (not stored) ─────────────────────────────────────────────────────
 export type WordLifecycle = 'unseen' | 'in_flight' | 'mastered';
 /** Per-word mastery tier id (= the registry TierId). */

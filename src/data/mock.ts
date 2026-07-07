@@ -5,7 +5,7 @@ import { evaluateCaptureInput } from '@/domain/capture';
 import { directionLangs } from '@/domain/derive';
 import type { BufferedRating, QuizCardItem } from '@/domain/quiz';
 import type { DictionarySense, LookupOutcome, LookupResult } from '@/domain/translation';
-import type { Card, CardFsrsState, Deck, Entitlement, Profile, SearchDirection } from '@/domain/types';
+import type { Card, CardFsrsState, Deck, Entitlement, NotificationPrefs, Profile, SearchDirection } from '@/domain/types';
 import { type DevPlan, type DevUserState, useDevStore } from '@/store/devStore';
 
 import type { DataSource, DeckCards, DeckSummary, Engagement, ProgressStats, WordListItem } from './DataSource';
@@ -277,6 +277,9 @@ function mockLookupResult(query: string, direction: SearchDirection): LookupOutc
 
 const scenario = () => useDevStore.getState();
 
+// In-memory notification prefs (03 onboarding defaults).
+const mockPrefs: NotificationPrefs = { enabled: true, frequency: 'daily', windows: [{ time: '19:00' }], minDueToNotify: 1 };
+
 export const mockDataSource: DataSource = {
   async completeOnboarding(_input) {
     // Mock profile ships onboardingComplete=true; nothing to persist.
@@ -347,6 +350,15 @@ export const mockDataSource: DataSource = {
         learningSteps: 0,
       },
     }));
+  },
+  async getNotificationPrefs(): Promise<NotificationPrefs> {
+    return { ...mockPrefs };
+  },
+  async updateNotificationPrefs(prefs) {
+    Object.assign(mockPrefs, prefs);
+  },
+  async registerPushToken(_token, _platform) {
+    // Mock: nothing to register.
   },
   async commitQuizSession(_payload: { ratings: BufferedRating[] }): Promise<void> {
     // TODO(P4 data): batch-write per 03 (update card_fsrs_state via ts-fsrs, append

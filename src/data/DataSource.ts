@@ -5,7 +5,7 @@
 // is one active deck (03); the source resolves the current user/deck itself.
 import type { BufferedRating, QuizCardItem } from '@/domain/quiz';
 import type { LookupOutcome, UsageExample } from '@/domain/translation';
-import type { Card, CardFsrsState, Deck, Entitlement, Profile, SearchDirection } from '@/domain/types';
+import type { Card, CardFsrsState, Deck, Entitlement, NotificationPrefs, Profile, SearchDirection } from '@/domain/types';
 
 export interface DeckCards {
   cards: Card[];
@@ -100,4 +100,10 @@ export interface DataSource {
   getDueCards(): Promise<QuizCardItem[]>;
   /** Commit a completed session's buffered ratings (03 batch write). */
   commitQuizSession(payload: { ratings: BufferedRating[] }): Promise<void>;
+  /** Notification prefs (2.5) — read + partial update. */
+  getNotificationPrefs(): Promise<NotificationPrefs>;
+  updateNotificationPrefs(prefs: Partial<NotificationPrefs>): Promise<void>;
+  /** Register this device's Expo push token (called once expo-notifications
+   *  lands app-side; the server scheduler no-ops for users without tokens). */
+  registerPushToken(token: string, platform: 'ios' | 'android'): Promise<void>;
 }

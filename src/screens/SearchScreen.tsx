@@ -76,6 +76,7 @@ function useDebouncedValue<T>(value: T, ms: number): T {
 // as an in-Home overlay (so the bottom nav can stay visible). Closes via `onClose`.
 export function SearchView({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
+  const router = useRouter();
   // Direction + recents are per-device prefs (03) → the prefs store, not local state.
   const direction = usePrefsStore((s) => s.searchDirection);
   const setDirection = usePrefsStore((s) => s.setSearchDirection);
@@ -150,12 +151,16 @@ export function SearchView({ onClose }: { onClose: () => void }) {
     setTimeout(() => setJustSaved(null), 1500);
     addRecent(q);
     saveCard.mutate(outcome.result.translationId, {
-      onError: () =>
+      onError: (e) => {
         setSaved((s) => {
           const n = new Set(s);
           n.delete(id);
           return n;
-        }),
+        });
+        // Server-enforced free-tier cap (3.2) → this IS the value moment; route
+        // to the paywall rather than showing a dead error.
+        if (e instanceof Error && e.message.includes('free_word_cap')) router.push('/paywall');
+      },
     });
   };
   const unsave = (i: number) => {

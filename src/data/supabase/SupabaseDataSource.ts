@@ -11,7 +11,7 @@
 import { applyReview } from '@/domain/fsrs';
 import { uiRatingToFsrs, type BufferedRating, type QuizCardItem } from '@/domain/quiz';
 import type { LookupOutcome, UsageExample } from '@/domain/translation';
-import type { Card, CardFsrsState, Deck, Entitlement, Profile, SearchDirection } from '@/domain/types';
+import type { Card, CardFsrsState, Deck, Entitlement, NotificationPrefs, Profile, SearchDirection } from '@/domain/types';
 import { directionLangs } from '@/domain/derive';
 
 import type { DataSource, DeckCards, DeckSummary, Engagement, ProgressStats, WordListItem } from '../DataSource';
@@ -129,18 +129,22 @@ export const supabaseDataSource: DataSource = {
   },
 
   async getEngagement(): Promise<Engagement> {
-    // TODO(03 follow-up): streak needs a schema home (study_events derivation).
-    return { streakDays: 0 };
+    const { data, error } = await supabase.rpc('get_study_stats');
+    bail(error);
+    const s = data as { streak_days: number };
+    return { streakDays: s.streak_days ?? 0 };
   },
 
   async getProgressStats(): Promise<ProgressStats> {
-    const { count, error } = await supabase
-      .from('study_events')
-      .select('id', { count: 'exact', head: true })
-      .eq('event', 'quiz_completed');
+    const { data, error } = await supabase.rpc('get_study_stats');
     bail(error);
-    // TODO(analytics): accuracy/bestStreak/daysActive derive from review_logs later.
-    return { sessionsTotal: count ?? 0, avgAccuracy: 0, bestStreak: 0, daysActive: 0 };
+    const s = data as { sessions_total: number; avg_accuracy: number; best_streak: number; days_active: number };
+    return {
+      sessionsTotal: s.sessions_total ?? 0,
+      avgAccuracy: Number(s.avg_accuracy ?? 0),
+      bestStreak: s.best_streak ?? 0,
+      daysActive: s.days_active ?? 0,
+    };
   },
 
   async getDecks(): Promise<DeckSummary[]> {
@@ -181,6 +185,37 @@ export const supabaseDataSource: DataSource = {
     return rows
       .filter((r) => r.card_fsrs_state != null)
       .map((r) => mapQuizItem(r, r.translations_cache, r.card_fsrs_state, profile.learningLang));
+  },
+
+  async getNotificationPrefs(): Promise<NotificationPrefs> {
+    const { data, error } = await supabase.from('notification_prefs').select('*').maybeSingle();
+    bail(error);
+    if (data == null) return { enabled: false, frequency: 'daily', windows: [{ time: '19:00' }], minDueToNotify: 1 };
+    return {
+      enabled: data.enabled,
+      frequency: data.frequency,
+      windows: data.windows ?? [{ time: '19:00' }],
+      minDueToNotify: data.min_due_to_notify ?? 1,
+    };
+  },
+
+  async updateNotificationPrefs(prefs: Partial<NotificationPrefs>): Promise<void> {
+    const userId = await uid();
+    const row: Record<string, unknown> = { user_id: userId };
+    if (prefs.enabled != null) row.enabled = prefs.enabled;
+    if (prefs.frequency != null) row.frequency = prefs.frequency;
+    if (prefs.windows != null) row.windows = prefs.windows;
+    if (prefs.minDueToNotify != null) row.min_due_to_notify = prefs.minDueToNotify;
+    const { error } = await supabase.from('notification_prefs').upsert(row, { onConflict: 'user_id' });
+    bail(error);
+  },
+
+  async registerPushToken(token: string, platform: 'ios' | 'android'): Promise<void> {
+    const userId = await uid();
+    const { error } = await supabase
+      .from('push_tokens')
+      .upsert({ user_id: userId, token, platform, updated_at: new Date().toISOString() }, { onConflict: 'user_id,token' });
+    bail(error);
   },
 
   async commitQuizSession({ ratings }: { ratings: BufferedRating[] }): Promise<void> {
