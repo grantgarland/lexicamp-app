@@ -1,21 +1,19 @@
 # CI-4 — nightly E2E smoke: build the Android debug APK via EAS Build (cloud)
-# and run the Maestro flows on a GitHub-hosted emulator. Uses EAS free tier
-# (~1 Android build/night × 30 nights ≈ 30/mo; budget is 15/mo but can batch
-# to 2–3/week if needed). No disk contention with free GitHub runners.
+# and run the Maestro flows on a GitHub-hosted emulator.
 #
-# ⚠️ MANUAL-TRIGGER ONLY until the flows are proven against a verified build —
-# run it once from the Actions tab after the on-device pass; when green,
-# uncomment the `schedule:` block to make it nightly. (A red nightly from
-# unproven flows would spam the ci-failure issue with noise, not signal.)
+# CHANGE-GATED: the scheduled run first checks whether HEAD has moved since the
+# last successful run of this workflow; if not, the build is skipped. This keeps
+# EAS free-tier usage proportional to actual commit activity (idle weeks cost 0
+# builds) instead of a flat ~30/mo. `workflow_dispatch` always runs (manual
+# trigger = explicit intent, e.g. re-proving a red run without a new commit).
 #
 # See SMOKE_TEST_DIAGNOSIS.md for rationale.
 name: Nightly smoke (Maestro + EAS)
 
 on:
   workflow_dispatch:
-  # Uncomment after the first successful manual run:
-  # schedule:
-  #   - cron: '0 8 * * *' # 08:00 UTC ≈ 3–4am ET, before the workday
+  schedule:
+    - cron: '0 8 * * *' # 08:00 UTC ≈ 3–4am ET, before the workday
 
 concurrency:
   group: nightly-smoke
@@ -25,7 +23,40 @@ env:
   EXPO_NO_TELEMETRY: '1'
 
 jobs:
+  # Change gate: skip the (expensive) EAS build when nothing has been committed
+  # since the last successful run. Compares the current HEAD sha against the
+  # head_sha of the newest successful run of this same workflow.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+    steps:
+      - name: Check for commits since last successful run
+        id: check
+        uses: actions/github-script@v9
+        with:
+          script: |
+            // Manual dispatch always runs — it's an explicit request.
+            if (context.eventName === 'workflow_dispatch') {
+              core.setOutput('should_run', 'true');
+              return;
+            }
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              ...context.repo,
+              workflow_id: 'nightly-smoke.yml',
+              status: 'success',
+              per_page: 1,
+            });
+            const last = data.workflow_runs[0];
+            const shouldRun = !last || last.head_sha !== context.sha;
+            core.info(last
+              ? `Last successful run: ${last.head_sha} — current HEAD: ${context.sha} — run: ${shouldRun}`
+              : 'No prior successful run — running.');
+            core.setOutput('should_run', String(shouldRun));
+
   smoke:
+    needs: changes
+    if: needs.changes.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -41,26 +72,36 @@ jobs:
 
       - name: Build Android APK via EAS
         run: |
-          npx eas build \
+          # --wait blocks until the cloud build finishes but does NOT download the
+          # artifact (--output is local-build only). With --json the finished build
+          # object — including the artifact download URL — is printed to stdout;
+          # logs go to stderr, so redirecting stdout gives us clean JSON to parse.
+          npx eas-cli build \
             --platform android \
             --profile preview \
+            --non-interactive \
             --wait \
-            --non-interactive
+            --json > eas-build.json
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
       - name: Download APK from EAS
         run: |
-          # EAS build with --wait downloads the artifact automatically to ./{platform}-{id}.apk
-          # Find the most recent APK file in the current directory
-          APK_FILE=$(ls -1t *.apk 2>/dev/null | head -1)
-          if [ -z "$APK_FILE" ]; then
-            echo "Error: No APK file found. EAS build may have failed."
+          mkdir -p android/app/build/outputs/apk/debug
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          URL=$(jq -r '.[0].artifacts.applicationArchiveUrl // .[0].artifacts.buildUrl // empty' eas-build.json)
+          if [ -z "$URL" ]; then
+            echo "Error: no artifact URL in EAS build output:"
+            cat eas-build.json
             exit 1
           fi
-          mkdir -p android/app/build/outputs/apk/debug
-          cp "$APK_FILE" android/app/build/outputs/apk/debug/app-debug.apk
-          echo "Using APK: $APK_FILE"
+          echo "Downloading APK from $URL"
+          curl -fSL -o "$APK" "$URL"
+          if [ ! -s "$APK" ]; then
+            echo "Error: downloaded APK is missing or empty."
+            exit 1
+          fi
+          echo "APK ready: $(du -h "$APK" | cut -f1) $APK"
 
       - name: Install Maestro
         run: |
