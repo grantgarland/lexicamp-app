@@ -19,6 +19,13 @@
         "EXPO_PUBLIC_USE_SUPABASE": "1"
       }
     },
+    "smoke": {
+      "distribution": "internal",
+      "env": {
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "EXPO_PUBLIC_USE_SUPABASE": "0"
+      }
+    },
     "production": {
       "autoIncrement": true,
       "env": {

@@ -1,0 +1,7 @@
+# Folder-run manifest — CI runs `maestro test .maestro/` and executes ONLY the
+# flows listed here. word-capture-crud.yaml is deliberately excluded until the
+# 2026-07-12 hardened nightly pipeline has produced one green dispatch run
+# (one variable at a time: don't co-mingle a new flow with an unproven CI fix).
+# Flip-on: add `- word-capture-crud.yaml` below, commit, dispatch once, watch.
+flows:
+  - smoke.yaml

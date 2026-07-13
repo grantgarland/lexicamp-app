@@ -1,8 +1,11 @@
 # CI-4 smoke flow — boots the app and traverses all four tabs, asserting each
 # screen's headline text (en locale). Catches the highest-value regression
 # classes: boot crashes, dead screens after navigation, and broken tab wiring.
-# Uses the mock DataSource (default in dev builds), summit/paid scenario, with
-# onboardingComplete=true → boots straight to Home.
+# Uses the mock DataSource (summit/paid scenario, onboardingComplete=true →
+# boots straight to Home). CI builds this with the `smoke` EAS profile
+# (EXPO_PUBLIC_USE_SUPABASE=0); a live-mode build redirects to onboarding on
+# first launch and this flow fails at its first assertion. If you change the
+# flow's mode assumptions, change the profile in eas.json + nightly-smoke.yml.
 #
 # Run locally:  maestro test .maestro/smoke.yaml   (app installed on a booted
 # emulator/simulator; https://maestro.mobile.dev for CLI install)

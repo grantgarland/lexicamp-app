@@ -7,7 +7,26 @@
 # builds) instead of a flat ~30/mo. `workflow_dispatch` always runs (manual
 # trigger = explicit intent, e.g. re-proving a red run without a new commit).
 #
-# See SMOKE_TEST_DIAGNOSIS.md for rationale.
+# INVARIANTS (2026-07-12 hardening — see SMOKE_TEST_DIAGNOSIS.md for history):
+# 1. Every code path in this file must be exercisable via workflow_dispatch.
+#    The 2026-07-12 403 shipped because the gate's API call only ran on
+#    `schedule` — manual verification runs never touched it. The gate now calls
+#    the API on every trigger; dispatch merely forces should_run=true AFTER the
+#    call succeeds, so a green manual run is a true rehearsal of the nightly.
+# 2. Every job declares its token permissions explicitly (top-level default is
+#    none). Behavior must not depend on the repo's default-workflow-permissions
+#    setting.
+# 3. No unpinned external tools. `npx eas-cli` and the Maestro installer float
+#    to latest when unpinned — a breaking upstream release becomes a 3am
+#    failure. Pins live in `env` below; bump them deliberately.
+# 4. The gate fails OPEN: if its API call errors, we run the smoke (worst case:
+#    one wasted EAS build) rather than silently losing coverage or going red on
+#    infrastructure noise.
+# 5. The smoke APK is built with the `smoke` EAS profile (mock DataSource,
+#    EXPO_PUBLIC_USE_SUPABASE=0). The Maestro flow assumes mock mode
+#    (onboardingComplete=true → boots straight to Home, no auth). A live-mode
+#    (`preview`) build redirects to onboarding on first launch and the flow
+#    fails at its first assertion. Keep flow and profile in lockstep.
 name: Nightly smoke (Maestro + EAS)
 
 on:
@@ -19,8 +38,17 @@ concurrency:
   group: nightly-smoke
   cancel-in-progress: true
 
+# Jobs opt in to exactly what they need (invariant 2).
+permissions: {}
+
 env:
   EXPO_NO_TELEMETRY: '1'
+  # Tool pins (invariant 3). eas-cli pinned to the major (patches absorbed,
+  # breaking majors excluded); eas.json enforces the >= 20.3.0 floor. Maestro's
+  # installer takes an exact version only. Latest as of 2026-07-12: eas-cli
+  # 20.5.1, Maestro 2.6.1.
+  EAS_CLI_SPEC: 'eas-cli@20'
+  MAESTRO_VERSION: '2.6.1'
 
 jobs:
   # Change gate: skip the (expensive) EAS build when nothing has been committed
@@ -28,6 +56,8 @@ jobs:
   # head_sha of the newest successful run of this same workflow.
   changes:
     runs-on: ubuntu-latest
+    permissions:
+      actions: read # listWorkflowRuns — the 2026-07-12 403 was this missing
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
     steps:
@@ -36,18 +66,43 @@ jobs:
         uses: actions/github-script@v9
         with:
           script: |
-            // Manual dispatch always runs — it's an explicit request.
+            // Invariant 1: the API call runs on EVERY trigger so that a manual
+            // dispatch rehearses the exact path the schedule uses. Do not move
+            // the dispatch early-return above this call.
+            let last = null;
+            let gateHealthy = true;
+            try {
+              const { data } = await github.rest.actions.listWorkflowRuns({
+                ...context.repo,
+                workflow_id: 'nightly-smoke.yml',
+                status: 'success',
+                per_page: 1,
+              });
+              last = data.workflow_runs[0] ?? null;
+            } catch (e) {
+              // Invariant 4: fail OPEN. A broken gate degrades to "run the
+              // smoke", never to lost coverage.
+              gateHealthy = false;
+              core.warning(
+                `Change-gate API call failed (${e.status ?? '?'}: ${e.message}). ` +
+                'Failing open — running the smoke. If this is a 403, the job has ' +
+                "lost its `actions: read` permission.",
+              );
+            }
+
             if (context.eventName === 'workflow_dispatch') {
+              // Manual dispatch always runs — but only after the API call above,
+              // so a green dispatch proves the scheduled path too.
+              core.info(`Manual dispatch — running. (gate API healthy: ${gateHealthy})`);
               core.setOutput('should_run', 'true');
               return;
             }
-            const { data } = await github.rest.actions.listWorkflowRuns({
-              ...context.repo,
-              workflow_id: 'nightly-smoke.yml',
-              status: 'success',
-              per_page: 1,
-            });
-            const last = data.workflow_runs[0];
+
+            if (!gateHealthy) {
+              core.setOutput('should_run', 'true');
+              return;
+            }
+
             const shouldRun = !last || last.head_sha !== context.sha;
             core.info(last
               ? `Last successful run: ${last.head_sha} — current HEAD: ${context.sha} — run: ${shouldRun}`
@@ -59,6 +114,8 @@ jobs:
     if: needs.changes.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read # checkout
     steps:
       - uses: actions/checkout@v7
 
@@ -76,9 +133,10 @@ jobs:
           # artifact (--output is local-build only). With --json the finished build
           # object — including the artifact download URL — is printed to stdout;
           # logs go to stderr, so redirecting stdout gives us clean JSON to parse.
-          npx eas-cli build \
+          # Profile `smoke` = mock DataSource (invariant 5).
+          npx "$EAS_CLI_SPEC" build \
             --platform android \
-            --profile preview \
+            --profile smoke \
             --non-interactive \
             --wait \
             --json > eas-build.json
@@ -105,6 +163,8 @@ jobs:
 
       - name: Install Maestro
         run: |
+          # MAESTRO_VERSION (env above) pins the installer — unpinned it pulls
+          # latest and a breaking Maestro release fails the nightly (invariant 3).
           curl -fsSL https://get.maestro.mobile.dev | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
@@ -138,9 +198,10 @@ jobs:
           if-no-files-found: ignore
 
   # Same sensor as ci.yml: a red nightly files/updates the rolling ci-failure
-  # issue (only meaningful once the schedule is enabled and flows are proven).
+  # issue. `needs` lists BOTH jobs so a gate failure escalates explicitly, not
+  # just via transitive failure() semantics.
   escalate-failure:
-    needs: smoke
+    needs: [changes, smoke]
     if: failure() && github.event_name == 'schedule'
     runs-on: ubuntu-latest
     permissions:
