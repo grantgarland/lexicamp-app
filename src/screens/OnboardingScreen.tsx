@@ -55,7 +55,7 @@ export function OnboardingScreen() {
   const [picker, setPicker] = useState(false);
   const targetLanguages = useMemo(() => TRANSLATABLE_LANGUAGES.filter((l) => l.code.toLowerCase() !== NATIVE_LANG), []);
   const targetLang = target != null ? findLanguage(target) : undefined;
-  const setLearningLang = useOnboardingStore((s) => s.setLearningLang);
+  const setTargetLang = useOnboardingStore((s) => s.setTargetLang);
   const setNotificationsEnabled = useOnboardingStore((s) => s.setNotificationsEnabled);
 
   const next = () => setStep((s) => Math.min(s + 1, NOTIF));
@@ -63,7 +63,7 @@ export function OnboardingScreen() {
   // O-06 choice → buffer (with the O-05 pair) → written transactionally by
   // complete_onboarding after auth succeeds (03 onboarding data flow).
   const finish = (notificationsEnabled: boolean) => {
-    if (target != null) setLearningLang(target);
+    if (target != null) setTargetLang(target);
     setNotificationsEnabled(notificationsEnabled);
     router.replace('/auth');
   };

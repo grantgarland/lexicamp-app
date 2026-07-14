@@ -65,7 +65,7 @@ export interface ProgressStats {
 /** Buffered onboarding choices → complete_onboarding RPC (03 onboarding flow). */
 export interface OnboardingInput {
   nativeLang: string;
-  learningLang: string;
+  targetLang: string;
   timezone: string;
   displayName?: string | null;
   notificationsEnabled: boolean;

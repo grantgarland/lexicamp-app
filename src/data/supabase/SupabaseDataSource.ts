@@ -65,7 +65,7 @@ export const supabaseDataSource: DataSource = {
   async completeOnboarding(input): Promise<void> {
     const { error } = await supabase.rpc('complete_onboarding', {
       p_native_lang: input.nativeLang,
-      p_learning_lang: input.learningLang,
+      p_learning_lang: input.targetLang,
       p_timezone: input.timezone,
       p_display_name: input.displayName ?? null,
       p_notifications_enabled: input.notificationsEnabled,
@@ -184,7 +184,7 @@ export const supabaseDataSource: DataSource = {
     const rows = (data ?? []) as unknown as JoinedCardRow[];
     return rows
       .filter((r) => r.card_fsrs_state != null)
-      .map((r) => mapQuizItem(r, r.translations_cache, r.card_fsrs_state, profile.learningLang));
+      .map((r) => mapQuizItem(r, r.translations_cache, r.card_fsrs_state, profile.targetLang));
   },
 
   async getNotificationPrefs(): Promise<NotificationPrefs> {

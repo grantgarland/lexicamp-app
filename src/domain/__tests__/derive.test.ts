@@ -90,9 +90,9 @@ describe('mountainTier', () => {
 
 // ── directionLangs / languageName ────────────────────────────────────────────
 describe('directionLangs', () => {
-  const profile = { nativeLang: 'en', learningLang: 'es' };
+  const profile = { nativeLang: 'en', targetLang: 'es' };
 
-  it('native_to_target = nativeLang → learningLang', () => {
+  it('native_to_target = nativeLang → targetLang', () => {
     const d = directionLangs(profile, 'native_to_target');
     expect(d.sourceCode).toBe('en');
     expect(d.targetCode).toBe('es');
@@ -107,7 +107,7 @@ describe('directionLangs', () => {
   });
 
   it('works for an arbitrary pair (fr→de) — not hardcoded to en/es', () => {
-    const d = directionLangs({ nativeLang: 'fr', learningLang: 'de' }, 'native_to_target');
+    const d = directionLangs({ nativeLang: 'fr', targetLang: 'de' }, 'native_to_target');
     expect(d.sourceShort).toBe('FR');
     expect(d.targetShort).toBe('DE');
   });

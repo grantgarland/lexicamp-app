@@ -72,7 +72,7 @@ describe('mapProfile / mapEntitlement', () => {
       id: 'u1',
       displayName: 'Casey',
       nativeLang: 'en',
-      learningLang: 'es',
+      targetLang: 'es',
       timezone: 'America/New_York',
       onboardingComplete: true,
     });

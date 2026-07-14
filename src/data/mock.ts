@@ -17,7 +17,7 @@ const PROFILE: Profile = {
   id: USER_ID,
   displayName: 'Casey',
   nativeLang: 'en',
-  learningLang: 'es',
+  targetLang: 'es',
   timezone: 'America/New_York',
   onboardingComplete: true,
 };

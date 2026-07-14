@@ -19,8 +19,8 @@ export function describeDataSourceContract(name: string, source: DataSource): vo
       const p = await source.getProfile();
       expect(p.id).toBeTruthy();
       expect(p.nativeLang).toBeTruthy();
-      expect(p.learningLang).toBeTruthy();
-      expect(p.nativeLang).not.toBe(p.learningLang);
+      expect(p.targetLang).toBeTruthy();
+      expect(p.nativeLang).not.toBe(p.targetLang);
       expect(p.timezone).toBeTruthy();
     });
 
@@ -116,7 +116,7 @@ export function describeDataSourceContract(name: string, source: DataSource): vo
       await expect(
         source.completeOnboarding({
           nativeLang: 'en',
-          learningLang: 'es',
+          targetLang: 'es',
           timezone: 'America/New_York',
           notificationsEnabled: true,
         }),

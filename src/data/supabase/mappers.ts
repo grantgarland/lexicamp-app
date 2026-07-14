@@ -83,7 +83,7 @@ export const mapProfile = (r: ProfileRow): Profile => ({
   id: r.id,
   displayName: r.display_name,
   nativeLang: r.native_lang,
-  learningLang: r.learning_lang,
+  targetLang: r.learning_lang,
   timezone: r.timezone,
   onboardingComplete: r.onboarding_complete,
 });
@@ -151,7 +151,7 @@ export function mapWordListItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRo
 }
 
 /** Due card → quiz view-model (mode mirrors the mock: lower tiers = recognition). */
-export function mapQuizItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow, learningLang: string): QuizCardItem {
+export function mapQuizItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow, targetLang: string): QuizCardItem {
   const tier = getTierByStability(fsrs.stability);
   const mode: QuizMode = tier.id === 'bc' || tier.id === 'abc' ? 'recognition' : 'recall';
   return {
@@ -164,7 +164,7 @@ export function mapQuizItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow, l
       frontPrompt:
         mode === 'recognition'
           ? i18n.t('quiz.promptRecognition')
-          : i18n.t('quiz.promptRecall', { lang: languageName(learningLang) }),
+          : i18n.t('quiz.promptRecall', { lang: languageName(targetLang) }),
       backWord: card.custom_back ?? tr.translation ?? '',
       ...(tr.pos_tag ? { backPos: i18n.t(`pos.${tr.pos_tag}`, { defaultValue: tr.pos_tag.toLowerCase() }) } : {}),
       // Cached example only — display-side; the quiz never adds network calls.

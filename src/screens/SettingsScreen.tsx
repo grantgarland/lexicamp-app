@@ -45,7 +45,7 @@ export function SettingsScreen() {
   const openPaywall = () => router.push('/paywall');
 
   const initial = (profile?.displayName ?? 'L').charAt(0).toUpperCase();
-  const direction = `${t(`languages.${profile?.nativeLang ?? 'en'}`)} → ${t(`languages.${profile?.learningLang ?? 'es'}`)}`;
+  const direction = `${t(`languages.${profile?.nativeLang ?? 'en'}`)} → ${t(`languages.${profile?.targetLang ?? 'es'}`)}`;
   const usagePct = Math.min(100, Math.round((wordsSaved / FREE_WORD_LIMIT) * 100));
 
   return (

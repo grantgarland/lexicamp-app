@@ -44,7 +44,7 @@ export function AuthScreen() {
       const ob = useOnboardingStore.getState();
       await dataSource.completeOnboarding({
         nativeLang: ob.nativeLang,
-        learningLang: ob.learningLang ?? 'es', // O-05 default if the buffer is cold (direct sign-in path)
+        targetLang: ob.targetLang ?? 'es', // O-05 default if the buffer is cold (direct sign-in path)
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC',
         notificationsEnabled: ob.notificationsEnabled,
       });

@@ -1,7 +1,7 @@
 // i18n — app UI localization (react-i18next + expo-localization). Initialized for
 // its side effects from `_layout.tsx` (like `@/theme/unistyles`) before any component
 // renders. This is the UI LOCALE (app chrome language), which is distinct from the
-// user's LEARNING-LANGUAGE pair (profile.nativeLang / learningLang, see `domain/derive`).
+// user's LEARNING-LANGUAGE pair (profile.nativeLang / targetLang, see `domain/derive`).
 // Add a locale by dropping a `locales/<code>.json` next to en/es and registering it below.
 import { getLocales } from 'expo-localization';
 import i18n from 'i18next';

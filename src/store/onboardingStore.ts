@@ -8,18 +8,18 @@ import { create } from 'zustand';
 interface OnboardingBuffer {
   /** Fixed to 'en' at launch (US-first, dictionary pairs are X↔en — 16 §1). */
   nativeLang: string;
-  learningLang: string | null;
+  targetLang: string | null;
   notificationsEnabled: boolean;
-  setLearningLang: (code: string) => void;
+  setTargetLang: (code: string) => void;
   setNotificationsEnabled: (enabled: boolean) => void;
   reset: () => void;
 }
 
 export const useOnboardingStore = create<OnboardingBuffer>((set) => ({
   nativeLang: 'en',
-  learningLang: null,
+  targetLang: null,
   notificationsEnabled: false,
-  setLearningLang: (learningLang) => set({ learningLang }),
+  setTargetLang: (targetLang) => set({ targetLang }),
   setNotificationsEnabled: (notificationsEnabled) => set({ notificationsEnabled }),
-  reset: () => set({ learningLang: null, notificationsEnabled: false }),
+  reset: () => set({ targetLang: null, notificationsEnabled: false }),
 }));

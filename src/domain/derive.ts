@@ -27,7 +27,7 @@ export function wordLifecycle(s: CardFsrsState): WordLifecycle {
 
 // ── Translation direction (03 SearchDirection × the user's language pair) ────
 // A SearchDirection is relative to the user's profile, NOT a fixed pair:
-//   native_to_target = nativeLang → learningLang;  target_to_native = the reverse.
+//   native_to_target = nativeLang → targetLang;  target_to_native = the reverse.
 // Every label the search UI shows (chip codes, language names, placeholder)
 // derives from HERE, so a profile with a different pair (e.g. fr→de) just works.
 
@@ -54,13 +54,13 @@ export interface DirectionLangs {
 
 /** Resolve a SearchDirection against the user's profile into its source/target language pair. */
 export function directionLangs(
-  profile: Pick<Profile, 'nativeLang' | 'learningLang'>,
+  profile: Pick<Profile, 'nativeLang' | 'targetLang'>,
   direction: SearchDirection,
 ): DirectionLangs {
   const [sourceCode, targetCode] =
     direction === 'native_to_target'
-      ? [profile.nativeLang, profile.learningLang]
-      : [profile.learningLang, profile.nativeLang];
+      ? [profile.nativeLang, profile.targetLang]
+      : [profile.targetLang, profile.nativeLang];
   return {
     sourceCode,
     targetCode,

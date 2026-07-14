@@ -83,7 +83,7 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const [name, setName] = useState(profile?.displayName ?? '');
-  const [learning, setLearning] = useState<string>(profile?.learningLang ?? 'es');
+  const [learning, setLearning] = useState<string>(profile?.targetLang ?? 'es');
   const [picker, setPicker] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 

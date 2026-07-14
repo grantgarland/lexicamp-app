@@ -12,7 +12,7 @@ export interface Profile {
   id: string;
   displayName: string | null;
   nativeLang: LanguageCode;
-  learningLang: LanguageCode;
+  targetLang: LanguageCode;
   timezone: string;
   onboardingComplete: boolean;
 }
