@@ -7,7 +7,8 @@
     "clear": "Clear",
     "filter": "Filter and sort",
     "cancel": "Cancel",
-    "undo": "Undo"
+    "undo": "Undo",
+    "done": "Done"
   },
   "tabs": {
     "home": "Home",
@@ -458,12 +459,9 @@
     "timePickerTitle": "Reminder Time",
     "frequency": "Frequency",
     "everyDay": "Every day",
-    "weekdays": "Weekdays",
-    "selectDay": "Select at least one day.",
-    "remindEveryDay": "Reminder every day.",
-    "remindOn": "Reminder on {{days}}.",
+    "saveError": "Couldn't save your preferences. Check your connection and try again.",
     "customTimeTitle": "Custom reminder time with Premium",
-    "customTimeBody": "Set any time and choose specific days.",
+    "customTimeBody": "Set the time that fits your day.",
     "savePreferences": "Save Preferences",
     "quizTitle": "Quiz Length",
     "quizHowMany": "How many cards per session?",
@@ -493,16 +491,7 @@
     "privacy": "Privacy Policy",
     "acknowledgments": "Acknowledgments",
     "aboutCopyright": "© 2026 Lexicamp. All rights reserved.",
-    "aboutMadeWith": "Made with ♥ for language learners everywhere.",
-    "weekdayAbbr": [
-      "S",
-      "M",
-      "T",
-      "W",
-      "T",
-      "F",
-      "S"
-    ]
+    "aboutMadeWith": "Made with ♥ for language learners everywhere."
   },
   "deckRow": {
     "studyA11y": "Study deck",

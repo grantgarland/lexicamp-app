@@ -2,14 +2,17 @@
 // Each is a shared-kit `Sheet`; premium-gated editors surface a `PremiumGate` callout
 // that routes to the paywall via `onUpgrade`. Kept in their own module so SettingsScreen
 // stays a thin hub.
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { type ReactNode, useMemo, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Platform, Pressable, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { findLanguage, TRANSLATABLE_LANGUAGES } from '@/constants';
 import { languageName } from '@/domain/derive';
-import type { LanguageCode, Profile } from '@/domain/types';
+import type { LanguageCode, NotificationPrefs, Profile } from '@/domain/types';
 import { useTranslation } from '@/i18n';
+import { registerForPush } from '@/notifications/push';
+import { useNotificationPrefs, useUpdateNotificationPrefs } from '@/query/hooks';
 import {
   Button,
   ConfirmDialog,
@@ -27,16 +30,27 @@ import {
   Toggle,
 } from '@/ui';
 
-// Reminder-time options in 30-min steps (minutes from midnight). 8:00 AM is the default.
-const TIME_STEP_MIN = 30;
-const REMINDER_TIMES = Array.from({ length: (24 * 60) / TIME_STEP_MIN }, (_, i) => i * TIME_STEP_MIN);
-const DEFAULT_REMINDER_MIN = 8 * 60;
-function formatReminderTime(mins: number): string {
-  const h24 = Math.floor(mins / 60);
-  const m = mins % 60;
-  const period = h24 < 12 ? 'AM' : 'PM';
-  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
-  return `${h12}:${m.toString().padStart(2, '0')} ${period}`;
+// Reminder-window time helpers. Windows store 24h 'HH:mm' local wall-clock
+// strings (03 §notification_prefs); the scheduler fires them ±30min in the
+// profile timezone. The Date round-trip uses a fixed dummy day so only the
+// hour/minute fields ever matter (no DST sensitivity).
+const FALLBACK_WINDOW = '19:00'; // mirrors the server-side default
+function parseHHMM(s: string): { h: number; m: number } {
+  const [h = 0, m = 0] = s.split(':').map(Number);
+  return { h: Number.isFinite(h) ? h : 0, m: Number.isFinite(m) ? m : 0 };
+}
+function hhmmToDate(s: string): Date {
+  const { h, m } = parseHHMM(s);
+  return new Date(2000, 0, 1, h, m);
+}
+function dateToHHMM(d: Date): string {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+function formatReminderTime(hhmm: string): string {
+  const { h, m } = parseHHMM(hhmm);
+  const period = h < 12 ? 'AM' : 'PM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${period}`;
 }
 
 const QUIZ_OPTIONS = [
@@ -136,19 +150,66 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
 }
 
 // ── SE-02 Study Reminders ───────────────────────────────────────────────────
+// Wired to DataSource notification prefs (2.5 app half). The draft mirrors the
+// 03 shape — enabled + windows — which is what the server-side pg_cron
+// scheduler actually reads; there is no days-of-week concept, so the old
+// (local-state-only) weekday chips are gone. The UI also deliberately offers
+// NO frequency selector: run_push_scheduler() caps at one push per user per
+// local day (push_log dedupe), so a second window can never fire — offering
+// "twice daily" would save but silently not deliver. If that cap is ever
+// relaxed to per-window dedupe (backlog), add the selector back here. The
+// stored frequency and any extra windows round-trip untouched; the UI edits
+// windows[0] only.
 export function NotificationSheet({ visible, isPaid, onClose, onUpgrade }: { visible: boolean; isPaid: boolean; onClose: () => void; onUpgrade: () => void }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
+  const { prefs } = useNotificationPrefs();
+  const update = useUpdateNotificationPrefs();
+
   const [enabled, setEnabled] = useState(true);
-  const [days, setDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
-  const [time, setTime] = useState(DEFAULT_REMINDER_MIN);
-  const [timePicker, setTimePicker] = useState(false);
-  const abbr = t('settings.weekdayAbbr', { returnObjects: true }) as string[];
-  const toggleDay = (d: number) => setDays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort((a, b) => a - b)));
+  const [windows, setWindows] = useState<{ time: string }[]>([{ time: FALLBACK_WINDOW }]);
+  const [editing, setEditing] = useState<number | null>(null); // window index open in the native picker
+  const [saveAttempted, setSaveAttempted] = useState(false);
+  const [seededFor, setSeededFor] = useState<NotificationPrefs | null>(null);
+
+  // Seed the draft from server prefs once per open (or when prefs land just
+  // after opening) — the same render-phase "adjust state during render"
+  // pattern Sheet uses. Deliberately once per open: mid-edit background
+  // refetches must not clobber the user's unsaved changes.
+  if (!visible && seededFor != null) setSeededFor(null);
+  if (visible && prefs != null && seededFor == null) {
+    setSeededFor(prefs);
+    setEnabled(prefs.enabled);
+    setWindows(prefs.windows.length > 0 ? prefs.windows : [{ time: FALLBACK_WINDOW }]);
+    setEditing(null);
+    setSaveAttempted(false); // a previous open's failed save shouldn't show stale
+  }
+
+  const setTime = (idx: number, time: string) => setWindows((w) => w.map((win, i) => (i === idx ? { time } : win)));
+
+  const save = () => {
+    setSaveAttempted(true);
+    // Free users only control the on/off switch — send a partial so their
+    // stored windows are never clobbered by the locked draft. Paid saves the
+    // full windows array (only [0] is editable; extras round-trip untouched).
+    const patch: Partial<NotificationPrefs> = isPaid ? { enabled, windows } : { enabled };
+    update.mutate(patch, {
+      onSuccess: () => {
+        // Opting in from Settings registers the device push token (push.ts
+        // contract: call after explicit opt-in, never unprompted). Fire-and-
+        // forget — a denied OS prompt must not block saving prefs.
+        if (enabled) void registerForPush().catch(() => {});
+        onClose();
+      },
+    });
+  };
+
+  const primaryTime = windows[0]?.time ?? FALLBACK_WINDOW;
+  const iosPickerOpen = editing != null && Platform.OS === 'ios';
 
   return (
     <>
-    <Sheet visible={visible && !timePicker} onClose={onClose} title={t('settings.notifTitle')}>
+    <Sheet visible={visible && !iosPickerOpen} onClose={onClose} title={t('settings.notifTitle')}>
       <View style={styles.notifToggle}>
         <View style={styles.flex1}>
           <RawText style={styles.notifToggleTitle}>{t('settings.enableReminders')}</RawText>
@@ -160,8 +221,8 @@ export function NotificationSheet({ visible, isPaid, onClose, onUpgrade }: { vis
       <View style={{ opacity: enabled ? 1 : 0.4 }} pointerEvents={enabled ? 'auto' : 'none'}>
         <FieldLabel>{t('settings.reminderTime')}</FieldLabel>
         {isPaid ? (
-          <Pressable onPress={() => setTimePicker(true)} style={({ pressed }) => [styles.timeRow, pressed && { opacity: 0.7 }]} accessibilityRole="button" accessibilityLabel={t('settings.reminderTime')}>
-            <RawText style={[styles.timeText, { color: theme.color.textStrong }]}>{formatReminderTime(time)}</RawText>
+          <Pressable onPress={() => setEditing(0)} style={({ pressed }) => [styles.timeRow, pressed && { opacity: 0.7 }]} accessibilityRole="button" accessibilityLabel={t('settings.reminderTime')}>
+            <RawText style={[styles.timeText, { color: theme.color.textStrong }]}>{formatReminderTime(primaryTime)}</RawText>
             <View style={styles.timeChange}>
               <RawText style={styles.fieldChange}>{t('settings.changeTime')}</RawText>
               <IconChevronRight size={14} color={theme.color.brand} />
@@ -169,61 +230,52 @@ export function NotificationSheet({ visible, isPaid, onClose, onUpgrade }: { vis
           </Pressable>
         ) : (
           <View style={styles.timeRow}>
-            <RawText style={styles.timeText}>{formatReminderTime(DEFAULT_REMINDER_MIN)}</RawText>
+            <RawText style={styles.timeText}>{formatReminderTime(primaryTime)}</RawText>
             <IconLock size={14} color={theme.color.textMuted} />
           </View>
         )}
 
-        {isPaid ? (
-          <>
-            <FieldLabel>{t('settings.frequency')}</FieldLabel>
-            <View style={styles.dayRow}>
-              {abbr.map((d, i) => {
-                const on = days.includes(i);
-                return (
-                  <Pressable key={i} onPress={() => toggleDay(i)} style={[styles.dayChip, { borderColor: on ? theme.color.brand : theme.color.border, backgroundColor: on ? theme.color.brandTint : 'transparent' }]} accessibilityRole="button" accessibilityState={{ selected: on }}>
-                    <RawText style={[styles.dayChipText, { color: on ? theme.color.brand : theme.color.textFaint }]}>{d}</RawText>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <RawText style={styles.dayHint}>
-              {days.length === 0 ? t('settings.selectDay') : days.length === 7 ? t('settings.remindEveryDay') : t('settings.remindOn', { days: days.map((d) => abbr[d]).join(', ') })}
-            </RawText>
-          </>
-        ) : (
-          <PremiumGate title={t('settings.customTimeTitle')} body={t('settings.customTimeBody')} onUpgrade={onUpgrade} />
-        )}
+        {!isPaid && <PremiumGate title={t('settings.customTimeTitle')} body={t('settings.customTimeBody')} onUpgrade={onUpgrade} />}
       </View>
 
+      {saveAttempted && update.isError && <RawText style={styles.saveError}>{t('settings.saveError')}</RawText>}
       <View style={styles.saveWrap}>
-        <Button title={t('settings.savePreferences')} variant="primary" onPress={onClose} />
+        <Button title={t('settings.savePreferences')} variant="primary" disabled={update.isPending || prefs == null} onPress={save} />
       </View>
     </Sheet>
 
-    <ReminderTimePickerSheet visible={visible && timePicker} current={time} onSelect={(m) => { setTime(m); setTimePicker(false); }} onClose={() => setTimePicker(false)} />
-    </>
-  );
-}
-
-// ── Reminder time picker (stacks over Study Reminders, premium only) ───────────
-function ReminderTimePickerSheet({ visible, current, onSelect, onClose }: { visible: boolean; current: number; onSelect: (mins: number) => void; onClose: () => void }) {
-  const { theme } = useUnistyles();
-  const { t } = useTranslation();
-  return (
-    <Sheet visible={visible} onClose={onClose} title={t('settings.timePickerTitle')}>
-      <ScrollView style={styles.langScroll} showsVerticalScrollIndicator={false}>
-        {REMINDER_TIMES.map((m, i) => (
-          <ListItem
-            key={m}
-            title={formatReminderTime(m)}
-            onPress={() => onSelect(m)}
-            trailing={current === m ? <IconCheck size={16} color={theme.color.brand} /> : undefined}
-            last={i === REMINDER_TIMES.length - 1}
+    {/* Native time picker. Android: the system clock dialog (mounting shows it);
+        iOS: the native spinner stacked in its own sheet, matching the existing
+        sheet-over-sheet pattern. */}
+    {editing != null && Platform.OS === 'android' && (
+      <DateTimePicker
+        mode="time"
+        value={hhmmToDate(windows[editing]?.time ?? FALLBACK_WINDOW)}
+        onChange={(e: DateTimePickerEvent, d?: Date) => {
+          const idx = editing;
+          setEditing(null); // close FIRST — Android fires exactly once per open; this guards re-entry
+          if (e.type === 'set' && d != null && idx != null) setTime(idx, dateToHHMM(d));
+        }}
+      />
+    )}
+    {editing != null && Platform.OS === 'ios' && (
+      <Sheet visible onClose={() => setEditing(null)} title={t('settings.timePickerTitle')}>
+        <View style={styles.iosPickerWrap}>
+          <DateTimePicker
+            mode="time"
+            display="spinner"
+            value={hhmmToDate(windows[editing]?.time ?? FALLBACK_WINDOW)}
+            onChange={(_e: DateTimePickerEvent, d?: Date) => {
+              if (d != null && editing != null) setTime(editing, dateToHHMM(d));
+            }}
           />
-        ))}
-      </ScrollView>
-    </Sheet>
+        </View>
+        <View style={styles.saveWrap}>
+          <Button title={t('common.done')} variant="primary" onPress={() => setEditing(null)} />
+        </View>
+      </Sheet>
+    )}
+    </>
   );
 }
 
@@ -355,8 +407,6 @@ const styles = StyleSheet.create((theme) => {
     deleteRow: { marginTop: 14, paddingVertical: 12, borderRadius: radius.md, borderWidth: 1.5, borderColor: color.dangerSoft, alignItems: 'center' },
     deleteText: { fontFamily: fonts.sans.semibold, fontSize: 14, color: color.danger },
 
-    langScroll: { maxHeight: 360, marginTop: 6 },
-
     // premium gate
     gate: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: palette.amber[50], borderWidth: theme.borderWidth.thin, borderColor: palette.amber[200], borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 16 },
     gateText: { flex: 1 },
@@ -372,10 +422,8 @@ const styles = StyleSheet.create((theme) => {
     timeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 14, borderRadius: radius.md, borderWidth: 1.5, borderColor: color.border, backgroundColor: color.surfaceSunken, marginBottom: 16 },
     timeText: { fontFamily: fonts.sans.bold, fontSize: 18, color: color.textMuted },
     timeChange: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-    dayRow: { flexDirection: 'row', gap: 5, marginBottom: 8 },
-    dayChip: { flex: 1, paddingVertical: 9, borderRadius: 8, borderWidth: 1.5, alignItems: 'center' },
-    dayChipText: { fontFamily: fonts.sans.bold, fontSize: 11 },
-    dayHint: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textFaint, marginBottom: 4 },
+    saveError: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.danger, marginTop: 12 },
+    iosPickerWrap: { alignItems: 'center' },
 
     // quiz length
     quizIntro: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 19, color: color.textMuted, marginBottom: 14 },

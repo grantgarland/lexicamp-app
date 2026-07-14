@@ -1,7 +1,8 @@
-# CI-4b (candidate) — search/capture flow smoke: the CRUD surfaces that exist
-# today, against the mock DataSource (`smoke` EAS profile / dev builds).
-# NOT in CI yet: .maestro/config.yaml pins folder runs to smoke.yaml until the
-# hardened nightly pipeline proves green once. Then add this file to config.yaml.
+# CI-4b — search/capture flow smoke: the CRUD surfaces that exist today,
+# against the mock DataSource (`smoke` EAS profile / dev builds).
+# In CI via .maestro/config.yaml since 2026-07-13. First-run caveat: the two
+# steps most likely to need tuning on a real emulator are the row `swipe` and
+# the `below:`-disambiguated confirm tap — if this flow alone is red, start there.
 #
 # What this verifies vs. what it CAN'T (mock-mode reality, 2026-07-13):
 #   CREATE — lookup renders + Save flips to "Saved!". Mock saveCard() is a

@@ -120,10 +120,21 @@ If EAS build becomes unreliable or the service changes, revert to **Option B** (
 
 ## Verification Checklist
 
-- [ ] Update `.github/workflows/nightly-smoke.yml` to call `eas build`
-- [ ] Set up `EXPO_TOKEN` GitHub secret (one-time, not in code)
-- [ ] Run manual nightly once to verify APK build + Maestro flow succeeds
-- [ ] Confirm Maestro assertions pass on the EAS-built APK
-- [ ] Update `02-technical-architecture.md` to note nightly uses EAS free tier
-- [ ] Document the 30/mo EAS budget allocation in the backlog/operating docs
-- [ ] Uncomment the `schedule` block in `.github/workflows/nightly-smoke.yml` to enable nightly cron
+- [x] Update `.github/workflows/nightly-smoke.yml` to call `eas build`
+- [x] Set up `EXPO_TOKEN` GitHub secret (one-time, not in code)
+- [x] Run manual nightly once to verify APK build + Maestro flow succeeds (2026-07-13)
+- [x] Confirm Maestro assertions pass on the EAS-built APK
+- [x] Update `02-technical-architecture.md` to note nightly uses EAS free tier
+- [x] Document the 30/mo EAS budget allocation in the backlog/operating docs (change-gate added 2026-07-12 makes usage proportional to commit activity)
+- [x] Uncomment the `schedule` block in `.github/workflows/nightly-smoke.yml` to enable nightly cron
+
+## Addendum (2026-07-12/13) — post-activation hardening
+
+The first scheduled run 403'd: the change-gate job called `listWorkflowRuns`
+without `actions: read` (the gate's API call never executed on manual dispatch,
+so activation testing couldn't catch it). The workflow now carries an invariants
+block (explicit per-job permissions, every path dispatch-rehearsable, fail-open
+gate, pinned eas-cli/Maestro) — read it before editing the workflow. The smoke
+APK builds the `smoke` EAS profile (mock mode); the `preview` profile is
+live-mode and the Maestro flows cannot pass against it. Flows are manifest-listed
+in `.maestro/config.yaml`.

@@ -7,7 +7,8 @@
     "clear": "Borrar",
     "filter": "Filtrar y ordenar",
     "cancel": "Cancelar",
-    "undo": "Deshacer"
+    "undo": "Deshacer",
+    "done": "Listo"
   },
   "tabs": {
     "home": "Inicio",
@@ -458,12 +459,9 @@
     "timePickerTitle": "Hora del recordatorio",
     "frequency": "Frecuencia",
     "everyDay": "Cada día",
-    "weekdays": "Entre semana",
-    "selectDay": "Selecciona al menos un día.",
-    "remindEveryDay": "Recordatorio cada día.",
-    "remindOn": "Recordatorio los {{days}}.",
+    "saveError": "No se pudieron guardar tus preferencias. Comprueba tu conexión e inténtalo de nuevo.",
     "customTimeTitle": "Hora personalizada con Premium",
-    "customTimeBody": "Elige cualquier hora y días específicos.",
+    "customTimeBody": "Elige la hora que mejor encaje en tu día.",
     "savePreferences": "Guardar preferencias",
     "quizTitle": "Duración del quiz",
     "quizHowMany": "¿Cuántas tarjetas por sesión?",
@@ -493,16 +491,7 @@
     "privacy": "Política de privacidad",
     "acknowledgments": "Reconocimientos",
     "aboutCopyright": "© 2026 Lexicamp. Todos los derechos reservados.",
-    "aboutMadeWith": "Hecho con ♥ para quienes aprenden idiomas.",
-    "weekdayAbbr": [
-      "D",
-      "L",
-      "M",
-      "X",
-      "J",
-      "V",
-      "S"
-    ]
+    "aboutMadeWith": "Hecho con ♥ para quienes aprenden idiomas."
   },
   "deckRow": {
     "studyA11y": "Estudiar mazo",

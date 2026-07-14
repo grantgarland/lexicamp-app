@@ -9,7 +9,7 @@ import { commitWithOutbox } from '@/data/outbox';
 import { type HomeSnapshot, homeSnapshot } from '@/domain/derive';
 import type { BufferedRating } from '@/domain/quiz';
 import type { LookupOutcome } from '@/domain/translation';
-import { type Entitlement, isPaid, type SearchDirection } from '@/domain/types';
+import { type Entitlement, isPaid, type NotificationPrefs, type SearchDirection } from '@/domain/types';
 import { useDevStore } from '@/store/devStore';
 
 export function useProfile() {
@@ -120,6 +120,27 @@ export function useExamples(translationId: string | null) {
     staleTime: Infinity,
   });
   return { examples: q.data ?? null, isLoading: translationId != null && q.isPending };
+}
+
+/** Notification prefs (2.5) — read. Keys on the dev scenario so DevBadge
+ *  account switches refetch, same as the other reads. */
+export function useNotificationPrefs() {
+  const userState = useDevStore((s) => s.userState);
+  const q = useQuery({ queryKey: ['notificationPrefs', userState], queryFn: () => ds.getNotificationPrefs() });
+  return { prefs: q.data, isLoading: q.isLoading };
+}
+
+/** Update notification prefs (write) — the server-side pg_cron scheduler reads
+ *  these (enabled + windows ±30min + min_due), so a saved change takes effect
+ *  on the next 15-min scheduler tick with no app-side scheduling. */
+export function useUpdateNotificationPrefs() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (prefs: Partial<NotificationPrefs>) => ds.updateNotificationPrefs(prefs),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notificationPrefs'] });
+    },
+  });
 }
 
 /** Save a gate-approved translation to the active deck (write → save_card path). */

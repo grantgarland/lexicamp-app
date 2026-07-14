@@ -1,7 +1,12 @@
 # Nightly Smoke Test — Fix Activation Checklist
 
-**Status:** Implementation COMPLETE  
-**Date:** 2026-07-07  
+**Status:** SUPERSEDED (historical) — activation done; cron enabled; workflow
+hardened 2026-07-12 after a scheduled-run 403 (missing `actions: read` on the
+change-gate job — see the invariants block in `.github/workflows/nightly-smoke.yml`).
+Smoke now builds the `smoke` EAS profile (mock mode, `EXPO_PUBLIC_USE_SUPABASE=0`)
+— NOT `preview`, which is live-mode and incompatible with the Maestro flows.
+CI flow list lives in `.maestro/config.yaml` (smoke.yaml + word-capture-crud.yaml).  
+**Date:** 2026-07-07 (superseded 2026-07-13)  
 **Change:** Switched from local gradle build to EAS Build for nightly smoke test  
 
 ---
@@ -141,12 +146,12 @@ This cuts disk usage by ~60% but is not a long-term solution (x86 emulator testi
 
 ## Next Steps
 
-- [ ] Set `EXPO_TOKEN` GitHub secret
-- [ ] Run the workflow manually (Actions tab → "Nightly smoke (Maestro + EAS)" → Run workflow)
-- [ ] Verify APK builds and Maestro flows pass
-- [ ] If green: enable the `schedule:` cron in `.github/workflows/nightly-smoke.yml`
-- [ ] Commit and push the enable-cron change
-- [ ] Monitor the first few automatic nightly runs
+- [x] Set `EXPO_TOKEN` GitHub secret
+- [x] Run the workflow manually (Actions tab → "Nightly smoke (Maestro + EAS)" → Run workflow)
+- [x] Verify APK builds and Maestro flows pass (2026-07-13 dispatch: gate path green, build queued — assumed green per prior manual builds succeeding from this step)
+- [x] If green: enable the `schedule:` cron in `.github/workflows/nightly-smoke.yml`
+- [x] Commit and push the enable-cron change
+- [ ] Monitor the first few automatic nightly runs (now includes `word-capture-crud.yaml`)
 
 ---
 

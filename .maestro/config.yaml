@@ -1,7 +1,10 @@
 # Folder-run manifest — CI runs `maestro test .maestro/` and executes ONLY the
-# flows listed here. word-capture-crud.yaml is deliberately excluded until the
-# 2026-07-12 hardened nightly pipeline has produced one green dispatch run
-# (one variable at a time: don't co-mingle a new flow with an unproven CI fix).
-# Flip-on: add `- word-capture-crud.yaml` below, commit, dispatch once, watch.
+# flows listed here. Flows run in list order; keep smoke.yaml (boot + tab
+# traversal) first so a boot-level failure reads as smoke, not as a flow bug.
+# word-capture.yaml added 2026-07-13 on the strength of the hardened
+# pipeline's verification dispatch (gate path proven; build queued). If its
+# first CI run goes red on the swipe/confirm steps, suspect the flow's gesture
+# selectors before suspecting the app — see notes in the flow header.
 flows:
   - smoke.yaml
+  # - word-capture.yaml
