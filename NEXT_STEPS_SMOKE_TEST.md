@@ -148,10 +148,19 @@ This cuts disk usage by ~60% but is not a long-term solution (x86 emulator testi
 
 - [x] Set `EXPO_TOKEN` GitHub secret
 - [x] Run the workflow manually (Actions tab → "Nightly smoke (Maestro + EAS)" → Run workflow)
-- [x] Verify APK builds and Maestro flows pass (2026-07-13 dispatch: gate path green, build queued — assumed green per prior manual builds succeeding from this step)
+- [x] ~~Verify APK builds and Maestro flows pass~~ **NOT actually verified in 2026-07-13** —
+  the "assumed green" note was wrong; runs failed *before* an installed build until
+  2026-07-15. Build/download plumbing since fixed (`eas-cli@20` spec; `--json`+`jq`+`curl`
+  download since `--output` is local-only). First installed-build run (2026-07-15) then went
+  red on a case-mismatch (UPPERCASE a11y text vs case-sensitive Maestro) — fixed with `(?i)`.
+  See the 2026-07-15 addendum in `SMOKE_TEST_DIAGNOSIS.md`.
 - [x] If green: enable the `schedule:` cron in `.github/workflows/nightly-smoke.yml`
 - [x] Commit and push the enable-cron change
-- [ ] Monitor the first few automatic nightly runs (now includes `word-capture-crud.yaml`)
+- [ ] **Confirm the first GREEN run** via `workflow_dispatch` (bypasses the change-gate) with the
+  `(?i)` + helper-script fixes applied
+- [ ] Monitor the first few automatic nightly runs. NOTE: `word-capture.yaml` (formerly
+  `word-capture-crud.yaml`) is currently commented out in `.maestro/config.yaml`; only
+  `smoke.yaml` runs. Its eyebrow asserts are `(?i)`-fixed, but the rest is unverified past Home.
 
 ---
 

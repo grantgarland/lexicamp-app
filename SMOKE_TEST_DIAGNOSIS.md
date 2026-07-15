@@ -138,3 +138,42 @@ gate, pinned eas-cli/Maestro) — read it before editing the workflow. The smoke
 APK builds the `smoke` EAS profile (mock mode); the `preview` profile is
 live-mode and the Maestro flows cannot pass against it. Flows are manifest-listed
 in `.maestro/config.yaml`.
+
+## Addendum (2026-07-15) — smoke first reached an installed build; real root cause found
+
+CORRECTION to the Verification Checklist above: the "Maestro assertions pass"
+items were never actually verified — every run through 2026-07-14 failed *before*
+an installed build, so the flows had never run against the app until 2026-07-15.
+
+Resolution chain (all fixed):
+1. **Build plumbing** — `npx eas build` failed (`eas-cli` was removed from deps →
+   `could not determine executable to run`); fixed with an `eas-cli@20` spec.
+2. **Artifact download** — `--wait` does NOT download the APK, and `--output` is
+   local-build-only ("--output is allowed only for local builds"). Now the build
+   runs with `--json`, and a follow-up step parses `artifacts.applicationArchiveUrl`
+   with `jq` and `curl`s the APK to the path the emulator step expects.
+3. **Real failure (the one that mattered)** — with the APK finally installed, the
+   flow went red at the FIRST assertion. Logcat proved the app launched clean (no
+   crash: `ReactNativeJS: Running "main"`, MainActivity displayed, splash
+   dismissed). The cause is a flow/​render mismatch, not the app: eyebrow and
+   section labels use `textTransform: 'uppercase'`, so the ACCESSIBILITY text
+   Maestro reads is UPPERCASE ("WORD MASTERY", "YOU ARE HERE", "ACCOUNT"), and
+   Maestro matches text case-SENSITIVELY. Fix: the `(?i)` inline regex flag on all
+   text assertions in `.maestro/smoke.yaml` (3 of 4 were affected — tab labels and
+   the "My Words" title are not transformed) and the two eyebrow asserts in
+   `.maestro/word-capture.yaml`.
+
+Tooling note: `reactivecircus/android-emulator-runner` runs each `script:` LINE as
+its own `sh -c`, so multi-line shell logic (captured vars, `set -e`, post-run
+cleanup) does not carry across lines. The emulator step now calls a single helper,
+`scripts/ci-smoke-emulator.sh` (APK install + logcat capture + inline crash grep +
+maestro exit-code passthrough), so the diagnostics actually run.
+
+Filename note: the second flow is `.maestro/word-capture.yaml` (older docs call it
+`word-capture-crud.yaml`); it is currently commented out in `.maestro/config.yaml`,
+so only `smoke.yaml` runs in CI. Status: fixes are committed to files but the green
+run is still pending a `workflow_dispatch` confirmation.
+
+Unrelated wart worth noting: a ~13-minute gap between Maestro driver startup and
+first app launch on the CI emulator (gRPC epoll native-load failure in logcat) —
+it eats the job's time budget but is not the failure.

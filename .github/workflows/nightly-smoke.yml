@@ -32,7 +32,7 @@ name: Nightly smoke (Maestro + EAS)
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 8 * * *' # 08:00 UTC ≈ 3–4am ET, before the workday
+    - cron: "0 8 * * *" # 08:00 UTC ≈ 3–4am ET, before the workday
 
 concurrency:
   group: nightly-smoke
@@ -42,13 +42,13 @@ concurrency:
 permissions: {}
 
 env:
-  EXPO_NO_TELEMETRY: '1'
+  EXPO_NO_TELEMETRY: "1"
   # Tool pins (invariant 3). eas-cli pinned to the major (patches absorbed,
   # breaking majors excluded); eas.json enforces the >= 20.3.0 floor. Maestro's
   # installer takes an exact version only. Latest as of 2026-07-12: eas-cli
   # 20.5.1, Maestro 2.6.1.
-  EAS_CLI_SPEC: 'eas-cli@20'
-  MAESTRO_VERSION: '2.6.1'
+  EAS_CLI_SPEC: "eas-cli@20"
+  MAESTRO_VERSION: "2.6.1"
 
 jobs:
   # Change gate: skip the (expensive) EAS build when nothing has been committed
@@ -183,34 +183,12 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          script: |
-            adb install android/app/build/outputs/apk/debug/app-debug.apk
-
-            # Diagnostics (2026-07-14): a red flow tells us an assertion failed but
-            # not WHY. The flows run against a RELEASE build (__DEV__=false) where a
-            # JS crash or a stuck launch gate renders a blank screen and every
-            # assertion fails identically. Capture logcat across the Maestro run so
-            # the failure artifact carries the crash trace, not just the assertion.
-            adb logcat -c
-            adb logcat -v time > logcat.txt 2>&1 &
-            LOGCAT_PID=$!
-
-            # Don't let a failing flow abort the step before logcat is harvested —
-            # capture the status, tear down, then re-raise it as the step's result.
-            set +e
-            maestro test .maestro/ --format junit --output maestro-report.xml
-            MAESTRO_STATUS=$?
-            set -e
-
-            kill "$LOGCAT_PID" 2>/dev/null || true
-
-            # Surface the app's own crashes/fatals inline so the run log alone is
-            # often enough — the full logcat still ships in the artifact.
-            echo "::group::logcat — lexicamp / crashes / fatals"
-            grep -iE 'lexicamp|FATAL|AndroidRuntime|ReactNative|beginning of crash' logcat.txt | tail -100 || true
-            echo "::endgroup::"
-
-            exit $MAESTRO_STATUS
+          # Single-command invocation: android-emulator-runner runs each script
+          # LINE as its own `sh -c`, so multi-line logic (LOGCAT_PID, set +e,
+          # post-maestro grep, exit passthrough) only works inside one shell —
+          # hence the helper script. Installs the APK, captures logcat across the
+          # run, greps crashes inline, and re-raises Maestro's exit code.
+          script: bash scripts/ci-smoke-emulator.sh
 
       - name: Upload Maestro artifacts
         if: always()

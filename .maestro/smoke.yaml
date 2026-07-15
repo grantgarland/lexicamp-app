@@ -14,23 +14,26 @@ appId: com.lexicamp.app
 - launchApp:
     clearState: true
 
+# NOTE: eyebrow/section labels render via `textTransform: 'uppercase'`, so the
+# accessibility text Maestro sees is UPPERCASE. Maestro matches text as a case-SENSITIVE regex, so assertions use
+# the `(?i)` inline flag to match regardless of cosmetic casing.
 # ── Home ─────────────────────────────────────────────────────────────────────
 - extendedWaitUntil:
-    visible: 'Word Mastery'
+    visible: '(?i)Word Mastery'
     timeout: 20000
 
 # ── Word List ────────────────────────────────────────────────────────────────
 - tapOn: 'Word List'
-- assertVisible: 'My Words'
+- assertVisible: '(?i)My Words'
 
 # ── Progress ─────────────────────────────────────────────────────────────────
 - tapOn: 'Progress'
-- assertVisible: 'You are here'
+- assertVisible: '(?i)You are here'
 
 # ── Settings ─────────────────────────────────────────────────────────────────
 - tapOn: 'Settings'
-- assertVisible: 'Account'
+- assertVisible: '(?i)Account'
 
 # ── Back to Home (round trip — catches the dead-screen-after-nav class) ──────
 - tapOn: 'Home'
-- assertVisible: 'Word Mastery'
+- assertVisible: '(?i)Word Mastery'

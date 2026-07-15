@@ -31,7 +31,7 @@ tags:
 - launchApp:
     clearState: true
 - extendedWaitUntil:
-    visible: 'Word Mastery'
+    visible: '(?i)Word Mastery'
     timeout: 20000
 
 # ── Open search (FAB, a11y label "Search") ───────────────────────────────────
@@ -103,4 +103,4 @@ tags:
 
 # ── Round trip home (same dead-screen guard as smoke.yaml) ───────────────────
 - tapOn: 'Home'
-- assertVisible: 'Word Mastery'
+- assertVisible: '(?i)Word Mastery'
