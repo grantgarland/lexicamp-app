@@ -59,7 +59,9 @@ export function SettingsScreen() {
     notifPrefs == null
       ? '…'
       : notifPrefs.enabled
-        ? t('settings.remindersOnAt', { time: formatReminderTime(notifPrefs.windows[0]?.time ?? '19:00') })
+        ? notifPrefs.days.length < 7
+          ? t('settings.remindersOnAtDays', { time: formatReminderTime(notifPrefs.windows[0]?.time ?? '19:00'), count: notifPrefs.days.length })
+          : t('settings.remindersOnAt', { time: formatReminderTime(notifPrefs.windows[0]?.time ?? '19:00') })
         : t('settings.remindersOff');
 
   return (

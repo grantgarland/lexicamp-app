@@ -221,12 +221,13 @@ export const supabaseDataSource: DataSource = {
   async getNotificationPrefs(): Promise<NotificationPrefs> {
     const { data, error } = await supabase.from('notification_prefs').select('*').maybeSingle();
     bail(error);
-    if (data == null) return { enabled: false, frequency: 'daily', windows: [{ time: '19:00' }], minDueToNotify: 1 };
+    if (data == null) return { enabled: false, frequency: 'daily', windows: [{ time: '19:00' }], minDueToNotify: 1, days: [0, 1, 2, 3, 4, 5, 6] };
     return {
       enabled: data.enabled,
       frequency: data.frequency,
       windows: data.windows ?? [{ time: '19:00' }],
       minDueToNotify: data.min_due_to_notify ?? 1,
+      days: data.days ?? [0, 1, 2, 3, 4, 5, 6],
     };
   },
 
@@ -237,6 +238,7 @@ export const supabaseDataSource: DataSource = {
     if (prefs.frequency != null) row.frequency = prefs.frequency;
     if (prefs.windows != null) row.windows = prefs.windows;
     if (prefs.minDueToNotify != null) row.min_due_to_notify = prefs.minDueToNotify;
+    if (prefs.days != null) row.days = prefs.days; // 18 §C1 (server rejects empty/invalid)
     const { error } = await supabase.from('notification_prefs').upsert(row, { onConflict: 'user_id' });
     bail(error);
   },

@@ -101,6 +101,9 @@ export interface NotificationPrefs {
   /** e.g. [{ time: '19:00' }] — local times in the user's profile timezone. */
   windows: { time: string }[];
   minDueToNotify: number;
+  /** Weekdays the reminder may fire (dow 0=Sun..6=Sat, user's local tz; 18 §C1).
+   *  Never empty — the server constraint rejects it. */
+  days: number[];
 }
 
 // ── Derived (not stored) ─────────────────────────────────────────────────────

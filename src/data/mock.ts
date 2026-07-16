@@ -297,7 +297,7 @@ function mockLookupResult(query: string, direction: SearchDirection): LookupOutc
 const scenario = () => useDevStore.getState();
 
 // In-memory notification prefs (03 onboarding defaults).
-const mockPrefs: NotificationPrefs = { enabled: true, frequency: 'daily', windows: [{ time: '19:00' }], minDueToNotify: 1 };
+const mockPrefs: NotificationPrefs = { enabled: true, frequency: 'daily', windows: [{ time: '19:00' }], minDueToNotify: 1, days: [0, 1, 2, 3, 4, 5, 6] };
 
 export const mockDataSource: DataSource = {
   async completeOnboarding(_input) {

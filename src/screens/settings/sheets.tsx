@@ -14,6 +14,7 @@ import { useTranslation } from '@/i18n';
 import { registerForPush } from '@/notifications/push';
 import { useNotificationPrefs, useUpdateNotificationPrefs } from '@/query/hooks';
 import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
+import { useUiStore } from '@/store/uiStore';
 import {
   Button,
   ConfirmDialog,
@@ -47,6 +48,15 @@ function hhmmToDate(s: string): Date {
 }
 function dateToHHMM(d: Date): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+/** C3: reminder times step in 15-min increments. iOS enforces via minuteInterval;
+ *  Android's clock dialog can't, so the picked value rounds to the nearest step
+ *  (rolling over midnight safely via Date math). */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function roundToQuarterHour(d: Date): Date {
+  const r = new Date(d);
+  r.setMinutes(Math.round(r.getMinutes() / 15) * 15, 0, 0);
+  return r;
 }
 export function formatReminderTime(hhmm: string): string {
   const { h, m } = parseHHMM(hhmm);
@@ -92,6 +102,18 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
   const [picker, setPicker] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // Re-seed the draft each open (render-adjust, same as NotificationSheet) so
+  // dirty-gating compares against current profile state, not stale edits.
+  const [seededOpen, setSeededOpen] = useState(false);
+  if (!visible && seededOpen) setSeededOpen(false);
+  if (visible && !seededOpen) {
+    setSeededOpen(true);
+    setName(profile?.displayName ?? '');
+    setLearning(profile?.targetLang ?? 'es');
+  }
+  // C4 pattern (Casey follow-up): Save stays disabled until something changed.
+  const dirty = name.trim() !== (profile?.displayName ?? '') || learning !== (profile?.targetLang ?? 'es');
+
   const nativeLang = profile?.nativeLang ?? 'en';
   const learningLabel = findLanguage(learning)?.name ?? languageName(learning as LanguageCode);
   // Learning target can be any translatable language except the user's native one.
@@ -123,7 +145,7 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
         )}
 
         <View style={styles.saveWrap}>
-          <Button title={t('settings.saveChanges')} variant="primary" onPress={onClose} />
+          <Button title={t('settings.save')} variant="primary" disabled={!dirty} onPress={onClose} />
         </View>
         <Pressable onPress={() => setConfirmDelete(true)} style={({ pressed }) => [styles.deleteRow, pressed && { opacity: 0.7 }]} accessibilityRole="button">
           <RawText style={styles.deleteText}>{t('settings.deleteAccount')}</RawText>
@@ -155,24 +177,22 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
 }
 
 // ── SE-02 Study Reminders ───────────────────────────────────────────────────
-// Wired to DataSource notification prefs (2.5 app half). The draft mirrors the
-// 03 shape — enabled + windows — which is what the server-side pg_cron
-// scheduler actually reads; there is no days-of-week concept, so the old
-// (local-state-only) weekday chips are gone. The UI also deliberately offers
-// NO frequency selector: run_push_scheduler() caps at one push per user per
-// local day (push_log dedupe), so a second window can never fire — offering
-// "twice daily" would save but silently not deliver. If that cap is ever
-// relaxed to per-window dedupe (backlog), add the selector back here. The
-// stored frequency and any extra windows round-trip untouched; the UI edits
-// windows[0] only.
+// Wired to DataSource notification prefs. Draft mirrors the 03 shape — enabled +
+// windows + days — which the server-side pg_cron scheduler reads. Weekday chips
+// RETURNED in Phase C (18 §C1/C2) now that the scheduler honestly honors them
+// (they were removed in 2.5 as local-state fiction). Still NO frequency selector:
+// the scheduler caps at one push per user per local day. Free tier: on/off only;
+// time + days are premium (D2). Save is dirty-gated and toasts on success (C4).
 export function NotificationSheet({ visible, isPaid, onClose, onUpgrade }: { visible: boolean; isPaid: boolean; onClose: () => void; onUpgrade: () => void }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const { prefs } = useNotificationPrefs();
   const update = useUpdateNotificationPrefs();
+  const showToast = useUiStore((s) => s.showToast);
 
   const [enabled, setEnabled] = useState(true);
   const [windows, setWindows] = useState<{ time: string }[]>([{ time: FALLBACK_WINDOW }]);
+  const [days, setDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
   const [editing, setEditing] = useState<number | null>(null); // window index open in the native picker
   const [saveAttempted, setSaveAttempted] = useState(false);
   const [seededFor, setSeededFor] = useState<NotificationPrefs | null>(null);
@@ -186,24 +206,46 @@ export function NotificationSheet({ visible, isPaid, onClose, onUpgrade }: { vis
     setSeededFor(prefs);
     setEnabled(prefs.enabled);
     setWindows(prefs.windows.length > 0 ? prefs.windows : [{ time: FALLBACK_WINDOW }]);
+    setDays(prefs.days.length > 0 ? [...prefs.days].sort((a, b) => a - b) : [0, 1, 2, 3, 4, 5, 6]);
     setEditing(null);
     setSaveAttempted(false); // a previous open's failed save shouldn't show stale
   }
 
   const setTime = (idx: number, time: string) => setWindows((w) => w.map((win, i) => (i === idx ? { time } : win)));
+  const toggleDay = (d: number) =>
+    setDays((cur) => {
+      if (cur.includes(d)) {
+        // Never allow an empty selection — the server constraint rejects it, and
+        // "reminders on but zero days" would be silently-off dishonest UI.
+        if (cur.length === 1) return cur;
+        return cur.filter((x) => x !== d);
+      }
+      return [...cur, d].sort((a, b) => a - b);
+    });
+
+  // C4: dirty-gating — Save only lights up when the draft differs from the
+  // server state (free users can only dirty the toggle).
+  const sameDays = (a: number[], b: number[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+  const dirty =
+    prefs != null &&
+    (enabled !== prefs.enabled ||
+      (isPaid &&
+        ((windows[0]?.time ?? FALLBACK_WINDOW) !== (prefs.windows[0]?.time ?? FALLBACK_WINDOW) ||
+          !sameDays(days, [...prefs.days].sort((a, b) => a - b)))));
 
   const save = () => {
     setSaveAttempted(true);
     // Free users only control the on/off switch — send a partial so their
-    // stored windows are never clobbered by the locked draft. Paid saves the
-    // full windows array (only [0] is editable; extras round-trip untouched).
-    const patch: Partial<NotificationPrefs> = isPaid ? { enabled, windows } : { enabled };
+    // stored windows/days are never clobbered by the locked draft. Paid saves
+    // windows (only [0] editable; extras round-trip untouched) + days.
+    const patch: Partial<NotificationPrefs> = isPaid ? { enabled, windows, days } : { enabled };
     update.mutate(patch, {
       onSuccess: () => {
         // Opting in from Settings registers the device push token (push.ts
         // contract: call after explicit opt-in, never unprompted). Fire-and-
         // forget — a denied OS prompt must not block saving prefs.
         if (enabled) void registerForPush().catch(() => {});
+        showToast({ variant: 'success', message: t('settings.prefsSaved') });
         onClose();
       },
     });
@@ -240,12 +282,38 @@ export function NotificationSheet({ visible, isPaid, onClose, onUpgrade }: { vis
           </View>
         )}
 
+        {/* C2: weekday selection (dow 0=Sun..6=Sat) — premium; the scheduler
+            now honors it server-side. At least one day always stays on. */}
+        <FieldLabel>{t('settings.reminderDays')}</FieldLabel>
+        <View style={styles.dayRow}>
+          {(t('settings.daysShort', { returnObjects: true }) as string[]).map((label, d) => {
+            const on = days.includes(d);
+            return (
+              <Pressable
+                key={d}
+                disabled={!isPaid}
+                onPress={() => toggleDay(d)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: on, disabled: !isPaid }}
+                accessibilityLabel={(t('date.days', { returnObjects: true }) as string[])[d]}
+                style={[
+                  styles.dayChip,
+                  { backgroundColor: on ? theme.color.brand : theme.color.surfaceSunken, borderColor: on ? theme.color.brand : theme.color.border },
+                  !isPaid && { opacity: 0.45 },
+                ]}
+              >
+                <RawText style={[styles.dayChipText, { color: on ? '#fff' : theme.color.textMuted }]}>{label}</RawText>
+              </Pressable>
+            );
+          })}
+        </View>
+
         {!isPaid && <PremiumGate title={t('settings.customTimeTitle')} body={t('settings.customTimeBody')} onUpgrade={onUpgrade} />}
       </View>
 
       {saveAttempted && update.isError && <RawText style={styles.saveError}>{t('settings.saveError')}</RawText>}
       <View style={styles.saveWrap}>
-        <Button title={t('settings.savePreferences')} variant="primary" disabled={update.isPending || prefs == null} onPress={save} />
+        <Button title={t('settings.save')} variant="primary" disabled={!dirty || update.isPending || prefs == null} onPress={save} />
       </View>
     </Sheet>
 
@@ -270,6 +338,7 @@ export function NotificationSheet({ visible, isPaid, onClose, onUpgrade }: { vis
           <DateTimePicker
             mode="time"
             display="spinner"
+            minuteInterval={15}
             value={hhmmToDate(windows[editing]?.time ?? FALLBACK_WINDOW)}
             onValueChange={(_e: DateTimePickerChangeEvent, d: Date) => {
               if (editing != null) setTime(editing, dateToHHMM(d));
@@ -294,6 +363,7 @@ export function QuizLengthSheet({ visible, isPaid, onClose, onUpgrade }: { visib
   const { t } = useTranslation();
   const quizLength = usePrefsStore((s) => s.quizLength);
   const setQuizLength = usePrefsStore((s) => s.setQuizLength);
+  const showToast = useUiStore((s) => s.showToast);
   const [selected, setSelected] = useState(isPaid ? quizLength : QUIZ_LENGTH_FREE);
   // Re-seed the draft each open so a canceled edit doesn't linger (render-adjust
   // pattern, same as NotificationSheet).
@@ -304,8 +374,12 @@ export function QuizLengthSheet({ visible, isPaid, onClose, onUpgrade }: { visib
     setSelected(isPaid ? quizLength : QUIZ_LENGTH_FREE);
   }
 
+  // C4 pattern (Casey follow-up): Save stays disabled until the choice changed.
+  const dirty = isPaid && selected !== quizLength;
+
   const save = () => {
     setQuizLength(selected);
+    showToast({ variant: 'success', message: t('settings.prefsSaved') });
     onClose();
   };
 
@@ -335,7 +409,7 @@ export function QuizLengthSheet({ visible, isPaid, onClose, onUpgrade }: { visib
       </View>
       <View style={styles.saveWrap}>
         {isPaid ? (
-          <Button title={t('settings.quizSave')} variant="primary" onPress={save} />
+          <Button title={t('settings.save')} variant="primary" disabled={!dirty} onPress={save} />
         ) : (
           <Button title={t('settings.upgradeToPremium')} variant="primary" onPress={onUpgrade} />
         )}
@@ -458,6 +532,9 @@ const styles = StyleSheet.create((theme) => {
     timeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 14, borderRadius: radius.md, borderWidth: 1.5, borderColor: color.border, backgroundColor: color.surfaceSunken, marginBottom: 16 },
     timeText: { fontFamily: fonts.sans.bold, fontSize: 18, color: color.textMuted },
     timeChange: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    dayRow: { flexDirection: 'row', gap: 6, marginBottom: 16 },
+    dayChip: { flex: 1, aspectRatio: 1, maxHeight: 42, borderRadius: 10, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+    dayChipText: { fontFamily: fonts.sans.bold, fontSize: 13 },
     saveError: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.danger, marginTop: 12 },
     iosPickerWrap: { alignItems: 'center' },
 
