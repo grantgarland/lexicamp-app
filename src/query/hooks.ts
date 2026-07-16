@@ -40,10 +40,11 @@ export function useHomeData(): HomeData {
   return { snapshot, streakDays: eng.data?.streakDays ?? 0, isLoading: deck.isLoading || eng.isLoading };
 }
 
-/** The study-session due queue (read). */
-export function useDueCards() {
+/** The study-session queue (read) — due-now plus next-due fill to `limit`
+ *  (18 §2c). The limit keys the query so a quiz-length change refetches. */
+export function useDueCards(limit: number) {
   const userState = useDevStore((s) => s.userState);
-  const q = useQuery({ queryKey: ['dueCards', userState], queryFn: () => ds.getDueCards() });
+  const q = useQuery({ queryKey: ['dueCards', userState, limit], queryFn: () => ds.getDueCards(limit) });
   return { cards: q.data ?? [], isLoading: q.isLoading };
 }
 
@@ -143,21 +144,44 @@ export function useUpdateNotificationPrefs() {
   });
 }
 
-/** Save a gate-approved translation to the active deck (write → save_card path). */
+/** Save a gate-approved translation to the active deck (write → save_card path).
+ *  Optional `custom` carries a chosen NON-primary sense (A12c). Resolves the new
+ *  card id (null in mock mode). */
 export function useSaveCard() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (translationId: string) => ds.saveCard(translationId),
+    mutationFn: (input: { translationId: string; custom?: { front?: string; back?: string } }) =>
+      ds.saveCard(input.translationId, input.custom),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['deckCards'] });
       qc.invalidateQueries({ queryKey: ['words'] });
+      qc.invalidateQueries({ queryKey: ['dueCards'] });
     },
   });
 }
 
-/** Commit a completed quiz session (write) — invalidates home/due reads on
- *  success. Offline-resilient: transport failures queue in the outbox and
- *  replay on reconnect (2.4); server errors still surface. */
+/** Delete a saved card (write → delete_card RPC; A12b). Destructive — the
+ *  word's FSRS history cascades away with it. */
+export function useDeleteCard() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (cardId: string) => ds.deleteCard(cardId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['deckCards'] });
+      qc.invalidateQueries({ queryKey: ['words'] });
+      qc.invalidateQueries({ queryKey: ['dueCards'] });
+    },
+  });
+}
+
+/** Commit a completed quiz session (write) — invalidates EVERY read that
+ *  derives from per-card FSRS state, not just the home/due pair: a session
+ *  changes each rated word's stability (tier badges in the Word List + tier
+ *  drawer via 'words'), the all-time stats ('progressStats'), and the streak
+ *  ('engagement'). Missing any of these leaves promoted words rendering their
+ *  old tier until an unrelated refetch (Casey bug, 2026-07-16).
+ *  Offline-resilient: transport failures queue in the outbox and replay on
+ *  reconnect (2.4); server errors still surface. */
 export function useCommitQuizSession() {
   const qc = useQueryClient();
   return useMutation({
@@ -166,6 +190,9 @@ export function useCommitQuizSession() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['deckCards'] });
       qc.invalidateQueries({ queryKey: ['dueCards'] });
+      qc.invalidateQueries({ queryKey: ['words'] });
+      qc.invalidateQueries({ queryKey: ['progressStats'] });
+      qc.invalidateQueries({ queryKey: ['engagement'] });
     },
   });
 }

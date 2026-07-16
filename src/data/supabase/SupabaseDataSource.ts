@@ -33,7 +33,6 @@ import {
   type TranslationJoin,
 } from './mappers';
 
-const QUIZ_SESSION_CAP = 20;
 
 async function uid(): Promise<string> {
   const { data } = await supabase.auth.getSession();
@@ -83,9 +82,24 @@ export const supabaseDataSource: DataSource = {
     return data as LookupOutcome;
   },
 
-  async saveCard(translationId: string): Promise<void> {
+  async saveCard(translationId: string, custom?: { front?: string; back?: string }): Promise<string | null> {
     const deck = await this.getActiveDeck();
-    const { error } = await supabase.rpc('save_card', { p_translation_id: translationId, p_deck_id: deck.id });
+    // A12c: a non-primary sense rides in as custom_front/custom_back — the card
+    // then renders the sense the user actually chose (mappers already prefer
+    // the custom fields over the cache row's primary sense).
+    const { data, error } = await supabase.rpc('save_card', {
+      p_translation_id: translationId,
+      p_deck_id: deck.id,
+      p_custom_front: custom?.front ?? null,
+      p_custom_back: custom?.back ?? null,
+    });
+    bail(error);
+    return (data as string | null) ?? null;
+  },
+
+  async deleteCard(cardId: string): Promise<void> {
+    // A12b: the real delete — cascades FSRS state server-side + logs word_deleted.
+    const { error } = await supabase.rpc('delete_card', { p_card_id: cardId });
     bail(error);
   },
 
@@ -171,20 +185,37 @@ export const supabaseDataSource: DataSource = {
     return rows.map((r) => mapWordListItem(r, r.translations_cache, r.card_fsrs_state));
   },
 
-  async getDueCards(): Promise<QuizCardItem[]> {
+  async getDueCards(limit: number): Promise<QuizCardItem[]> {
+    // 18 §2c fill composition — two ordered pulls: (1) everything due now,
+    // oldest overdue first; (2) if the due count is under the session cap,
+    // top up with the NEXT-due upcoming cards (dueAt asc). Reviewing ahead is
+    // FSRS-legitimate (ts-fsrs schedules from actual elapsed time), and the
+    // ordering guarantees the fill is always the highest-priority words.
     const profile = await this.getProfile();
-    const { data, error } = await supabase
+    const nowIso = new Date().toISOString();
+    const { data: dueData, error: dueErr } = await supabase
       .from('cards')
       .select(DUE_JOIN)
       .eq('suspended', false)
-      .lte('card_fsrs_state.due_at', new Date().toISOString())
+      .lte('card_fsrs_state.due_at', nowIso)
       .order('due_at', { referencedTable: 'card_fsrs_state', ascending: true })
-      .limit(QUIZ_SESSION_CAP);
-    bail(error);
-    const rows = (data ?? []) as unknown as JoinedCardRow[];
-    return rows
-      .filter((r) => r.card_fsrs_state != null)
-      .map((r) => mapQuizItem(r, r.translations_cache, r.card_fsrs_state, profile.targetLang));
+      .limit(limit);
+    bail(dueErr);
+    const rows = ((dueData ?? []) as unknown as JoinedCardRow[]).filter((r) => r.card_fsrs_state != null);
+
+    const remaining = limit - rows.length;
+    if (remaining > 0) {
+      const { data: nextData, error: nextErr } = await supabase
+        .from('cards')
+        .select(DUE_JOIN)
+        .eq('suspended', false)
+        .gt('card_fsrs_state.due_at', nowIso)
+        .order('due_at', { referencedTable: 'card_fsrs_state', ascending: true })
+        .limit(remaining);
+      bail(nextErr);
+      rows.push(...((nextData ?? []) as unknown as JoinedCardRow[]).filter((r) => r.card_fsrs_state != null));
+    }
+    return rows.map((r) => mapQuizItem(r, r.translations_cache, r.card_fsrs_state, profile.targetLang));
   },
 
   async getNotificationPrefs(): Promise<NotificationPrefs> {

@@ -66,7 +66,14 @@ export function QuizScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
   const { t } = useTranslation();
-  const { cards, isLoading } = useDueCards();
+  // Session size = the persisted quiz-length pref (17 §S2 / 18 §2c); free tier
+  // pinned. The DataSource composes the session: due-now first, filled with
+  // next-due upcoming words to the cap — so "Study now" always has a session
+  // while the deck has words.
+  const { isPaid } = useEntitlement();
+  const quizLength = usePrefsStore((s) => s.quizLength);
+  const sessionCap = isPaid ? quizLength : QUIZ_LENGTH_FREE;
+  const { cards, isLoading } = useDueCards(sessionCap);
   const { streakDays } = useHomeData();
   const commit = useCommitQuizSession();
 
@@ -76,20 +83,13 @@ export function QuizScreen() {
   const [ratings, setRatings] = useState<BufferedRating[]>([]);
   const [showExit, setShowExit] = useState(false);
 
-  // Session size = the one persisted quiz-length pref (17 §S2/X4); free tier is
-  // pinned to QUIZ_LENGTH_FREE. The due queue beyond the cap stays due — it
-  // simply waits for the next session.
-  const { isPaid } = useEntitlement();
-  const quizLength = usePrefsStore((s) => s.quizLength);
-  const sessionCap = isPaid ? quizLength : QUIZ_LENGTH_FREE;
-
   // SNAPSHOT the session's cards once the queue arrives (render-adjust pattern).
-  // Committing invalidates the dueCards query and the refetch comes back EMPTY
-  // (nothing is due anymore — FSRS worked), so the end/stats/promo phases must
-  // render from this frozen list, never the live query.
+  // Committing invalidates the dueCards query and the refetch may come back
+  // different (ratings re-scheduled everything), so the end/stats/promo phases
+  // must render from this frozen list, never the live query.
   const [sessionCards, setSessionCards] = useState<QuizCardItem[] | null>(null);
-  if (sessionCards == null && cards.length > 0) setSessionCards(cards.slice(0, sessionCap));
-  const sc = sessionCards ?? cards.slice(0, sessionCap);
+  if (sessionCards == null && cards.length > 0) setSessionCards(cards);
+  const sc = sessionCards ?? cards;
 
   const total = sc.length;
   const card = sc[idx];

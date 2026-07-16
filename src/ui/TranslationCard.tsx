@@ -2,14 +2,13 @@
 // TranslationCard + TranslationItem. A headword header (direction chips · POS ·
 // headword · phonetic) over an accordion of translations; the expanded ("current")
 // item shows an example, optional details, and a save / saved / delete action.
-import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
 import { Card } from './Card';
-import { IconArrowRight, IconBook, IconCheck, IconChevronDown, IconChevronUp, IconInfo, IconLock, IconTrash } from './icons';
+import { IconArrowRight, IconBook, IconCheck, IconChevronDown, IconInfo, IconLock, IconTrash } from './icons';
 import { RawText as RNText } from './Text';
 
 export interface TranslationExample {
@@ -137,16 +136,6 @@ function TranslationItem({
 }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
-  const [showDetails, setShowDetails] = useState(false);
-
-  // Reset the details disclosure whenever this row collapses. Done during render (the
-  // lint-clean equivalent of a reset effect): React re-renders immediately on the
-  // guarded setState, before paint. See react.dev "adjusting state on prop change".
-  const [wasExpanded, setWasExpanded] = useState(isExpanded);
-  if (wasExpanded !== isExpanded) {
-    setWasExpanded(isExpanded);
-    if (!isExpanded) setShowDetails(false);
-  }
 
   // Layout-animated shell: height animates as the current word changes; the
   // collapsed row and the expanded "current word" block crossfade in/out.
@@ -177,29 +166,21 @@ function TranslationItem({
             </View>
           )}
 
+          {/* Details render unconditionally when present (Casey, 2026-07-16: the
+              "More details" disclosure was a tap-tax paid on every lookup). */}
           {translation.details != null && translation.details.length > 0 && (
             <View style={styles.detailsWrap}>
-              <Pressable onPress={() => setShowDetails((d) => !d)} style={styles.detailsToggle} accessibilityRole="button">
-                {showDetails ? (
-                  <IconChevronUp size={13} color={theme.color.textMuted} />
-                ) : (
-                  <IconChevronDown size={13} color={theme.color.textMuted} />
-                )}
-                <RNText style={styles.detailsToggleText}>{t('translationCard.moreDetails')}</RNText>
-              </Pressable>
-              {showDetails && (
-                <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.detailsList}>
-                  {translation.details.map((d, i) => (
-                    <View
-                      key={d.label}
-                      style={[styles.detailRow, i < translation.details!.length - 1 && styles.detailRowBorder]}
-                    >
-                      <RNText style={styles.detailLabel}>{d.label}</RNText>
-                      <RNText style={styles.detailValue}>{d.value}</RNText>
-                    </View>
-                  ))}
-                </Animated.View>
-              )}
+              <View style={styles.detailsList}>
+                {translation.details.map((d, i) => (
+                  <View
+                    key={d.label}
+                    style={[styles.detailRow, i < translation.details!.length - 1 && styles.detailRowBorder]}
+                  >
+                    <RNText style={styles.detailLabel}>{d.label}</RNText>
+                    <RNText style={styles.detailValue}>{d.value}</RNText>
+                  </View>
+                ))}
+              </View>
             </View>
           )}
 
@@ -315,8 +296,6 @@ const styles = StyleSheet.create((theme) => {
     exampleTarget: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted, lineHeight: 18 },
 
     detailsWrap: { marginHorizontal: 18, marginBottom: 12 },
-    detailsToggle: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 4 },
-    detailsToggleText: { fontFamily: fonts.sans.semibold, fontSize: 12, color: color.textMuted, letterSpacing: 0.3 },
     detailsList: { marginTop: 8 },
     detailRow: { flexDirection: 'row', gap: 10, paddingVertical: 6 },
     detailRowBorder: { borderBottomWidth: theme.borderWidth.thin, borderBottomColor: palette.blue[100] },

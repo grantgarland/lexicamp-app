@@ -124,13 +124,15 @@
     "statMastered": "Mastered",
     "statMasteredTip": "Mastered words hold for 30+ days without review. They've left your queue and count toward your mountain rank.",
     "caughtUpTitle": "All caught up!",
-    "caughtUpTomorrow_one": "{{count}} word comes due tomorrow.",
-    "caughtUpTomorrow_other": "{{count}} words come due tomorrow.",
-    "caughtUpNothing": "Nothing scheduled right now. Add new words to keep climbing.",
+    "caughtUpTomorrow_one": "No reviews needed right now — {{count}} word comes due tomorrow. You can always study ahead.",
+    "caughtUpTomorrow_other": "No reviews needed right now — {{count}} words come due tomorrow. You can always study ahead.",
+    "caughtUpNothing": "No reviews needed right now. You can always study ahead — the schedule adapts.",
     "streakTitle": "Your Streak",
     "streakCurrent": "Current",
     "streakBest": "Best",
-    "streakRule": "Finish one review session a day to keep your streak — any session length counts."
+    "streakRule": "Finish one review session a day to keep your streak — any session length counts.",
+    "studyAhead": "Study ahead",
+    "studyAheadA11y": "Study ahead — review your next scheduled words early"
   },
   "masteryCard": {
     "eyebrow": "Word Mastery",
@@ -159,11 +161,10 @@
     "noResultsTitle": "We couldn't find that one.",
     "noResultsBody": "Try checking the spelling, or this language pair may have limited coverage right now.",
     "noResultsNetwork": "If this word should have a result, you may be offline or on a slow connection.",
-    "alsoTranslates": "also translates"
+    "alsoTranslates": "other translations"
   },
   "translationCard": {
     "currentWord": "Current word",
-    "moreDetails": "More details",
     "saveWord": "Save word",
     "saved": "Saved!",
     "deleteWord": "Delete word",
@@ -189,8 +190,8 @@
   },
   "quiz": {
     "closeQuiz": "Close quiz",
-    "caughtUpTitle": "You're all caught up.",
-    "caughtUpBody": "No cards are due right now. Check back when your next review is scheduled.",
+    "caughtUpTitle": "Nothing to study yet",
+    "caughtUpBody": "Save a few words and your first session will be waiting here.",
     "backToHome": "Back to home",
     "endGreat": "Great session!",
     "endKeepGoing": "Keep going!",
@@ -343,7 +344,8 @@
     "deleteDeckBody": "The deck is removed, but its words stay in your library and study history.",
     "removeTitle": "Remove “{{word}}”?",
     "removeBody": "This removes the word from this deck only. It stays in your library.",
-    "removeConfirm": "Remove from deck"
+    "removeConfirm": "Remove from deck",
+    "deleteFailed": "Couldn't delete “{{word}}” — check your connection and try again."
   },
   "progress": {
     "title": "Progress",
@@ -464,7 +466,7 @@
     "savePreferences": "Save Preferences",
     "quizTitle": "Quiz Length",
     "quizHowMany": "How many cards per session?",
-    "quizInfo": "Each card takes ~5–20 s. Under ~2 min is too short to consolidate memory; beyond ~20 min, focus fades. 20–100 cards keeps you in the effective window.",
+    "quizInfo": "Each card takes ~2–20 seconds to review. Past ~20 minutes focus fades — 20 cards is the sweet spot for most. Remember: a short, sustainable session always beats a skipped one.",
     "quizCustomizeTitle": "Customize quiz length with Premium",
     "quizCustomizeBody": "Free plan uses the default (40 cards).",
     "quizRecommended": "Recommended",
@@ -474,7 +476,6 @@
     "quizLabelQuick": "Quick",
     "quizLabelStandard": "Standard",
     "quizLabelExtended": "Extended",
-    "quizLabelDeep": "Deep dive",
     "quizLabelMarathon": "Marathon",
     "upgradeToPremium": "Upgrade to Premium",
     "supportTitle": "Contact Support",
@@ -506,12 +507,12 @@
   },
   "paywall": {
     "title": "Unlock Premium",
-    "heading": "Reach your summit faster",
-    "sub": "Upgrade to save unlimited words and unlock everything Lexicamp offers.",
+    "heading": "Reach mastery faster",
+    "sub": "Upgrade to unlock everything Lexicamp offers.",
     "featureUnlimited": "Unlimited saved words",
     "featureDecks": "Custom study decks",
     "featureLanguages": "Learn multiple languages at once",
-    "featureOffline": "Offline study & full analytics",
+    "featureOffline": "The optimal route to vocabulary mastery",
     "annual": "Annual",
     "annualPrice": "$39.99/yr",
     "annualSub": "$3.33/mo · billed annually",

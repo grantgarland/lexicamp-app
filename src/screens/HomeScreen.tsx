@@ -69,7 +69,7 @@ export function HomeScreen() {
                 {snapshot.needRecallTotal > 0 ? (
                   <StudyCard due={snapshot.needRecallTotal} onStudy={() => router.push('/quiz')} />
                 ) : (
-                  <CaughtUpCard dueTomorrow={snapshot.dueTomorrow} onAdd={() => setSearchOpen(true)} />
+                  <CaughtUpCard dueTomorrow={snapshot.dueTomorrow} onStudyAhead={() => router.push('/quiz')} />
                 )}
                 <StatTiles mastered={snapshot.masteredCount} addedToday={snapshot.addedToday} dueTomorrow={snapshot.dueTomorrow} />
               </>
@@ -264,10 +264,13 @@ function HowItWorksCard({ defaultOpen = false, dismissible = false }: { defaultO
   );
 }
 
-// Zero-due state (17 §H1) — the most-seen daily surface for a healthy user. No
-// "study anyway": reviewing unscheduled cards fights FSRS, so the forward action
-// is capture. Evergreen styling = calm success, distinct from the blue call-to-study.
-function CaughtUpCard({ dueTomorrow, onAdd }: { dueTomorrow: number; onAdd: () => void }) {
+// Zero-due state (17 §H1, revised 18 §B3 + B6) — the most-seen daily surface for
+// a healthy user. ONE CTA: "Study ahead" (a session filled with the next-due
+// words — legitimate early review; the queue is FSRS-ordered, never arbitrary).
+// No capture CTA here: this card only renders when words exist, and the nav's
+// search FAB already owns capture — stacking a second add-word button was
+// competing with prime real estate (Casey, 2026-07-16).
+function CaughtUpCard({ dueTomorrow, onStudyAhead }: { dueTomorrow: number; onStudyAhead: () => void }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   return (
@@ -280,12 +283,12 @@ function CaughtUpCard({ dueTomorrow, onAdd }: { dueTomorrow: number; onAdd: () =
         {dueTomorrow > 0 ? t('home.caughtUpTomorrow', { count: dueTomorrow }) : t('home.caughtUpNothing')}
       </RawText>
       <Pressable
-        onPress={onAdd}
+        onPress={onStudyAhead}
         accessibilityRole="button"
-        accessibilityLabel={t('home.addWordA11y')}
+        accessibilityLabel={t('home.studyAheadA11y')}
         style={({ pressed }) => [styles.caughtUpBtn, pressed && { transform: [{ scale: 0.98 }] }]}
       >
-        <RawText style={styles.caughtUpBtnText}>{t('home.addWord')}</RawText>
+        <RawText style={styles.caughtUpBtnText}>{t('home.studyAhead')}</RawText>
       </Pressable>
     </View>
   );

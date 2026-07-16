@@ -63,8 +63,24 @@ export function describeDataSourceContract(name: string, source: DataSource): vo
       }
     });
 
+    it('getDueCards composes the session per 18 §2c: due-first ordering, cap respected, whole deck when smaller', async () => {
+      // Cap respected + dueAt ascending (due-now leads, next-due fills the tail).
+      const capped = await source.getDueCards(3);
+      expect(capped.length).toBeLessThanOrEqual(3);
+      const all = await source.getDueCards(1000);
+      for (let i = 1; i < all.length; i++) {
+        expect(all[i].fsrs.dueAt.getTime()).toBeGreaterThanOrEqual(all[i - 1].fsrs.dueAt.getTime());
+      }
+      // Whole deck when smaller than the cap: a huge cap can't invent cards.
+      expect(all.length).toBeGreaterThan(0);
+      expect((await source.getDueCards(1000)).length).toBe(all.length);
+      // The capped session is a prefix of the full ordering — the fill is always
+      // the HIGHEST-priority words, never arbitrary picks.
+      expect(capped.map((c) => c.id)).toEqual(all.slice(0, capped.length).map((c) => c.id));
+    });
+
     it('getDueCards returns valid quiz view-models (registry tiers, known modes)', async () => {
-      const due = await source.getDueCards();
+      const due = await source.getDueCards(20);
       for (const q of due) {
         expect(TIER_IDS.has(q.tierId)).toBe(true);
         expect(['recognition', 'recall']).toContain(q.mode);
@@ -74,7 +90,7 @@ export function describeDataSourceContract(name: string, source: DataSource): vo
     });
 
     it('commitQuizSession accepts a full-session batch (03 write pattern)', async () => {
-      const due = await source.getDueCards();
+      const due = await source.getDueCards(20);
       const ratings = due.map((q, i) => ({
         cardId: q.id,
         rating: (['again', 'almost', 'got_it'] as const)[i % 3],

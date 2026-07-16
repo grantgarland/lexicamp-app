@@ -81,8 +81,15 @@ export interface DataSource {
    *  Edge Function. Never resolves ungated content. */
   lookup(query: string, direction: SearchDirection): Promise<LookupOutcome>;
   /** Save a gate-approved translation to the active deck (Tier-2: save_card RPC).
-   *  The card references the cache row; the primary sense is the card content. */
-  saveCard(translationId: string): Promise<void>;
+   *  The card references the cache row; the primary sense is the default card
+   *  content, overridable via `custom` when the user saved a NON-primary sense
+   *  (A12c — the card then renders custom_front/custom_back). Resolves the new
+   *  card id (null in mock mode) so the capture flow can delete without waiting
+   *  for a words refetch. */
+  saveCard(translationId: string, custom?: { front?: string; back?: string }): Promise<string | null>;
+  /** Delete a saved card (delete_card RPC — cascades FSRS state + logs the
+   *  analytics event; A12b). Destructive: study history goes with it. */
+  deleteCard(cardId: string): Promise<void>;
   /** Lazy example sentences for a saved/looked-up translation (16 §3). */
   getExamples(translationId: string): Promise<UsageExample[]>;
   getProfile(): Promise<Profile>;
@@ -96,8 +103,11 @@ export interface DataSource {
   getDecks(): Promise<DeckSummary[]>;
   /** The user's saved words for the Word List (newest first). */
   getWords(): Promise<WordListItem[]>;
-  /** The due-now study queue, resolved to quiz view-models (capped per session). */
-  getDueCards(): Promise<QuizCardItem[]>;
+  /** The study-session queue (18 §2c): everything due now (dueAt asc — oldest
+   *  overdue first), FILLED with the next-due upcoming cards when the due count
+   *  is under `limit`, so a session always uses the user's full quiz length
+   *  while words exist. Returns fewer only when the deck itself is smaller. */
+  getDueCards(limit: number): Promise<QuizCardItem[]>;
   /** Commit a completed session's buffered ratings (03 batch write). */
   commitQuizSession(payload: { ratings: BufferedRating[] }): Promise<void>;
   /** Notification prefs (2.5) — read + partial update. */

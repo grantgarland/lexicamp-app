@@ -5,9 +5,10 @@
 // (2.1): Tier-0 capture gate client-side for instant feedback → debounced query
 // through the state layer (mock now, translate Edge Function via SupabaseDataSource).
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet as RNStyleSheet, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { captureReasonI18nKey, evaluateCaptureInput } from '@/domain/capture';
@@ -15,7 +16,7 @@ import { directionLangs } from '@/domain/derive';
 import { type LookupResult, posTagI18nKey, qualityReasonI18nKey } from '@/domain/translation';
 import type { Profile, SearchDirection } from '@/domain/types';
 import { useTranslation } from '@/i18n';
-import { useExamples, useLookup, useProfile, useSaveCard, useWords } from '@/query/hooks';
+import { useDeleteCard, useExamples, useLookup, useProfile, useSaveCard, useWords } from '@/query/hooks';
 import { usePrefsStore } from '@/store/prefsStore';
 import {
   ConfirmDialog,
@@ -80,16 +81,24 @@ export function SearchView({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
   const router = useRouter();
-  // Direction + recents are per-device prefs (03) → the prefs store, not local state.
+  // Direction is a device pref; recents are PER USER (18-session: only what the
+  // active account actually searched — no seeds, no cross-account bleed).
   const direction = usePrefsStore((s) => s.searchDirection);
   const setDirection = usePrefsStore((s) => s.setSearchDirection);
-  const recents = usePrefsStore((s) => s.recents);
-  const addRecent = usePrefsStore((s) => s.addRecent);
-  const removeRecent = usePrefsStore((s) => s.removeRecent);
+  const recentsByUser = usePrefsStore((s) => s.recentsByUser);
+  const addRecentToStore = usePrefsStore((s) => s.addRecent);
+  const removeRecentFromStore = usePrefsStore((s) => s.removeRecent);
 
   // The language PAIR is a per-user fact (profiles.native_lang / learning_lang, 03);
   // direction just picks which way to read it. Resolve both into the labels the UI shows.
   const profile = useProfile();
+  const recents = profile != null ? (recentsByUser[profile.id] ?? []) : [];
+  const addRecent = (w: string) => {
+    if (profile != null) addRecentToStore(profile.id, w);
+  };
+  const removeRecent = (w: string) => {
+    if (profile != null) removeRecentFromStore(profile.id, w);
+  };
   const langs = profile ? directionLangs(profile, direction) : null;
   const placeholder = langs ? t('search.placeholder', { lang: langs.sourceName }) : t('search.placeholderFallback');
 
@@ -105,6 +114,9 @@ export function SearchView({ onClose }: { onClose: () => void }) {
   const savedTranslations = useMemo(() => new Set(words.map((w) => w.translationId)), [words]);
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [locallyRemoved, setLocallyRemoved] = useState<Set<string>>(new Set());
+  // translationId → card id for saves made THIS session (save_card returns the
+  // id), so delete works before the words refetch lands (A12b).
+  const [sessionCardIds, setSessionCardIds] = useState<Map<string, string>>(new Map());
   const [justSaved, setJustSaved] = useState<string | null>(null);
 
   const q = query.trim();
@@ -159,9 +171,10 @@ export function SearchView({ onClose }: { onClose: () => void }) {
     setCurrentIdx(0);
   }
 
-  // The set the card renders: server truth (translation already saved → mark the
-  // PRIMARY sense, since save_card persists the cache row's primary sense) plus
-  // this session's optimistic adds, minus this session's deletes.
+  // The set the card renders: server truth plus this session's optimistic adds,
+  // minus this session's deletes. The saved card knows WHICH sense it holds
+  // (custom_back, A12c) — match it back to a sense chip by target text; fall
+  // back to the primary sense for pre-A12c cards.
   const savedIds = useMemo(() => {
     const s = new Set(saved);
     if (
@@ -170,40 +183,50 @@ export function SearchView({ onClose }: { onClose: () => void }) {
       savedTranslations.has(outcome.result.translationId) &&
       !locallyRemoved.has(outcome.result.translationId)
     ) {
-      const primary = result.translations[0];
-      if (primary != null) s.add(primary.id);
+      const savedWord = words.find((w) => w.translationId === outcome.result.translationId);
+      const senseIdx = savedWord != null ? result.translations.findIndex((tr) => tr.word === savedWord.target) : -1;
+      const sense = result.translations[senseIdx >= 0 ? senseIdx : 0];
+      if (sense != null) s.add(sense.id);
     }
     return s;
-  }, [saved, savedTranslations, locallyRemoved, outcome, result]);
+  }, [saved, savedTranslations, locallyRemoved, outcome, result, words]);
 
   const saveCard = useSaveCard();
+  const deleteCard = useDeleteCard();
   const save = (i: number) => {
     if (result == null || outcome?.status !== 'found' || !saveable) return;
+    const tid = outcome.result.translationId;
     const id = result.translations[i].id;
-    // Optimistic UI on the sense chip; the persisted card references the cache
-    // row (primary sense) via save_card — see DataSource.saveCard.
+    // Optimistic UI on the sense chip. A12c: a NON-primary sense rides along as
+    // the card's custom back, so what the user tapped is what gets studied.
     setSaved((s) => new Set(s).add(id));
     setLocallyRemoved((s) => {
-      if (!s.has(outcome.result.translationId)) return s;
+      if (!s.has(tid)) return s;
       const n = new Set(s);
-      n.delete(outcome.result.translationId);
+      n.delete(tid);
       return n;
     });
     setJustSaved(id);
     setTimeout(() => setJustSaved(null), 1500);
     addRecent(q);
-    saveCard.mutate(outcome.result.translationId, {
-      onError: (e) => {
-        setSaved((s) => {
-          const n = new Set(s);
-          n.delete(id);
-          return n;
-        });
-        // Server-enforced free-tier cap (3.2) → this IS the value moment; route
-        // to the paywall rather than showing a dead error.
-        if (e instanceof Error && e.message.includes('free_word_cap')) router.push('/paywall');
+    saveCard.mutate(
+      { translationId: tid, custom: i > 0 ? { back: result.translations[i].word } : undefined },
+      {
+        onSuccess: (cardId) => {
+          if (cardId != null) setSessionCardIds((m) => new Map(m).set(tid, cardId));
+        },
+        onError: (e) => {
+          setSaved((s) => {
+            const n = new Set(s);
+            n.delete(id);
+            return n;
+          });
+          // Server-enforced free-tier cap (3.2) → this IS the value moment; route
+          // to the paywall rather than showing a dead error.
+          if (e instanceof Error && e.message.includes('free_word_cap')) router.push('/paywall');
+        },
       },
-    });
+    );
   };
   // Delete-from-results goes through the SAME confirmation as every other delete
   // surface (shared ConfirmDialog + wordList.delete* copy): a saved word carries
@@ -212,16 +235,30 @@ export function SearchView({ onClose }: { onClose: () => void }) {
   const confirmUnsave = () => {
     const i = pendingUnsave;
     setPendingUnsave(null);
-    if (result == null || i == null) return;
+    if (result == null || i == null || outcome?.status !== 'found') return;
+    const tid = outcome.result.translationId;
     const id = result.translations[i].id;
+    // Optimistic clear (also covers mock mode, where nothing persists) …
     setSaved((s) => {
       const n = new Set(s);
       n.delete(id);
       return n;
     });
-    // Mask the server-derived saved state too (UI-level, same as the Word List's
-    // local delete) until app-side delete persistence lands.
-    if (outcome?.status === 'found') setLocallyRemoved((s) => new Set(s).add(outcome.result.translationId));
+    setLocallyRemoved((s) => new Set(s).add(tid));
+    // … then the REAL delete (A12b): resolve the card id from this session's
+    // save or the words query. On failure, unmask — the word is still saved.
+    const cardId = sessionCardIds.get(tid) ?? words.find((w) => w.translationId === tid)?.id;
+    if (cardId != null) {
+      deleteCard.mutate(cardId, {
+        onError: () => {
+          setLocallyRemoved((s) => {
+            const n = new Set(s);
+            n.delete(tid);
+            return n;
+          });
+        },
+      });
+    }
   };
 
   return (
@@ -237,12 +274,14 @@ export function SearchView({ onClose }: { onClose: () => void }) {
 
       <SearchBar value={query} onChange={setQuery} placeholder={placeholder} />
 
+      {/* Recents live OUTSIDE the content scroll: the fade mask must stay fixed
+          relative to the search input while the list scrolls beneath it. */}
+      {phase === 'recents' ? (
+        <Animated.View key="recents" entering={FadeIn.duration(200)} exiting={FadeOut.duration(140)} style={styles.fill}>
+          <RecentList recents={recents} onTap={setQuery} onDismiss={removeRecent} />
+        </Animated.View>
+      ) : (
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        {phase === 'recents' && (
-          <Animated.View key="recents" entering={FadeIn.duration(200)} exiting={FadeOut.duration(140)}>
-            <RecentChips recents={recents} onTap={setQuery} onDismiss={removeRecent} />
-          </Animated.View>
-        )}
         {phase === 'typing' && (
           <Animated.View key="typing" entering={FadeIn.duration(200)} exiting={FadeOut.duration(140)}>
             <SkeletonCard typed={q} />
@@ -280,6 +319,7 @@ export function SearchView({ onClose }: { onClose: () => void }) {
           </Animated.View>
         )}
       </ScrollView>
+      )}
 
       {/* Shared delete confirmation — identical prompt to the Word List surfaces. */}
       <ConfirmDialog
@@ -382,25 +422,45 @@ function SearchBar({ value, onChange, placeholder }: { value: string; onChange: 
   );
 }
 
-function RecentChips({ recents, onTap, onDismiss }: { recents: string[]; onTap: (w: string) => void; onDismiss: (w: string) => void }) {
+// RecentList (18-session rework) — a vertical "floating" history under the search
+// input with a FIXED fade mask: rows begin fading ~50% down the pane and are fully
+// faded by ~90%. The list scrolls BENEATH the mask, so older searches surface into
+// clarity as the user scrolls — a visible-but-unobtrusive history.
+function RecentList({ recents, onTap, onDismiss }: { recents: string[]; onTap: (w: string) => void; onDismiss: (w: string) => void }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   if (recents.length === 0) return null;
+  const canvas = theme.color.canvas;
   return (
-    <View style={styles.recentPad}>
+    <View style={styles.recentPane}>
       <RawText style={styles.recentLabel}>{t('search.recent')}</RawText>
-      <View style={styles.chipRow}>
-        {recents.map((word, i) => (
-          <Animated.View key={word} entering={FadeIn.duration(180).delay(i * 40)} exiting={FadeOut.duration(120)}>
-            <Pressable onPress={() => onTap(word)} accessibilityRole="button" style={styles.chip}>
-              <IconClock size={12} color={theme.color.textFaint} />
-              <RawText style={styles.chipText}>{word}</RawText>
-              <Pressable onPress={() => onDismiss(word)} hitSlop={8} accessibilityLabel={t('search.removeA11y', { word })} style={styles.chipX}>
-                <IconX size={9} color={theme.color.textMuted} />
+      <View style={styles.recentListWrap}>
+        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.recentListContent}>
+          {recents.map((word, i) => (
+            <Animated.View key={word} entering={FadeIn.duration(180).delay(Math.min(i, 10) * 30)} exiting={FadeOut.duration(120)}>
+              <Pressable onPress={() => onTap(word)} accessibilityRole="button" style={({ pressed }) => [styles.recentRow, pressed && { opacity: 0.6 }]}>
+                <IconClock size={13} color={theme.color.textFaint} />
+                <RawText style={styles.recentWord} numberOfLines={1}>{word}</RawText>
+                <Pressable onPress={() => onDismiss(word)} hitSlop={10} accessibilityLabel={t('search.removeA11y', { word })} style={styles.recentX}>
+                  <IconX size={11} color={theme.color.textMuted} />
+                </Pressable>
               </Pressable>
-            </Pressable>
-          </Animated.View>
-        ))}
+            </Animated.View>
+          ))}
+        </ScrollView>
+        {/* Fixed fade mask: canvas-colored gradient, alpha 0 → 1 between 50% and
+            90% of the pane (fully opaque below). pointerEvents none — the list
+            underneath keeps scrolling. */}
+        <Svg style={RNStyleSheet.absoluteFill} width="100%" height="100%" pointerEvents="none">
+          <Defs>
+            <LinearGradient id="recentsFade" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0.5" stopColor={canvas} stopOpacity="0" />
+              <Stop offset="0.9" stopColor={canvas} stopOpacity="1" />
+              <Stop offset="1" stopColor={canvas} stopOpacity="1" />
+            </LinearGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#recentsFade)" />
+        </Svg>
       </View>
     </View>
   );
@@ -461,23 +521,13 @@ const styles = StyleSheet.create((theme) => {
     content: { paddingBottom: 32 },
     resultWrap: { paddingHorizontal: 16, paddingTop: 8 },
 
-    recentPad: { paddingHorizontal: 16, paddingTop: 4 },
+    recentPane: { flex: 1, paddingHorizontal: 16, paddingTop: 4 },
+    recentListWrap: { flex: 1, position: 'relative' },
+    recentListContent: { paddingBottom: 24 },
+    recentRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11 },
+    recentWord: { flex: 1, fontFamily: fonts.serif.regular, fontSize: 16, color: color.textBody },
+    recentX: { width: 18, height: 18, borderRadius: 9, backgroundColor: palette.slate[200], alignItems: 'center', justifyContent: 'center' },
     recentLabel: { fontFamily: fonts.sans.bold, fontSize: 10, color: color.textMuted, textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 10 },
-    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-    chip: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      backgroundColor: palette.slate[50],
-      borderWidth: theme.borderWidth.thin,
-      borderColor: color.border,
-      borderRadius: 20,
-      paddingVertical: 7,
-      paddingLeft: 12,
-      paddingRight: 10,
-    },
-    chipText: { fontFamily: fonts.serif.regular, fontSize: 14, color: color.textBody },
-    chipX: { width: 16, height: 16, borderRadius: 8, backgroundColor: palette.slate[200], alignItems: 'center', justifyContent: 'center' },
 
     skelWrap: { paddingHorizontal: 16, paddingTop: 8 },
     skelCaption: { fontFamily: fonts.serif.regular, fontSize: 13, color: color.textMuted, marginBottom: 14 },

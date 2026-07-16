@@ -8,13 +8,14 @@
 // row tap + Add-to-Deck are wired as TODOs.
 import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, TextInput, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
-import { useDecks, useEntitlement, useWords } from '@/query/hooks';
+import { useDecks, useDeleteCard, useEntitlement, useWords } from '@/query/hooks';
 import type { DeckSummary, WordListItem } from '@/data/DataSource';
 import { addedLabel } from '@/lib/relativeTime';
+import { useDeferredReady } from '@/lib/useDeferredReady';
 import { useUiStore } from '@/store/uiStore';
 import { getTierByStability, TIERS, type TierId } from '@/theme/tiers';
 
@@ -65,10 +66,14 @@ export function WordListScreen() {
   const router = useRouter();
   const showToast = useUiStore((s) => s.showToast);
   const { words, isLoading: wordsLoading } = useWords();
+  const deleteCard = useDeleteCard();
   const { decks, isLoading: decksLoading } = useDecks();
   const { isPaid } = useEntitlement();
 
   const [subTab, setSubTab] = useState<'words' | 'decks'>('words');
+  // Paint-first traversal: false on mount + for the frame after a tab switch,
+  // true once interactions settle — heavy lists render behind a skeleton.
+  const contentReady = useDeferredReady(subTab);
   const [query, setQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortId>('newest');
   const [filterTiers, setFilterTiers] = useState<Set<TierId>>(new Set());
@@ -156,9 +161,11 @@ export function WordListScreen() {
         />
       )}
 
-      {/* Words tab */}
+      {/* Words tab. `contentReady` gates the HEAVY mounts (18-session perf fix):
+          the press paints the tab traversal + skeleton this frame; the list
+          mounts right after interactions settle. */}
       {subTab === 'words' &&
-        (wordsLoading ? (
+        (wordsLoading || !contentReady ? (
           <SkeletonRows />
         ) : noneSaved ? (
           <EmptyState title={t('wordList.emptyTitle')} body={t('wordList.emptyBody')} style={styles.empty} />
@@ -167,18 +174,28 @@ export function WordListScreen() {
             <RawText style={styles.noMatchText}>{t('wordList.noMatch')}</RawText>
           </View>
         ) : (
-          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.listContent}>
-            {visible.map((w) => (
+          // Virtualized (18 §2b perf guardrail): rows mount lazily instead of
+          // all-at-once — a plain ScrollView built every swipeable row
+          // synchronously, which is what made tab traversal feel stuck.
+          <FlatList
+            data={visible}
+            keyExtractor={(w) => w.id}
+            renderItem={({ item: w }) => (
               <WordRow
-                key={w.id}
                 word={{ native: w.native, target: w.target, stability: w.stability, dueAt: w.dueAt, reps: w.reps }}
                 isPremium={isPaid}
                 onPress={() => setDetailWord(w)}
                 onDelete={() => setPendingDelete(w)}
                 onAddToDeck={() => (isPaid ? setAddToDeckWord(w) : setSubTab('decks'))}
               />
-            ))}
-          </ScrollView>
+            )}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.listContent}
+            initialNumToRender={12}
+            maxToRenderPerBatch={12}
+            windowSize={7}
+          />
         ))}
 
       {/* Decks tab (W-04 / W-07) */}
@@ -191,7 +208,7 @@ export function WordListScreen() {
             <View style={styles.stickyCreate}>
               <CreateNewDeckRow onPress={() => openCreate()} />
             </View>
-            {decksLoading ? (
+            {decksLoading || !contentReady ? (
               <SkeletonRows count={3} />
             ) : allDecks.length === 0 ? (
               <View style={styles.decksEmpty}>
@@ -254,11 +271,20 @@ export function WordListScreen() {
         onConfirm={() => {
           const w = pendingDelete;
           if (w) {
+            // Optimistic removal (also carries mock mode) + the REAL delete
+            // (A12b — delete_card RPC cascades FSRS state). No Undo: the study
+            // history is gone with the card, and offering to bring it back
+            // would be dishonest. The confirm dialog is the safety.
             setRemoved((r) => [...r, w.id]);
+            deleteCard.mutate(w.id, {
+              onError: () => {
+                setRemoved((r) => r.filter((id) => id !== w.id));
+                showToast({ variant: 'destructive', message: t('wordList.deleteFailed', { word: w.native }) });
+              },
+            });
             showToast({
               variant: 'destructive',
               message: t('wordList.wordDeleted', { word: w.native }),
-              action: { label: t('common.undo'), onPress: () => setRemoved((r) => r.filter((id) => id !== w.id)) },
             });
           }
           setPendingDelete(null);

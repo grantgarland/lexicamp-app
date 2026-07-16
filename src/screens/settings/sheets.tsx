@@ -55,14 +55,17 @@ export function formatReminderTime(hhmm: string): string {
   return `${h12}:${String(m).padStart(2, '0')} ${period}`;
 }
 
+// Doubling ladder (Casey, 2026-07-16): 10 / 20 / 40 / 80. 20 = Standard, the
+// recommended default AND the free-tier pin — free users study the recommended
+// experience, premium tunes around it. (Supersedes D5's 10–100 six-option set.)
+// Minute ranges derive from the stated ~2–20 s/card (quizInfo copy) — keep in sync.
 const QUIZ_OPTIONS = [
-  { n: 20, min: 2, max: 7, labelKey: 'quizLabelQuick' },
-  { n: 40, min: 3, max: 14, labelKey: 'quizLabelStandard' },
-  { n: 60, min: 5, max: 20, labelKey: 'quizLabelExtended' },
-  { n: 80, min: 7, max: 27, labelKey: 'quizLabelDeep' },
-  { n: 100, min: 8, max: 33, labelKey: 'quizLabelMarathon' },
+  { n: 10, min: 1, max: 3, labelKey: 'quizLabelQuick' },
+  { n: 20, min: 1, max: 7, labelKey: 'quizLabelStandard' },
+  { n: 40, min: 2, max: 13, labelKey: 'quizLabelExtended' },
+  { n: 80, min: 3, max: 27, labelKey: 'quizLabelMarathon' },
 ] as const;
-const QUIZ_RECOMMENDED = 40;
+const QUIZ_RECOMMENDED = 20;
 
 // ── Premium gate callout ────────────────────────────────────────────────────
 function PremiumGate({ title, body, onUpgrade }: { title: string; body: string; onUpgrade: () => void }) {

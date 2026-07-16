@@ -306,8 +306,12 @@ export const mockDataSource: DataSource = {
   async lookup(query, direction) {
     return mockLookupResult(query, direction);
   },
-  async saveCard(_translationId) {
+  async saveCard(_translationId, _custom) {
     // Mock: screens keep their own optimistic saved-state; nothing to persist.
+    return null; // no card id in mock mode (A12b — screens fall back to local masks)
+  },
+  async deleteCard(_cardId) {
+    // Mock: nothing persisted to delete; screens keep optimistic removal state.
   },
   async getExamples(translationId) {
     // One canned example so W-03/detail UIs have something to render.
@@ -349,26 +353,33 @@ export const mockDataSource: DataSource = {
   async getWords(): Promise<WordListItem[]> {
     return buildWords(scenario().userState);
   },
-  async getDueCards(): Promise<QuizCardItem[]> {
-    // Synthesize a due, in-band scheduling state per item so the results screen
-    // can compute real FSRS tier transitions (domain/fsrs.tierTransition).
+  async getDueCards(limit: number): Promise<QuizCardItem[]> {
+    // Synthesize an in-band scheduling state per item so the results screen can
+    // compute real FSRS tier transitions (domain/fsrs.tierTransition).
+    // 18 §2c fill semantics, mirrored from the live source: the first items are
+    // DUE (staggered overdue, oldest first), the tail is UPCOMING (next-due
+    // ascending) — the session tops up to `limit` from the future queue.
     const tierIdxOf: Record<string, number> = { bc: 0, abc: 1, hc: 2, sr: 3, summit: 4 };
     const now = Date.now();
-    return QUIZ_SESSION.map((q) => ({
+    const dueCount = Math.ceil(QUIZ_SESSION.length / 2); // first half due, rest upcoming
+    return QUIZ_SESSION.map((q, i) => ({
       ...q,
       fsrs: {
         cardId: q.id,
         userId: USER_ID,
         stability: TIER_STABILITY[tierIdxOf[q.tierId] ?? 0],
         difficulty: 5,
-        dueAt: new Date(now - 2 * HOUR),
+        // Due items: increasingly overdue toward index 0; upcoming: i-indexed days out.
+        dueAt: i < dueCount ? new Date(now - (dueCount - i) * 2 * HOUR) : new Date(now + (i - dueCount + 1) * DAY),
         lastReviewAt: new Date(now - Math.round(TIER_STABILITY[tierIdxOf[q.tierId] ?? 0] * DAY)),
-        state: 2,
+        state: 2 as const,
         reps: 3,
         lapses: 0,
         learningSteps: 0,
       },
-    }));
+    }))
+      .sort((a, b) => a.fsrs.dueAt.getTime() - b.fsrs.dueAt.getTime())
+      .slice(0, Math.max(0, limit));
   },
   async getNotificationPrefs(): Promise<NotificationPrefs> {
     return { ...mockPrefs };
