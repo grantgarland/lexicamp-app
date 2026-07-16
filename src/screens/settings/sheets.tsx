@@ -2,7 +2,7 @@
 // Each is a shared-kit `Sheet`; premium-gated editors surface a `PremiumGate` callout
 // that routes to the paywall via `onUpgrade`. Kept in their own module so SettingsScreen
 // stays a thin hub.
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import DateTimePicker, { type DateTimePickerChangeEvent } from '@react-native-community/datetimepicker';
 import { type ReactNode, useMemo, useState } from 'react';
 import { Platform, Pressable, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -13,9 +13,11 @@ import type { LanguageCode, NotificationPrefs, Profile } from '@/domain/types';
 import { useTranslation } from '@/i18n';
 import { registerForPush } from '@/notifications/push';
 import { useNotificationPrefs, useUpdateNotificationPrefs } from '@/query/hooks';
+import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
 import {
   Button,
   ConfirmDialog,
+  HowItWorksList,
   IconCheck,
   IconChevronRight,
   IconInfo,
@@ -46,7 +48,7 @@ function hhmmToDate(s: string): Date {
 function dateToHHMM(d: Date): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
-function formatReminderTime(hhmm: string): string {
+export function formatReminderTime(hhmm: string): string {
   const { h, m } = parseHHMM(hhmm);
   const period = h < 12 ? 'AM' : 'PM';
   const h12 = h % 12 === 0 ? 12 : h % 12;
@@ -60,7 +62,7 @@ const QUIZ_OPTIONS = [
   { n: 80, min: 7, max: 27, labelKey: 'quizLabelDeep' },
   { n: 100, min: 8, max: 33, labelKey: 'quizLabelMarathon' },
 ] as const;
-const QUIZ_DEFAULT = 40;
+const QUIZ_RECOMMENDED = 40;
 
 // ── Premium gate callout ────────────────────────────────────────────────────
 function PremiumGate({ title, body, onUpgrade }: { title: string; body: string; onUpgrade: () => void }) {
@@ -251,11 +253,12 @@ export function NotificationSheet({ visible, isPaid, onClose, onUpgrade }: { vis
       <DateTimePicker
         mode="time"
         value={hhmmToDate(windows[editing]?.time ?? FALLBACK_WINDOW)}
-        onChange={(e: DateTimePickerEvent, d?: Date) => {
+        onValueChange={(_e: DateTimePickerChangeEvent, d: Date) => {
           const idx = editing;
           setEditing(null); // close FIRST — Android fires exactly once per open; this guards re-entry
-          if (e.type === 'set' && d != null && idx != null) setTime(idx, dateToHHMM(d));
+          if (idx != null) setTime(idx, dateToHHMM(d));
         }}
+        onDismiss={() => setEditing(null)}
       />
     )}
     {editing != null && Platform.OS === 'ios' && (
@@ -265,8 +268,8 @@ export function NotificationSheet({ visible, isPaid, onClose, onUpgrade }: { vis
             mode="time"
             display="spinner"
             value={hhmmToDate(windows[editing]?.time ?? FALLBACK_WINDOW)}
-            onChange={(_e: DateTimePickerEvent, d?: Date) => {
-              if (d != null && editing != null) setTime(editing, dateToHHMM(d));
+            onValueChange={(_e: DateTimePickerChangeEvent, d: Date) => {
+              if (editing != null) setTime(editing, dateToHHMM(d));
             }}
           />
         </View>
@@ -280,10 +283,28 @@ export function NotificationSheet({ visible, isPaid, onClose, onUpgrade }: { vis
 }
 
 // ── SE-03 Quiz Length ────────────────────────────────────────────────────────
+// One persisted source of truth (17 §S2/X4): the prefsStore `quizLength`, read by
+// this sheet, the Settings row subtitle, and QuizScreen's session slice. Free tier
+// is pinned to QUIZ_LENGTH_FREE (20 — short sessions protect the daily habit).
 export function QuizLengthSheet({ visible, isPaid, onClose, onUpgrade }: { visible: boolean; isPaid: boolean; onClose: () => void; onUpgrade: () => void }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
-  const [selected, setSelected] = useState(QUIZ_DEFAULT);
+  const quizLength = usePrefsStore((s) => s.quizLength);
+  const setQuizLength = usePrefsStore((s) => s.setQuizLength);
+  const [selected, setSelected] = useState(isPaid ? quizLength : QUIZ_LENGTH_FREE);
+  // Re-seed the draft each open so a canceled edit doesn't linger (render-adjust
+  // pattern, same as NotificationSheet).
+  const [seededOpen, setSeededOpen] = useState(false);
+  if (!visible && seededOpen) setSeededOpen(false);
+  if (visible && !seededOpen) {
+    setSeededOpen(true);
+    setSelected(isPaid ? quizLength : QUIZ_LENGTH_FREE);
+  }
+
+  const save = () => {
+    setQuizLength(selected);
+    onClose();
+  };
 
   return (
     <Sheet visible={visible} onClose={onClose} title={t('settings.quizTitle')}>
@@ -298,7 +319,7 @@ export function QuizLengthSheet({ visible, isPaid, onClose, onUpgrade }: { visib
                 <RawText style={[styles.quizN, { color: sel ? theme.color.brand : theme.color.textStrong }]}>{t('settings.quizCards', { count: o.n })}</RawText>
                 <RawText style={styles.quizRange}>{t('settings.quizRange', { min: o.min, max: o.max })}</RawText>
                 <RawText style={styles.quizLabel}>· {t(`settings.${o.labelKey}`)}</RawText>
-                {o.n === QUIZ_DEFAULT && (
+                {o.n === QUIZ_RECOMMENDED && (
                   <View style={styles.recommendedBadge}>
                     <RawText style={styles.recommendedText}>{t('settings.quizRecommended')}</RawText>
                   </View>
@@ -311,11 +332,23 @@ export function QuizLengthSheet({ visible, isPaid, onClose, onUpgrade }: { visib
       </View>
       <View style={styles.saveWrap}>
         {isPaid ? (
-          <Button title={t('settings.quizSave')} variant="primary" onPress={onClose} />
+          <Button title={t('settings.quizSave')} variant="primary" onPress={save} />
         ) : (
           <Button title={t('settings.upgradeToPremium')} variant="primary" onPress={onUpgrade} />
         )}
       </View>
+    </Sheet>
+  );
+}
+
+// ── How Lexicamp works (17 §H3) — the Home educator content, permanently reachable
+// here after the Home card is dismissed. Same shared accordion component.
+export function HowItWorksSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <Sheet visible={visible} onClose={onClose} title={t('home.edu.title')}>
+      <RawText style={styles.quizIntro}>{t('home.edu.teaser')}</RawText>
+      <HowItWorksList />
     </Sheet>
   );
 }

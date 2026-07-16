@@ -52,6 +52,22 @@ export interface DirectionLangs {
   targetName: string;
 }
 
+/** Seed a default display name from the auth identity (18 §A7 / D1): prefer the
+ *  provider-supplied name (Apple/Google, when those flows land); else prettify the
+ *  email local-part — "grant.persona+tag@x.com" → "Grant Persona". Never empty:
+ *  falls back to "Learner" for degenerate inputs. */
+export function defaultDisplayName(email: string, providerName?: string | null): string {
+  if (providerName != null && providerName.trim() !== '') return providerName.trim().slice(0, 40);
+  const local = (email.split('@')[0] ?? '').split('+')[0] ?? '';
+  const words = local
+    .split(/[._\-]+/)
+    .map((w) => w.replace(/[^\p{L}\p{N}]/gu, ''))
+    .filter((w) => w.length > 0)
+    .map((w) => (/\p{L}/u.test(w) ? w.charAt(0).toUpperCase() + w.slice(1) : w));
+  const name = words.join(' ').slice(0, 40).trim();
+  return name === '' ? 'Learner' : name;
+}
+
 /** Resolve a SearchDirection against the user's profile into its source/target language pair. */
 export function directionLangs(
   profile: Pick<Profile, 'nativeLang' | 'targetLang'>,

@@ -41,11 +41,13 @@ import {
   WordRow,
 } from '@/ui';
 
-type SortId = 'newest' | 'oldest' | 'az' | 'tier';
+type SortId = 'newest' | 'oldest' | 'az' | 'tier' | 'due';
 
 function sortWords(list: WordListItem[], sortBy: SortId): WordListItem[] {
   const arr = [...list];
   switch (sortBy) {
+    case 'due': // 18 §A4 — next review first (overdue → soonest → furthest)
+      return arr.sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
     case 'oldest':
       return arr.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
     case 'az':
@@ -169,7 +171,7 @@ export function WordListScreen() {
             {visible.map((w) => (
               <WordRow
                 key={w.id}
-                word={{ native: w.native, target: w.target, stability: w.stability, added: addedLabel(w.createdAt, t) }}
+                word={{ native: w.native, target: w.target, stability: w.stability, dueAt: w.dueAt, reps: w.reps }}
                 isPremium={isPaid}
                 onPress={() => setDetailWord(w)}
                 onDelete={() => setPendingDelete(w)}
@@ -404,6 +406,7 @@ function FilterSortSheet({
 
   const sortOptions: { id: SortId; label: string }[] = [
     { id: 'newest', label: t('wordList.sortNewest') },
+    { id: 'due', label: t('wordList.sortDue') }, // 18 §A4
     { id: 'oldest', label: t('wordList.sortOldest') },
     { id: 'az', label: t('wordList.sortAz') },
     { id: 'tier', label: t('wordList.sortTier') },
@@ -518,8 +521,9 @@ function WordPicker({
         checked={selected.has(w.id)}
         checkColor={tier.color}
         leading={<TierBadge tier={tier.id} variant="pill" size="sm" />}
-        title={w.native}
-        subtitle={w.target}
+        // 18-session item 1.2: target-language word leads everywhere.
+        title={w.target}
+        subtitle={w.native}
         subtitleInline
         compact
         onPress={() => onToggle(w.id)}
@@ -622,7 +626,8 @@ function DeckDetailSheet({
       .slice(0, deck.wordCount)
       .filter((w) => !removed.includes(w.id)) // globally deleted words drop from the deck too
       .filter((w) => !removedFromDeck.has(`${deck.id}|${w.id}`))
-      .sort((a, b) => a.stability - b.stability); // tier low → high
+      // 18 §A4: implicit lists default to due-soonest — surface what needs review.
+      .sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
   }, [deck, words, removed, removedFromDeck]);
   return (
     <Sheet visible={deck != null} onClose={onClose} title={deck?.name}>
@@ -638,7 +643,7 @@ function DeckDetailSheet({
           />
           <List scroll style={styles.deckWordScroll} isEmpty={deckWords.length === 0} emptyTitle={t('wordList.deckEmptyTitle')} emptyBody={t('wordList.deckEmptyBody')}>
             {deckWords.map((w) => (
-              <WordRow key={w.id} word={{ native: w.native, target: w.target, stability: w.stability }} onPress={() => onWordPress(w)} onRemoveFromDeck={() => onRemoveWord(deck, w)} />
+              <WordRow key={w.id} word={{ native: w.native, target: w.target, stability: w.stability, dueAt: w.dueAt, reps: w.reps }} onPress={() => onWordPress(w)} onRemoveFromDeck={() => onRemoveWord(deck, w)} />
             ))}
           </List>
           <ButtonRow

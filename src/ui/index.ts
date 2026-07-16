@@ -19,6 +19,7 @@ export { SegmentedTabs, type SegmentedTab, type SegmentedTabsProps } from './Seg
 export { ButtonRow, type ButtonRowButton, type ButtonRowProps } from './ButtonRow';
 export { List, ListItem, Checkbox, type ListProps, type ListItemProps } from './List';
 export { Skeleton, SkeletonRows } from './Skeleton';
+export { HowItWorksList } from './HowItWorksList';
 export { ConfirmDialog, type ConfirmDialogProps } from './ConfirmDialog';
 export { Portal, PortalHost } from './Portal';
 export { Toast } from './Toast';

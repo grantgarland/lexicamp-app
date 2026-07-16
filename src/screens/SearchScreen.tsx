@@ -4,7 +4,7 @@
 // SearchBar, RecentChips, SkeletonCard. Lookup flows through DataSource.lookup()
 // (2.1): Tier-0 capture gate client-side for instant feedback → debounced query
 // through the state layer (mock now, translate Edge Function via SupabaseDataSource).
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
@@ -15,12 +15,14 @@ import { directionLangs } from '@/domain/derive';
 import { type LookupResult, posTagI18nKey, qualityReasonI18nKey } from '@/domain/translation';
 import type { Profile, SearchDirection } from '@/domain/types';
 import { useTranslation } from '@/i18n';
-import { useExamples, useLookup, useProfile, useSaveCard } from '@/query/hooks';
+import { useExamples, useLookup, useProfile, useSaveCard, useWords } from '@/query/hooks';
 import { usePrefsStore } from '@/store/prefsStore';
 import {
+  ConfirmDialog,
   EmptyState,
   FONT_SCALE_MAX,
   IconClock,
+  IconTrash,
   IconSearch,
   IconX,
   RawText,
@@ -76,6 +78,7 @@ function useDebouncedValue<T>(value: T, ms: number): T {
 // as an in-Home overlay (so the bottom nav can stay visible). Closes via `onClose`.
 export function SearchView({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
+  const { theme } = useUnistyles();
   const router = useRouter();
   // Direction + recents are per-device prefs (03) → the prefs store, not local state.
   const direction = usePrefsStore((s) => s.searchDirection);
@@ -92,7 +95,16 @@ export function SearchView({ onClose }: { onClose: () => void }) {
 
   const [query, setQuery] = useState('');
   const [currentIdx, setCurrentIdx] = useState(0);
+  // Saved-state is DERIVED from the user's saved words (cards.translation_id ↔
+  // result.translationId — a stable join), not kept as screen state: a word saved
+  // in a previous session must show as saved when searched again. The two local
+  // sets are per-session optimistic overlays only: `saved` (sense ids just saved
+  // here) and `locallyRemoved` (translationIds deleted here, pending the real
+  // delete wiring — see 18 follow-up).
+  const { words } = useWords();
+  const savedTranslations = useMemo(() => new Set(words.map((w) => w.translationId)), [words]);
   const [saved, setSaved] = useState<Set<string>>(new Set());
+  const [locallyRemoved, setLocallyRemoved] = useState<Set<string>>(new Set());
   const [justSaved, setJustSaved] = useState<string | null>(null);
 
   const q = query.trim();
@@ -147,6 +159,23 @@ export function SearchView({ onClose }: { onClose: () => void }) {
     setCurrentIdx(0);
   }
 
+  // The set the card renders: server truth (translation already saved → mark the
+  // PRIMARY sense, since save_card persists the cache row's primary sense) plus
+  // this session's optimistic adds, minus this session's deletes.
+  const savedIds = useMemo(() => {
+    const s = new Set(saved);
+    if (
+      outcome?.status === 'found' &&
+      result != null &&
+      savedTranslations.has(outcome.result.translationId) &&
+      !locallyRemoved.has(outcome.result.translationId)
+    ) {
+      const primary = result.translations[0];
+      if (primary != null) s.add(primary.id);
+    }
+    return s;
+  }, [saved, savedTranslations, locallyRemoved, outcome, result]);
+
   const saveCard = useSaveCard();
   const save = (i: number) => {
     if (result == null || outcome?.status !== 'found' || !saveable) return;
@@ -154,6 +183,12 @@ export function SearchView({ onClose }: { onClose: () => void }) {
     // Optimistic UI on the sense chip; the persisted card references the cache
     // row (primary sense) via save_card — see DataSource.saveCard.
     setSaved((s) => new Set(s).add(id));
+    setLocallyRemoved((s) => {
+      if (!s.has(outcome.result.translationId)) return s;
+      const n = new Set(s);
+      n.delete(outcome.result.translationId);
+      return n;
+    });
     setJustSaved(id);
     setTimeout(() => setJustSaved(null), 1500);
     addRecent(q);
@@ -170,14 +205,23 @@ export function SearchView({ onClose }: { onClose: () => void }) {
       },
     });
   };
-  const unsave = (i: number) => {
-    if (result == null) return;
+  // Delete-from-results goes through the SAME confirmation as every other delete
+  // surface (shared ConfirmDialog + wordList.delete* copy): a saved word carries
+  // study history, so un-saving it is destructive, not a toggle.
+  const [pendingUnsave, setPendingUnsave] = useState<number | null>(null);
+  const confirmUnsave = () => {
+    const i = pendingUnsave;
+    setPendingUnsave(null);
+    if (result == null || i == null) return;
     const id = result.translations[i].id;
     setSaved((s) => {
       const n = new Set(s);
       n.delete(id);
       return n;
     });
+    // Mask the server-derived saved state too (UI-level, same as the Word List's
+    // local delete) until app-side delete persistence lands.
+    if (outcome?.status === 'found') setLocallyRemoved((s) => new Set(s).add(outcome.result.translationId));
   };
 
   return (
@@ -212,12 +256,12 @@ export function SearchView({ onClose }: { onClose: () => void }) {
               targetLang={langs?.targetShort}
               currentIdx={currentIdx}
               onSetCurrent={setCurrentIdx}
-              savedIds={saved}
+              savedIds={savedIds}
               justSavedId={justSaved}
               saveable={saveable}
               noticeText={noticeText}
               onSave={save}
-              onDelete={unsave}
+              onDelete={setPendingUnsave}
             />
           </Animated.View>
         )}
@@ -236,6 +280,18 @@ export function SearchView({ onClose }: { onClose: () => void }) {
           </Animated.View>
         )}
       </ScrollView>
+
+      {/* Shared delete confirmation — identical prompt to the Word List surfaces. */}
+      <ConfirmDialog
+        visible={pendingUnsave != null}
+        icon={<IconTrash size={22} color={theme.color.danger} />}
+        title={t('wordList.deleteTitle', { word: pendingUnsave != null ? (result?.translations[pendingUnsave]?.word ?? '') : '' })}
+        body={t('wordList.deleteBody')}
+        confirmLabel={t('wordList.deleteConfirm')}
+        destructive
+        onConfirm={confirmUnsave}
+        onClose={() => setPendingUnsave(null)}
+      />
     </View>
   );
 }
@@ -267,9 +323,7 @@ function DirectionToggle({
   profile?: Profile;
 }) {
   const { theme } = useUnistyles();
-  const { t } = useTranslation();
   const opts: SearchDirection[] = ['native_to_target', 'target_to_native'];
-  const active = profile ? directionLangs(profile, direction) : null;
   return (
     <View style={styles.dirWrap}>
       <View style={styles.segmented}>
@@ -292,7 +346,8 @@ function DirectionToggle({
           );
         })}
       </View>
-      {active && <RawText style={styles.dirHint}>{t('search.dirHint', { source: active.sourceName, target: active.targetName })}</RawText>}
+      {/* 18 §A3: the full-sentence direction hint was cut — the toggle labels and
+          the search-bar placeholder already state the direction. */}
     </View>
   );
 }
@@ -388,7 +443,6 @@ const styles = StyleSheet.create((theme) => {
     segmented: { flexDirection: 'row', backgroundColor: palette.slate[100], borderRadius: 10, padding: 3, gap: 2 },
     segBtn: { paddingVertical: 6, paddingHorizontal: 18, borderRadius: 8 },
     segText: { fontSize: 13 },
-    dirHint: { fontFamily: fonts.mono.regular, fontSize: 11, color: color.textMuted, letterSpacing: 0.1 },
 
     searchPad: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10 },
     searchBox: {

@@ -14,6 +14,17 @@ export function addedLabel(createdAt: Date, t: TFunction): string {
   return t('wordList.addedMonthsAgo', { count: Math.round(days / 30) });
 }
 
+/** A word's review "health" from its next-due date: overdue/now → needs review,
+ *  within 2 days → approaching, else healthy. Drives the due-label color in the
+ *  shared WordRow (moved here from ProgressScreen for the 18-item-1 row
+ *  consolidation — one definition, every list). */
+export function wordHealth(dueAt: Date): 'due' | 'soon' | 'ok' {
+  const ms = dueAt.getTime() - Date.now();
+  if (ms <= 0) return 'due';
+  if (ms <= 2 * DAY) return 'soon';
+  return 'ok';
+}
+
 /** "Due now / Today / Tomorrow / in N days · weeks". */
 export function dueLabel(dueAt: Date, t: TFunction): string {
   const ms = dueAt.getTime() - Date.now();

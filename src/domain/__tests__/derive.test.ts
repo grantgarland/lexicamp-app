@@ -4,6 +4,7 @@
 import { getTier, TIERS } from '@/theme/tiers';
 
 import {
+  defaultDisplayName,
   directionLangs,
   homeSnapshot,
   languageName,
@@ -174,5 +175,19 @@ describe('homeSnapshot', () => {
     const snap = homeSnapshot(cards, [], NOW);
     expect(snap.addedToday).toBe(1);
     expect(snap.wordsSaved).toBe(2);
+  });
+});
+
+describe('defaultDisplayName (18 §A7)', () => {
+  test('prettifies the email local-part', () => {
+    expect(defaultDisplayName('grant.persona@gmail.com')).toBe('Grant Persona');
+    expect(defaultDisplayName('casey_garland-dev@x.io')).toBe('Casey Garland Dev');
+  });
+  test('strips +tags and never returns empty', () => {
+    expect(defaultDisplayName('grant+lexicamp@gmail.com')).toBe('Grant');
+    expect(defaultDisplayName('++@x.io')).toBe('Learner');
+  });
+  test('prefers a provider-supplied name', () => {
+    expect(defaultDisplayName('x@y.com', '  Casey G  ')).toBe('Casey G');
   });
 });

@@ -12,26 +12,26 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
-import { useHomeData } from '@/query/hooks';
+import { useHomeData, useProgressData } from '@/query/hooks';
+import { usePrefsStore } from '@/store/prefsStore';
 import { useUiStore } from '@/store/uiStore';
 
 import {
+  HowItWorksList,
   IconArrowRight,
   IconBook,
   IconCalendar,
+  IconCheck,
   IconChevronDown,
   IconChevronUp,
-  IconClock,
   IconFire,
   IconInfo,
   IconMountain,
   MasteryCard,
   RawText,
   Screen,
+  Sheet,
   Tooltip,
-  ForgettingCurve,
-  CardSorter,
-  DailyPractice,
 } from '@/ui';
 
 // Day/month names are localized (`date.days` / `date.months` arrays); the label shape
@@ -48,7 +48,12 @@ export function HomeScreen() {
   const { t } = useTranslation();
   const setSearchOpen = useUiStore((s) => s.setSearchOpen);
   const { snapshot, streakDays } = useHomeData();
+  const eduCardDismissed = usePrefsStore((s) => s.eduCardDismissed);
   const isEmpty = snapshot?.isEmpty ?? false;
+  // The educator card is permanent while the deck is empty (first-run teaching);
+  // afterwards it honors the persisted dismissal (17 §H3 — content stays
+  // reachable via Settings → How Lexicamp works).
+  const showEdu = isEmpty || !eduCardDismissed;
   return (
     <Screen edges={['top']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -60,11 +65,16 @@ export function HomeScreen() {
               <AddFirstWordCard onAdd={() => setSearchOpen(true)} />
             ) : (
               <>
-                <StudyCard due={snapshot.needRecallToday} onStudy={() => router.push('/quiz')} />
-                <StatTiles needRecall={snapshot.needRecallTotal} addedToday={snapshot.addedToday} dueTomorrow={snapshot.dueTomorrow} />
+                {/* ONE due number app-wide (17 §H1/X1): everything ready now, incl. overdue. */}
+                {snapshot.needRecallTotal > 0 ? (
+                  <StudyCard due={snapshot.needRecallTotal} onStudy={() => router.push('/quiz')} />
+                ) : (
+                  <CaughtUpCard dueTomorrow={snapshot.dueTomorrow} onAdd={() => setSearchOpen(true)} />
+                )}
+                <StatTiles mastered={snapshot.masteredCount} addedToday={snapshot.addedToday} dueTomorrow={snapshot.dueTomorrow} />
               </>
             )}
-            <HowItWorksCard defaultOpen={isEmpty} />
+            {showEdu && <HowItWorksCard defaultOpen={isEmpty} dismissible={!isEmpty} />}
           </>
         )}
       </ScrollView>
@@ -75,6 +85,9 @@ export function HomeScreen() {
 function GreetingRow({ dateLabel, streakDays, subline }: { dateLabel: string; streakDays: number; subline?: string }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
+  const [streakOpen, setStreakOpen] = useState(false);
+  // bestStreak rides the already-cached progress-stats query (17 §H4).
+  const { bestStreak } = useProgressData();
   const hot = streakDays > 1;
   const fg = hot ? theme.palette.amber[600] : theme.palette.slate[500];
   return (
@@ -83,22 +96,39 @@ function GreetingRow({ dateLabel, streakDays, subline }: { dateLabel: string; st
         <RawText style={styles.date}>{dateLabel}</RawText>
         {subline != null && <RawText style={styles.subline}>{subline}</RawText>}
       </View>
-      <View
-        style={[
+      <Pressable
+        onPress={() => setStreakOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel={t('home.dayStreakA11y', { count: streakDays })}
+        style={({ pressed }) => [
           styles.streak,
           {
             backgroundColor: hot ? theme.palette.amber[50] : theme.palette.slate[50],
             borderColor: hot ? theme.palette.amber[200] : theme.palette.slate[200],
           },
+          pressed && { opacity: 0.7 },
         ]}
-        accessibilityLabel={t('home.dayStreakA11y', { count: streakDays })}
       >
         <View style={styles.streakTop}>
           <IconFire size={18} color={hot ? theme.color.accent : theme.palette.slate[400]} />
           <RawText style={[styles.streakNum, { color: fg }]}>{streakDays}</RawText>
         </View>
         <RawText style={[styles.streakLabel, { color: fg }]}>{t('home.dayStreak')}</RawText>
-      </View>
+      </Pressable>
+
+      <Sheet visible={streakOpen} onClose={() => setStreakOpen(false)} title={t('home.streakTitle')}>
+        <View style={styles.streakStatsRow}>
+          <View style={styles.streakStat}>
+            <RawText style={styles.streakStatNum}>{streakDays}</RawText>
+            <RawText style={styles.streakStatLabel}>{t('home.streakCurrent')}</RawText>
+          </View>
+          <View style={styles.streakStat}>
+            <RawText style={styles.streakStatNum}>{Math.max(bestStreak, streakDays)}</RawText>
+            <RawText style={styles.streakStatLabel}>{t('home.streakBest')}</RawText>
+          </View>
+        </View>
+        <RawText style={styles.streakRule}>{t('home.streakRule')}</RawText>
+      </Sheet>
     </View>
   );
 }
@@ -120,7 +150,7 @@ function StudyCard({ due, onStudy }: { due: number; onStudy: () => void }) {
       <View style={styles.studyContent}>
         <RawText style={styles.studyEyebrow}>{t('home.ready')}</RawText>
         <RawText style={styles.studyNumber}>{due}</RawText>
-        <RawText style={styles.studyDue}>{t('home.wordsDueToday')}</RawText>
+        <RawText style={styles.studyDue}>{t('home.wordsReady')}</RawText>
         <RawText style={styles.studySub}>{t('home.studySub')}</RawText>
         <Pressable
           accessibilityRole="button"
@@ -136,14 +166,13 @@ function StudyCard({ due, onStudy }: { due: number; onStudy: () => void }) {
   );
 }
 
-function StatTiles({ needRecall, addedToday, dueTomorrow }: { needRecall: number; addedToday: number; dueTomorrow: number }) {
+// Tile trio (17 §H2): Added today · Due tomorrow · Mastered. "Need recall" was cut —
+// its number now IS the StudyCard hero (X1) — and Mastered ties the daily glance to
+// the mountain goal, mirroring Progress.
+function StatTiles({ mastered, addedToday, dueTomorrow }: { mastered: number; addedToday: number; dueTomorrow: number }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const tiles = [
-    {
-      label: t('home.statNeedRecall'), value: needRecall, icon: <IconClock size={15} color={theme.color.accent} />, bg: theme.palette.amber[50], border: theme.palette.amber[100],
-      tip: t('home.statNeedRecallTip'),
-    },
     {
       label: t('home.statAddedToday'), value: addedToday, icon: <IconBook size={15} color={theme.color.brand} />, bg: theme.palette.blue[50], border: theme.palette.blue[100],
       tip: t('home.statAddedTodayTip'),
@@ -151,6 +180,10 @@ function StatTiles({ needRecall, addedToday, dueTomorrow }: { needRecall: number
     {
       label: t('home.statDueTomorrow'), value: dueTomorrow, icon: <IconCalendar size={15} color={theme.color.textMuted} />, bg: theme.palette.slate[50], border: theme.palette.slate[200],
       tip: t('home.statDueTomorrowTip'),
+    },
+    {
+      label: t('home.statMastered'), value: mastered, icon: <IconMountain size={15} color={theme.color.evergreen} />, bg: theme.color.evergreenTint, border: theme.color.evergreenSoft,
+      tip: t('home.statMasteredTip'),
     },
   ];
   return (
@@ -180,22 +213,15 @@ function StatTiles({ needRecall, addedToday, dueTomorrow }: { needRecall: number
   );
 }
 
-// "How Lexicamp works" educator — present on every Home variant. Collapsible card
-// (default collapsed → title + teaser); when open it reveals its concepts as an accordion
-// list, each item independently expanding to its explanation (FSRS scheduling, the study
-// queue, usage tips).
-function HowItWorksCard({ defaultOpen = false }: { defaultOpen?: boolean }) {
+// "How Lexicamp works" educator — collapsible card (default collapsed → title +
+// teaser). The accordion content is the shared `HowItWorksList` (also served from
+// Settings → How Lexicamp works). Once the user has saved words it becomes
+// dismissible ("Got it") with the dismissal persisted (17 §H3).
+function HowItWorksCard({ defaultOpen = false, dismissible = false }: { defaultOpen?: boolean; dismissible?: boolean }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const [open, setOpen] = useState(defaultOpen);
-  // Accordion: only one section open at a time (opening one closes the others).
-  const [openSection, setOpenSection] = useState<number | null>(null);
-  const toggleSection = (i: number) => setOpenSection((cur) => (cur === i ? null : i));
-  const sections = [
-    { title: t('home.edu.s1Title'), body: t('home.edu.s1Body'), graphic: <ForgettingCurve /> },
-    { title: t('home.edu.s2Title'), body: t('home.edu.s2Body'), graphic: <CardSorter /> },
-    { title: t('home.edu.s3Title'), body: t('home.edu.s3Body'), graphic: <DailyPractice /> },
-  ];
+  const setEduCardDismissed = usePrefsStore((s) => s.setEduCardDismissed);
   return (
     <View style={styles.eduCard}>
       <Pressable
@@ -220,35 +246,47 @@ function HowItWorksCard({ defaultOpen = false }: { defaultOpen?: boolean }) {
       </Pressable>
       {open && (
         <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(140)} style={styles.eduList}>
-          {sections.map((s, i) => {
-            const isOpen = openSection === i;
-            return (
-              <View key={s.title} style={styles.eduItem}>
-                <Pressable
-                  onPress={() => toggleSection(i)}
-                  accessibilityRole="button"
-                  accessibilityState={{ expanded: isOpen }}
-                  accessibilityLabel={s.title}
-                  style={({ pressed }) => [styles.eduItemHeader, pressed && { opacity: 0.6 }]}
-                >
-                  <RawText style={styles.eduItemTitle}>{s.title}</RawText>
-                  {isOpen ? (
-                    <IconChevronUp size={14} color={theme.color.textMuted} />
-                  ) : (
-                    <IconChevronDown size={14} color={theme.color.textMuted} />
-                  )}
-                </Pressable>
-                {isOpen && (
-                  <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)}>
-                    <RawText style={styles.eduItemBody}>{s.body}</RawText>
-                    <View style={styles.eduItemGraphic}>{s.graphic}</View>
-                  </Animated.View>
-                )}
-              </View>
-            );
-          })}
+          <HowItWorksList />
+          {dismissible && (
+            <Pressable
+              onPress={() => setEduCardDismissed(true)}
+              accessibilityRole="button"
+              accessibilityLabel={t('home.edu.dismissA11y')}
+              style={({ pressed }) => [styles.eduDismiss, pressed && { opacity: 0.6 }]}
+            >
+              <IconCheck size={14} color={theme.color.brand} />
+              <RawText style={styles.eduDismissText}>{t('home.edu.dismiss')}</RawText>
+            </Pressable>
+          )}
         </Animated.View>
       )}
+    </View>
+  );
+}
+
+// Zero-due state (17 §H1) — the most-seen daily surface for a healthy user. No
+// "study anyway": reviewing unscheduled cards fights FSRS, so the forward action
+// is capture. Evergreen styling = calm success, distinct from the blue call-to-study.
+function CaughtUpCard({ dueTomorrow, onAdd }: { dueTomorrow: number; onAdd: () => void }) {
+  const { theme } = useUnistyles();
+  const { t } = useTranslation();
+  return (
+    <View style={styles.caughtUpCard}>
+      <View style={styles.caughtUpBadge}>
+        <IconCheck size={18} color={theme.color.evergreen} />
+      </View>
+      <RawText style={styles.caughtUpTitle}>{t('home.caughtUpTitle')}</RawText>
+      <RawText style={styles.caughtUpBody}>
+        {dueTomorrow > 0 ? t('home.caughtUpTomorrow', { count: dueTomorrow }) : t('home.caughtUpNothing')}
+      </RawText>
+      <Pressable
+        onPress={onAdd}
+        accessibilityRole="button"
+        accessibilityLabel={t('home.addWordA11y')}
+        style={({ pressed }) => [styles.caughtUpBtn, pressed && { transform: [{ scale: 0.98 }] }]}
+      >
+        <RawText style={styles.caughtUpBtnText}>{t('home.addWord')}</RawText>
+      </Pressable>
     </View>
   );
 }
@@ -284,6 +322,34 @@ const styles = StyleSheet.create((theme) => {
     streakTop: { flexDirection: 'row', alignItems: 'center', gap: 3 },
     streakNum: { fontFamily: fonts.mono.bold, fontSize: 18 },
     streakLabel: { fontFamily: fonts.sans.semibold, fontSize: 10, letterSpacing: 0.4, textTransform: 'uppercase' },
+    streakStatsRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+    streakStat: { flex: 1, alignItems: 'center', backgroundColor: palette.amber[50], borderWidth: theme.borderWidth.thin, borderColor: palette.amber[200], borderRadius: theme.radius.md, paddingVertical: 14 },
+    streakStatNum: { fontFamily: fonts.serif.bold, fontSize: 30, color: color.textStrong },
+    streakStatLabel: { fontFamily: fonts.sans.semibold, fontSize: 11, letterSpacing: 0.4, textTransform: 'uppercase', color: color.textMuted, marginTop: 3 },
+    streakRule: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 20, color: color.textMuted },
+
+    caughtUpCard: {
+      backgroundColor: color.evergreenTint,
+      borderWidth: theme.borderWidth.base,
+      borderColor: color.evergreenSoft,
+      borderRadius: theme.radius.lg,
+      paddingHorizontal: 22,
+      paddingVertical: 24,
+      alignItems: 'center',
+    },
+    caughtUpBadge: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+    caughtUpTitle: { fontFamily: fonts.serif.semibold, fontSize: 20, color: color.textStrong, textAlign: 'center', marginBottom: 6 },
+    caughtUpBody: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 20, color: color.textMuted, textAlign: 'center', maxWidth: 260, marginBottom: 16 },
+    caughtUpBtn: {
+      alignSelf: 'stretch',
+      backgroundColor: color.accent,
+      borderRadius: theme.radius.md,
+      paddingVertical: 13,
+      alignItems: 'center',
+      justifyContent: 'center',
+      boxShadow: theme.shadow.accent,
+    },
+    caughtUpBtnText: { fontFamily: fonts.sans.bold, fontSize: 16, color: '#fff' },
 
     // No `overflow: hidden` — that would clip the Study button's glow. The gradient is
     // rounded via the SVG Rect's rx/ry instead, so the card corners still read clean.
@@ -351,11 +417,8 @@ const styles = StyleSheet.create((theme) => {
     eduTitle: { fontFamily: fonts.sans.bold, fontSize: 14, color: color.textStrong },
     eduTeaser: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted, marginTop: 2 },
     eduList: { marginTop: 8 },
-    eduItem: { borderTopWidth: theme.borderWidth.thin, borderTopColor: color.divider },
-    eduItemHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11 },
-    eduItemTitle: { flex: 1, fontFamily: fonts.sans.semibold, fontSize: 13, color: color.textStrong },
-    eduItemBody: { fontFamily: fonts.sans.regular, fontSize: 12.5, lineHeight: 18, color: color.textMuted },
-    eduItemGraphic: { marginTop: 12, paddingBottom: 14 },
+    eduDismiss: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderTopWidth: theme.borderWidth.thin, borderTopColor: color.divider, paddingTop: 12, paddingBottom: 2 },
+    eduDismissText: { fontFamily: fonts.sans.semibold, fontSize: 13, color: color.brand },
 
     statRow: { flexDirection: 'row', gap: 10 },
     statTileTrigger: { flex: 1 },

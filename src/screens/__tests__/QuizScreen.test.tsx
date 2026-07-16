@@ -69,6 +69,7 @@ jest.mock('@/query/hooks', () => ({
   useDueCards: () => ({ cards: [mockCard, { ...mockCard, id: 'c2' }], isLoading: false }),
   useHomeData: () => ({ streakDays: 3 }),
   useCommitQuizSession: () => ({ mutate: jest.fn() }),
+  useEntitlement: () => ({ entitlement: undefined, isPaid: false, isLoading: false }), // 17 §S2: session cap read
 }));
 
 import { fireEvent, render, screen } from '@testing-library/react-native';

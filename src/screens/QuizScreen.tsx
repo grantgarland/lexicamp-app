@@ -15,7 +15,8 @@ import { sessionPromotions, tierTransition, type PromotedWord } from '@/domain/f
 import type { BufferedRating, QuizCardItem, UiRating } from '@/domain/quiz';
 import { sessionStats, uiRatingToFsrs } from '@/domain/quiz';
 import { useTranslation } from '@/i18n';
-import { useCommitQuizSession, useDueCards, useHomeData } from '@/query/hooks';
+import { useCommitQuizSession, useDueCards, useEntitlement, useHomeData } from '@/query/hooks';
+import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
 import { type TierId } from '@/theme/tiers';
 import {
   Button,
@@ -75,13 +76,20 @@ export function QuizScreen() {
   const [ratings, setRatings] = useState<BufferedRating[]>([]);
   const [showExit, setShowExit] = useState(false);
 
+  // Session size = the one persisted quiz-length pref (17 §S2/X4); free tier is
+  // pinned to QUIZ_LENGTH_FREE. The due queue beyond the cap stays due — it
+  // simply waits for the next session.
+  const { isPaid } = useEntitlement();
+  const quizLength = usePrefsStore((s) => s.quizLength);
+  const sessionCap = isPaid ? quizLength : QUIZ_LENGTH_FREE;
+
   // SNAPSHOT the session's cards once the queue arrives (render-adjust pattern).
   // Committing invalidates the dueCards query and the refetch comes back EMPTY
   // (nothing is due anymore — FSRS worked), so the end/stats/promo phases must
   // render from this frozen list, never the live query.
   const [sessionCards, setSessionCards] = useState<QuizCardItem[] | null>(null);
-  if (sessionCards == null && cards.length > 0) setSessionCards(cards);
-  const sc = sessionCards ?? cards;
+  if (sessionCards == null && cards.length > 0) setSessionCards(cards.slice(0, sessionCap));
+  const sc = sessionCards ?? cards.slice(0, sessionCap);
 
   const total = sc.length;
   const card = sc[idx];

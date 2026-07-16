@@ -18,7 +18,8 @@ import { TierBadge } from './TierBadge';
 export interface WordDetailSheetProps {
   word: WordListItem | null;
   onClose: () => void;
-  onDelete: (w: WordListItem) => void;
+  /** Omit for read-only contexts (e.g. the Progress tier drawer, 18 §A6) — hides the delete action. */
+  onDelete?: (w: WordListItem) => void;
 }
 
 export function WordDetailSheet({ word, onClose, onDelete }: WordDetailSheetProps) {
@@ -52,7 +53,8 @@ export function WordDetailSheet({ word, onClose, onDelete }: WordDetailSheetProp
               <Text style={[styles.memoryTier, { color: tier.text }]}>{t(`tier.${tier.id}.name`)}</Text>
               <Text style={[styles.memoryDays, { color: tier.text }]}>{t('wordList.memoryStrengthDays', { count: Math.round(word.stability) })}</Text>
             </View>
-            <Text style={[styles.memoryDesc, { color: tier.text }]}>{t(`tier.${tier.id}.desc`)}</Text>
+            {/* 18-session: tier-desc subheader cut — the tier name + days already
+                say it; the hint below is the one line that earns the space. */}
             <Text style={[styles.memoryHint, { color: tier.text, borderTopColor: tier.border }]}>{t('wordList.memoryHint')}</Text>
           </View>
           {example !== '' && (
@@ -70,10 +72,12 @@ export function WordDetailSheet({ word, onClose, onDelete }: WordDetailSheetProp
               { label: t('wordList.addedLabel'), value: addedLabel(word.createdAt, t) },
             ]}
           />
-          <Pressable onPress={() => onDelete(word)} accessibilityRole="button" style={({ pressed }) => [styles.delete, pressed && { opacity: 0.85 }]}>
-            <IconTrash size={17} color={theme.color.danger} />
-            <Text style={styles.deleteText}>{t('wordList.deleteWord')}</Text>
-          </Pressable>
+          {onDelete != null && (
+            <Pressable onPress={() => onDelete(word)} accessibilityRole="button" style={({ pressed }) => [styles.delete, pressed && { opacity: 0.85 }]}>
+              <IconTrash size={17} color={theme.color.danger} />
+              <Text style={styles.deleteText}>{t('wordList.deleteWord')}</Text>
+            </Pressable>
+          )}
         </View>
       )}
     </Sheet>
@@ -93,7 +97,6 @@ const styles = StyleSheet.create((theme) => {
     memoryTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
     memoryTier: { fontFamily: fonts.sans.bold, fontSize: 12 },
     memoryDays: { fontFamily: fonts.sans.semibold, fontSize: 12 },
-    memoryDesc: { fontFamily: fonts.sans.regular, fontSize: 12, lineHeight: 17, opacity: 0.85 },
     memoryHint: { fontFamily: fonts.sans.regular, fontSize: 11, lineHeight: 15, opacity: 0.7, marginTop: 8, paddingTop: 8, borderTopWidth: theme.borderWidth.thin },
     sectionLabel: { fontFamily: fonts.sans.bold, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', color: color.textMuted, marginBottom: 6 },
     example: { fontFamily: fonts.sans.regular, fontSize: 14, fontStyle: 'italic', lineHeight: 21, color: color.textBody, marginBottom: 16 },

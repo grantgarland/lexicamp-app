@@ -62,6 +62,13 @@ const SAMPLE_RESULT: TranslationResult = {
   ],
 };
 
+const NOW = Date.now();
+const SAMPLE_WORDS = [
+  { native: 'mountain', target: 'montaña', stability: 1, dueAt: new Date(NOW - 3600e3), reps: 4, isPremium: true },
+  { native: 'to remember', target: 'recordar', stability: 9, dueAt: new Date(NOW + 2 * 864e5), reps: 4 },
+  { native: 'fluency', target: 'fluidez', stability: 40, dueAt: new Date(NOW + 30 * 864e5), reps: 11, isPremium: true },
+];
+
 const TYPE_SPECIMENS: { variant: TextVariant; sample: string }[] = [
   { variant: 'display', sample: 'Headword' },
   { variant: 'title', sample: 'Screen title' },
@@ -260,20 +267,9 @@ export default function KitchenSink() {
 
         <Section title="Word rows (swipe left for actions)">
           <Card padding={0}>
-            <WordRow
-              word={{ native: 'mountain', target: 'montaña', added: '2d', stability: 1 }}
-              isPremium
-              onPress={() => {}}
-            />
-            <WordRow
-              word={{ native: 'to remember', target: 'recordar', added: '5d', stability: 9 }}
-              onPress={() => {}}
-            />
-            <WordRow
-              word={{ native: 'fluency', target: 'fluidez', added: '3w', stability: 40 }}
-              isPremium
-              onPress={() => {}}
-            />
+            {SAMPLE_WORDS.map(({ isPremium, ...word }) => (
+              <WordRow key={word.target} word={word} isPremium={isPremium} onPress={() => {}} />
+            ))}
           </Card>
         </Section>
 

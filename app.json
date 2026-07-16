@@ -15,6 +15,13 @@
         "com.apple.developer.applesignin": [
           "Default"
         ]
+      },
+      "infoPlist": {
+        "CFBundleLocalizations": [
+          "en",
+          "es"
+        ],
+        "CFBundleDevelopmentRegion": "en"
       }
     },
     "android": {
@@ -51,7 +58,16 @@
           "organization": "lexicamp"
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "./plugins/withAndroidLocaleConfig",
+        {
+          "locales": [
+            "en",
+            "es"
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

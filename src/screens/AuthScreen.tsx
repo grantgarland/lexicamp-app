@@ -11,6 +11,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { signInWithEmail, signUpWithEmail } from '@/auth/session';
 import { dataSource, USE_SUPABASE } from '@/data';
+import { defaultDisplayName } from '@/domain/derive';
 import { useTranslation } from '@/i18n';
 import { registerForPush } from '@/notifications/push';
 import { useOnboardingStore } from '@/store/onboardingStore';
@@ -47,6 +48,9 @@ export function AuthScreen() {
         targetLang: ob.targetLang ?? 'es', // O-05 default if the buffer is cold (direct sign-in path)
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC',
         notificationsEnabled: ob.notificationsEnabled,
+        // 18 §A7 (D1): seed a default name so profiles are never blank — Apple/
+        // Google provider names slot in here when those auth flows land.
+        displayName: defaultDisplayName(email.trim()),
       });
       // O-06 opt-in → OS permission prompt + device token registration (2.5).
       // Fire-and-forget: a denied prompt must not block entry into the app.

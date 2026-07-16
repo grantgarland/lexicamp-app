@@ -20,7 +20,7 @@ export interface Engagement {
 }
 
 /** A saved word resolved for the Word List (card ⋈ translations_cache ⋈ fsrs_state).
- *  `native` = the learning-language headword (bold), `target` = its translation. */
+ *  `target` = its translation headword (bold), `native` = the learner's nativelanguage,  */
 export interface WordListItem {
   id: string;
   /** translations_cache row id — keys the lazy examples fetch (16 §3). */

@@ -1,16 +1,19 @@
-// SettingsScreen (SE-01) — the settings hub, assembled against settings/Settings.html.
-// Account · Study Preferences · Subscription · Data & Support, over real profile +
-// entitlement state. Rows compose the shared ListItem with a colored icon tile;
-// PremiumBadge is the shared amber pill. Destructive Clear-data / Sign-out and About
-// open confirm sheets; the deeper editors open a placeholder sheet for now.
+// SettingsScreen (SE-01) — the settings hub, assembled against settings/Settings.html
+// as refined by 17-ux-refinement: reminders row reads real pref state (no premium
+// badge on the row — the gate is inside, on the custom-time field only, §S1/X5);
+// quiz length reads the one persisted pref (§S2); Clear-all-data was cut (§S3);
+// App-language and Restore-purchases rows added (§S4/S5); "How Lexicamp works"
+// lives in Help & Support (§H3). Rows compose the shared ListItem with a colored
+// icon tile; destructive Sign-out confirms via sheet.
 import { useRouter } from 'expo-router';
 import { type ReactNode, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
-import { useEntitlement, useHomeData, useProfile } from '@/query/hooks';
-import { AboutSheet, EditProfileSheet, NotificationSheet, QuizLengthSheet, SupportSheet } from './settings/sheets';
+import { useEntitlement, useHomeData, useNotificationPrefs, useProfile } from '@/query/hooks';
+import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
+import { AboutSheet, EditProfileSheet, formatReminderTime, HowItWorksSheet, NotificationSheet, QuizLengthSheet, SupportSheet } from './settings/sheets';
 import {
   Button,
   ConfirmDialog,
@@ -20,8 +23,8 @@ import {
   IconCheck,
   IconInfo,
   IconMail,
+  IconMountain,
   IconStar,
-  IconTrash,
   ListItem,
   PremiumBadge,
   RawText,
@@ -30,7 +33,7 @@ import {
 
 const FREE_WORD_LIMIT = 50;
 const FREE_FEATURES = ['featureUnlimited', 'featureDecks', 'featureLanguages'] as const;
-type SheetId = 'about' | 'clear' | 'signout' | 'editProfile' | 'notifications' | 'quizLength' | 'support' | null;
+type SheetId = 'about' | 'signout' | 'editProfile' | 'notifications' | 'quizLength' | 'support' | 'howItWorks' | null;
 
 export function SettingsScreen() {
   const { theme } = useUnistyles();
@@ -39,6 +42,8 @@ export function SettingsScreen() {
   const profile = useProfile();
   const { isPaid } = useEntitlement();
   const { snapshot } = useHomeData();
+  const { prefs: notifPrefs } = useNotificationPrefs();
+  const quizLength = usePrefsStore((s) => s.quizLength);
   const wordsSaved = snapshot?.wordsSaved ?? 0;
 
   const [sheet, setSheet] = useState<SheetId>(null);
@@ -47,6 +52,15 @@ export function SettingsScreen() {
   const initial = (profile?.displayName ?? 'L').charAt(0).toUpperCase();
   const direction = `${t(`languages.${profile?.nativeLang ?? 'en'}`)} → ${t(`languages.${profile?.targetLang ?? 'es'}`)}`;
   const usagePct = Math.min(100, Math.round((wordsSaved / FREE_WORD_LIMIT) * 100));
+  // Honest row state (17 §S1): the subtitle reflects the user's actual reminder
+  // prefs; free users are NOT shown a premium badge here — the toggle is free,
+  // only the custom time is gated (inside the sheet).
+  const remindersSubtitle =
+    notifPrefs == null
+      ? '…'
+      : notifPrefs.enabled
+        ? t('settings.remindersOnAt', { time: formatReminderTime(notifPrefs.windows[0]?.time ?? '19:00') })
+        : t('settings.remindersOff');
 
   return (
     <Screen edges={['top']}>
@@ -66,6 +80,9 @@ export function SettingsScreen() {
             </View>
             <IconChevronRight size={16} color={theme.color.textFaint} />
           </Pressable>
+          {/* 18 §A8 (D3): no in-app UI-language switcher — the app follows the OS
+              (per-app language in iOS/Android settings). Native language (content)
+              stays an explicit onboarding choice; the two are deliberately separate. */}
         </Section>
 
         {/* Study Preferences */}
@@ -73,15 +90,15 @@ export function SettingsScreen() {
           <ListItem
             leading={<IconTile><IconBell size={16} color={theme.color.brand} /></IconTile>}
             title={t('settings.studyReminders')}
-            subtitle={isPaid ? t('settings.remindersOn') : t('settings.remindersLocked')}
-            trailing={isPaid ? <Chevron /> : <PremiumBadge small />}
+            subtitle={remindersSubtitle}
+            trailing={<Chevron />}
             onPress={() => setSheet('notifications')}
           />
           <ListItem
             leading={<IconTile><IconBook size={16} color={theme.color.brand} /></IconTile>}
             title={t('settings.quizLength')}
-            subtitle={t('settings.cardsPerSession', { count: 20 })}
-            trailing={isPaid ? <Chevron /> : <PremiumBadge small />}
+            subtitle={t('settings.cardsPerSession', { count: isPaid ? quizLength : QUIZ_LENGTH_FREE })}
+            trailing={<Chevron />}
             onPress={() => setSheet('quizLength')}
             last
           />
@@ -130,16 +147,21 @@ export function SettingsScreen() {
               </View>
             </>
           )}
+          {/* Restore purchases (17 §S5) — store-compliance affordance reachable
+              outside the paywall. RevenueCat wiring pending (same stub as PW-01). */}
+          <Pressable onPress={() => {}} accessibilityRole="button" style={({ pressed }) => [styles.restoreRow, pressed && { opacity: 0.6 }]}>
+            <RawText style={styles.restoreText}>{t('settings.restorePurchases')}</RawText>
+          </Pressable>
         </Section>
 
-        {/* Data & Support */}
+        {/* Help & Support (17 §S3: Clear-all-data cut — redundant with Delete
+            Account and destructive; §H3: the Home educator lives here permanently) */}
         <Section label={t('settings.dataSupport')}>
           <ListItem
-            leading={<IconTile tone="danger"><IconTrash size={15} color={theme.color.danger} /></IconTile>}
-            title={t('settings.clearData')}
-            titleColor={theme.color.danger}
+            leading={<IconTile><IconMountain size={15} color={theme.color.brand} /></IconTile>}
+            title={t('home.edu.title')}
             trailing={<Chevron />}
-            onPress={() => setSheet('clear')}
+            onPress={() => setSheet('howItWorks')}
           />
           <ListItem
             leading={<IconTile><IconMail size={15} color={theme.color.brand} /></IconTile>}
@@ -170,18 +192,7 @@ export function SettingsScreen() {
       <QuizLengthSheet visible={sheet === 'quizLength'} isPaid={isPaid} onClose={() => setSheet(null)} onUpgrade={openPaywall} />
       <SupportSheet visible={sheet === 'support'} onClose={() => setSheet(null)} />
       <AboutSheet visible={sheet === 'about'} onClose={() => setSheet(null)} />
-
-      <ConfirmDialog
-        visible={sheet === 'clear'}
-        icon={<IconTrash size={22} color={theme.color.danger} />}
-        title={t('settings.clearTitle')}
-        body={t('settings.clearBody')}
-        confirmLabel={t('settings.clearConfirm')}
-        cancelLabel={t('settings.cancel')}
-        destructive
-        onConfirm={() => setSheet(null)}
-        onClose={() => setSheet(null)}
-      />
+      <HowItWorksSheet visible={sheet === 'howItWorks'} onClose={() => setSheet(null)} />
 
       <ConfirmDialog
         visible={sheet === 'signout'}
@@ -253,6 +264,8 @@ const styles = StyleSheet.create((theme) => {
     featureRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     featureText: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted },
     pricing: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textFaint, textAlign: 'center', marginTop: 8 },
+    restoreRow: { borderTopWidth: theme.borderWidth.thin, borderTopColor: color.divider, paddingVertical: 11, alignItems: 'center' },
+    restoreText: { fontFamily: fonts.sans.semibold, fontSize: 13, color: color.brand },
 
     signOutWrap: { paddingBottom: 12 },
     signOut: { borderWidth: 1.5, borderColor: color.border, borderRadius: radius.md, paddingVertical: 13, alignItems: 'center' },
