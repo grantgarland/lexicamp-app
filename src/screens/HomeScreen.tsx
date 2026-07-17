@@ -13,6 +13,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
 import { useHomeData, useProgressData } from '@/query/hooks';
+import { LanguageIndicator } from '@/screens/shared/LanguageSwitcher';
 import { usePrefsStore } from '@/store/prefsStore';
 import { useUiStore } from '@/store/uiStore';
 
@@ -95,6 +96,10 @@ function GreetingRow({ dateLabel, streakDays, subline }: { dateLabel: string; st
       <View style={styles.greetText}>
         <RawText style={styles.date}>{dateLabel}</RawText>
         {subline != null && <RawText style={styles.subline}>{subline}</RawText>}
+      </View>
+      {/* Phase D: global active-language indicator (18 §D5) */}
+      <View style={styles.greetLang}>
+        <LanguageIndicator />
       </View>
       <Pressable
         onPress={() => setStreakOpen(true)}
@@ -317,8 +322,9 @@ const styles = StyleSheet.create((theme) => {
   return {
     content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16, gap: 14 },
 
-    greetRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    greetRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
     greetText: { flex: 1 },
+    greetLang: { alignSelf: 'flex-start', marginTop: 2 },
     date: { fontFamily: fonts.serif.semibold, fontSize: 24, lineHeight: 28, letterSpacing: -0.2, color: color.textStrong },
     subline: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted, marginTop: 3 },
     streak: { alignItems: 'center', gap: 1, borderWidth: theme.borderWidth.base, borderRadius: 14, paddingVertical: 8, paddingHorizontal: 12 },

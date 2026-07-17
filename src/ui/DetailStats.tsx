@@ -27,5 +27,7 @@ const styles = StyleSheet.create((theme) => ({
   row: { flexDirection: 'row', gap: 12 },
   col: { flex: 1 },
   label: { fontFamily: theme.fonts.sans.bold, fontSize: 10, letterSpacing: 0.5, textTransform: 'uppercase', color: theme.color.textMuted, marginBottom: 3 },
-  value: { fontFamily: theme.fonts.sans.medium, fontSize: 13, color: theme.color.textBody },
+  // 18-session: values carry the information — bolder + stronger than the labels,
+  // sized to match the sheet's example body text (14) so the strip doesn't shout.
+  value: { fontFamily: theme.fonts.sans.bold, fontSize: 14, color: theme.color.textStrong },
 }));

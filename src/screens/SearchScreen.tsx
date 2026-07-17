@@ -17,6 +17,7 @@ import { type LookupResult, posTagI18nKey, qualityReasonI18nKey } from '@/domain
 import type { Profile, SearchDirection } from '@/domain/types';
 import { useTranslation } from '@/i18n';
 import { useDeleteCard, useExamples, useLookup, useProfile, useSaveCard, useWords } from '@/query/hooks';
+import { LanguageIndicator } from '@/screens/shared/LanguageSwitcher';
 import { usePrefsStore } from '@/store/prefsStore';
 import {
   ConfirmDialog,
@@ -111,12 +112,12 @@ export function SearchView({ onClose }: { onClose: () => void }) {
   // here) and `locallyRemoved` (translationIds deleted here, pending the real
   // delete wiring — see 18 follow-up).
   const { words } = useWords();
-  const savedTranslations = useMemo(() => new Set(words.map((w) => w.translationId)), [words]);
   const [saved, setSaved] = useState<Set<string>>(new Set());
-  const [locallyRemoved, setLocallyRemoved] = useState<Set<string>>(new Set());
-  // translationId → card id for saves made THIS session (save_card returns the
-  // id), so delete works before the words refetch lands (A12b).
-  const [sessionCardIds, setSessionCardIds] = useState<Map<string, string>>(new Map());
+  // D10 (multi-sense cards): saved-state, removal masks, and card-id tracking are
+  // all PER SENSE now — each sense of a headword can be its own card with its own
+  // FSRS history ("to go" → ехать/идти/пойти).
+  const [locallyRemoved, setLocallyRemoved] = useState<Set<string>>(new Set()); // sense chip ids
+  const [sessionCardIds, setSessionCardIds] = useState<Map<string, string>>(new Map()); // sense id → card id
   const [justSaved, setJustSaved] = useState<string | null>(null);
 
   const q = query.trim();
@@ -172,24 +173,22 @@ export function SearchView({ onClose }: { onClose: () => void }) {
   }
 
   // The set the card renders: server truth plus this session's optimistic adds,
-  // minus this session's deletes. The saved card knows WHICH sense it holds
-  // (custom_back, A12c) — match it back to a sense chip by target text; fall
-  // back to the primary sense for pre-A12c cards.
+  // minus this session's per-sense deletes. D10: EVERY sense with a saved card
+  // marks — match each saved word row (target = custom_back ?? primary) to its
+  // sense chip by text; a row that matches no chip falls back to the primary
+  // sense (pre-D10 cards).
   const savedIds = useMemo(() => {
-    const s = new Set(saved);
-    if (
-      outcome?.status === 'found' &&
-      result != null &&
-      savedTranslations.has(outcome.result.translationId) &&
-      !locallyRemoved.has(outcome.result.translationId)
-    ) {
-      const savedWord = words.find((w) => w.translationId === outcome.result.translationId);
-      const senseIdx = savedWord != null ? result.translations.findIndex((tr) => tr.word === savedWord.target) : -1;
-      const sense = result.translations[senseIdx >= 0 ? senseIdx : 0];
-      if (sense != null) s.add(sense.id);
+    const set = new Set(saved);
+    if (outcome?.status === 'found' && result != null) {
+      const tid = outcome.result.translationId;
+      for (const w of words) {
+        if (w.translationId !== tid) continue;
+        const sense = result.translations.find((tr) => tr.word === w.target) ?? result.translations[0];
+        if (sense != null && !locallyRemoved.has(sense.id)) set.add(sense.id);
+      }
     }
-    return s;
-  }, [saved, savedTranslations, locallyRemoved, outcome, result, words]);
+    return set;
+  }, [saved, locallyRemoved, outcome, result, words]);
 
   const saveCard = useSaveCard();
   const deleteCard = useDeleteCard();
@@ -197,13 +196,13 @@ export function SearchView({ onClose }: { onClose: () => void }) {
     if (result == null || outcome?.status !== 'found' || !saveable) return;
     const tid = outcome.result.translationId;
     const id = result.translations[i].id;
-    // Optimistic UI on the sense chip. A12c: a NON-primary sense rides along as
-    // the card's custom back, so what the user tapped is what gets studied.
+    // Optimistic UI on the sense chip. D10: senses are independent cards —
+    // saving one never touches its siblings.
     setSaved((s) => new Set(s).add(id));
     setLocallyRemoved((s) => {
-      if (!s.has(tid)) return s;
+      if (!s.has(id)) return s;
       const n = new Set(s);
-      n.delete(tid);
+      n.delete(id);
       return n;
     });
     setJustSaved(id);
@@ -213,7 +212,7 @@ export function SearchView({ onClose }: { onClose: () => void }) {
       { translationId: tid, custom: i > 0 ? { back: result.translations[i].word } : undefined },
       {
         onSuccess: (cardId) => {
-          if (cardId != null) setSessionCardIds((m) => new Map(m).set(tid, cardId));
+          if (cardId != null) setSessionCardIds((m) => new Map(m).set(id, cardId));
         },
         onError: (e) => {
           setSaved((s) => {
@@ -237,23 +236,26 @@ export function SearchView({ onClose }: { onClose: () => void }) {
     setPendingUnsave(null);
     if (result == null || i == null || outcome?.status !== 'found') return;
     const tid = outcome.result.translationId;
-    const id = result.translations[i].id;
+    const sense = result.translations[i];
     // Optimistic clear (also covers mock mode, where nothing persists) …
     setSaved((s) => {
       const n = new Set(s);
-      n.delete(id);
+      n.delete(sense.id);
       return n;
     });
-    setLocallyRemoved((s) => new Set(s).add(tid));
-    // … then the REAL delete (A12b): resolve the card id from this session's
-    // save or the words query. On failure, unmask — the word is still saved.
-    const cardId = sessionCardIds.get(tid) ?? words.find((w) => w.translationId === tid)?.id;
+    setLocallyRemoved((s) => new Set(s).add(sense.id));
+    // … then the REAL delete (A12b, sense-scoped per D10): this session's save
+    // id, else the words row whose content IS this sense. On failure, unmask.
+    const cardId =
+      sessionCardIds.get(sense.id) ??
+      words.find((w) => w.translationId === tid && w.target === sense.word)?.id ??
+      (i === 0 ? words.find((w) => w.translationId === tid)?.id : undefined);
     if (cardId != null) {
       deleteCard.mutate(cardId, {
         onError: () => {
           setLocallyRemoved((s) => {
             const n = new Set(s);
-            n.delete(tid);
+            n.delete(sense.id);
             return n;
           });
         },
@@ -269,7 +271,11 @@ export function SearchView({ onClose }: { onClose: () => void }) {
           <IconXClose />
         </Pressable>
         <DirectionToggle direction={direction} onChange={setDirection} profile={profile} />
-        <View style={styles.headerSpacer} />
+        {/* Phase D (item 3.1.1): the global language indicator — the toggle shows
+            the pair per-direction; this is the switch-affordance for the PAIR. */}
+        <View style={styles.headerSpacer}>
+          <LanguageIndicator compact />
+        </View>
       </View>
 
       <SearchBar value={query} onChange={setQuery} placeholder={placeholder} />
@@ -497,7 +503,7 @@ const styles = StyleSheet.create((theme) => {
     handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: palette.slate[300], alignSelf: 'center', marginTop: 8, marginBottom: 4 },
     header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 4, paddingBottom: 2 },
     close: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
-    headerSpacer: { width: 32 },
+    headerSpacer: { minWidth: 32, alignItems: 'flex-end' },
 
     dirWrap: { flex: 1, alignItems: 'center', gap: 7 },
     segmented: { flexDirection: 'row', backgroundColor: palette.slate[100], borderRadius: 10, padding: 3, gap: 2 },

@@ -12,7 +12,7 @@ import ReanimatedSwipeable, {
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
-import { dueLabel, wordHealth } from '@/lib/relativeTime';
+import { dueLabelShort, wordHealth } from '@/lib/relativeTime';
 import { getTierByStability } from '@/theme/tiers';
 import { IconFolderPlus, IconLock, IconMinus, IconTrash } from './icons';
 import { ListItem } from './List';
@@ -125,7 +125,7 @@ export function WordRow({ word, onPress, onDelete, onAddToDeck, onRemoveFromDeck
           <View style={styles.trailing}>
             {word.dueAt != null && health != null && (
               <Text variant="footnote" style={[styles.due, { color: healthColor[health] }]}>
-                {dueLabel(word.dueAt, t)}
+                {dueLabelShort(word.dueAt, t)}
               </Text>
             )}
             {word.reps != null && (

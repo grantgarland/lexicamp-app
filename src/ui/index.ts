@@ -51,6 +51,7 @@ export {
   IconArrowUp,
   IconArrowDown,
   IconMountain,
+  IconPlus,
   IconInfo,
   IconSliders,
   IconMinus,

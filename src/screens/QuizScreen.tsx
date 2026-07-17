@@ -422,13 +422,13 @@ function TierPromoScreen({ promotions, onContinue }: { promotions: PromotedWord[
   const order: TierId[] = ['bc', 'abc', 'hc', 'sr', 'summit'];
   const topTier = promotions.reduce<TierId>((acc, p) => (order.indexOf(p.to) > order.indexOf(acc) ? p.to : acc), 'abc');
   const summit = topTier === 'summit';
+  // 18-session (Casey): STATIC layout — badge/headline/Pika/CTA never scroll,
+  // so the CTA can't fall below the fold. Only the promoted-words list scrolls,
+  // in its own bounded window (flexShrink absorbs long sessions).
   return (
     <View style={styles.promoRoot}>
       <Confetti colors={SUMMIT_CONFETTI} />
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.promoScroll, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 24 }]}
-      >
+      <View style={[styles.promoStatic, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 24 }]}>
         {/* Ascending stars over the badge */}
         <Animated.View entering={FadeIn.duration(400).delay(500)} style={styles.promoStars}>
           {[0, 1, 2, 3, 4].map((i) => (
@@ -451,17 +451,19 @@ function TierPromoScreen({ promotions, onContinue }: { promotions: PromotedWord[
         {promotions.length > 0 && (
           <Animated.View entering={FadeInDown.duration(400).delay(440)} style={styles.promoList}>
             <RawText style={styles.promoWordsLabel}>{t('quiz.masteryWordsLabel')}</RawText>
-            {promotions.map((p) => (
-              <View key={p.cardId} style={styles.promoWordRow}>
-                <RawText style={styles.promoStar}>★</RawText>
-                <View style={styles.promoWordBody}>
-                  <RawText style={styles.promoWord}>{p.word}</RawText>
-                  <RawText style={styles.promoWordTiers}>
-                    {t(`tier.${p.from}.name`)} → {t(`tier.${p.to}.name`)}
-                  </RawText>
+            <ScrollView style={styles.promoListScroll} showsVerticalScrollIndicator contentContainerStyle={styles.promoListContent}>
+              {promotions.map((p) => (
+                <View key={p.cardId} style={styles.promoWordRow}>
+                  <RawText style={styles.promoStar}>★</RawText>
+                  <View style={styles.promoWordBody}>
+                    <RawText style={styles.promoWord}>{p.word}</RawText>
+                    <RawText style={styles.promoWordTiers}>
+                      {t(`tier.${p.from}.name`)} → {t(`tier.${p.to}.name`)}
+                    </RawText>
+                  </View>
                 </View>
-              </View>
-            ))}
+              ))}
+            </ScrollView>
           </Animated.View>
         )}
 
@@ -474,7 +476,7 @@ function TierPromoScreen({ promotions, onContinue }: { promotions: PromotedWord[
             <RawText style={styles.promoBtnText}>{t('quiz.keepClimbing')}</RawText>
           </Pressable>
         </Animated.View>
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -529,14 +531,17 @@ const styles = StyleSheet.create((theme) => {
 
     // mastery / summit celebration (Q-10)
     promoRoot: { flex: 1, backgroundColor: '#221e1b' },
-    promoScroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
+    promoStatic: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
+    promoListScroll: { flexGrow: 0 },
+    promoListContent: { paddingBottom: 4 },
     promoStars: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, marginBottom: 10 },
     promoStarTop: { color: '#f7a855' },
     promoBadgeWrap: { marginBottom: 18, borderRadius: 999, boxShadow: '0 0 28px rgba(232, 119, 34, 0.45)' },
     promoHead: { alignItems: 'center', marginBottom: 14 },
     promoTitle: { fontFamily: fonts.serif.bold, fontSize: 26, color: '#fff', textAlign: 'center', letterSpacing: -0.4, lineHeight: 32 },
     promoSub: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 20, color: 'rgba(255,255,255,0.6)', textAlign: 'center', maxWidth: 250, marginTop: 8 },
-    promoList: { width: '100%', maxWidth: 320, alignSelf: 'center', marginBottom: 16 },
+    // flexShrink + minHeight 0: the list yields space so Pika + CTA stay on-screen.
+    promoList: { width: '100%', maxWidth: 320, alignSelf: 'center', marginBottom: 16, flexShrink: 1, minHeight: 0 },
     promoWordsLabel: { fontFamily: fonts.sans.bold, fontSize: 10, letterSpacing: 0.8, textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', textAlign: 'center', marginBottom: 8 },
     // Star pinned to the first line; word + tier transition stack in a flexible column
     // (minWidth:0 lets long words/expressions wrap instead of overflowing the card).

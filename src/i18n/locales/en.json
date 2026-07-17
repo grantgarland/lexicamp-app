@@ -8,7 +8,8 @@
     "filter": "Filter and sort",
     "cancel": "Cancel",
     "undo": "Undo",
-    "done": "Done"
+    "done": "Done",
+    "close": "Close"
   },
   "tabs": {
     "home": "Home",
@@ -243,7 +244,8 @@
     "promptRecall": "Recall the {{lang}} word.",
     "promoHeadline": "New camp reached!",
     "promoSubtitle": "These words climbed to a higher camp this session.",
-    "commitError": "Your progress couldn't be saved — check your connection and study these words again."
+    "commitError": "Your progress couldn't be saved — check your connection and study these words again.",
+    "senseHint": "as in: {{hints}}"
   },
   "wordRow": {
     "addToDeckA11y": "Add to deck",
@@ -275,11 +277,6 @@
     "filterA11y": "Filter and sort",
     "filterSortTitle": "Filter & Sort",
     "sortBy": "Sort by",
-    "sortNewest": "Newest first",
-    "sortDue": "Due soonest",
-    "sortOldest": "Oldest first",
-    "sortAz": "A – Z",
-    "sortTier": "By tier (Base Camp → Summit)",
     "filterByTier": "Filter by tier",
     "filterByTierHint": "(none = all)",
     "reset": "Reset",
@@ -345,7 +342,23 @@
     "removeTitle": "Remove “{{word}}”?",
     "removeBody": "This removes the word from this deck only. It stays in your library.",
     "removeConfirm": "Remove from deck",
-    "deleteFailed": "Couldn't delete “{{word}}” — check your connection and try again."
+    "deleteFailed": "Couldn't delete “{{word}}” — check your connection and try again.",
+    "dueDaysShort_one": "{{count}} day",
+    "dueDaysShort_other": "{{count}} days",
+    "dueWeeksShort_one": "{{count}} wk",
+    "dueWeeksShort_other": "{{count}} wks",
+    "sortDimAdded": "Date added",
+    "dirNewest": "Newest",
+    "dirOldest": "Oldest",
+    "sortDimStrength": "Memory strength",
+    "dirWeakest": "Weakest",
+    "dirStrongest": "Strongest",
+    "sortDimAlpha": "Alphabetical",
+    "dirAZ": "A–Z",
+    "dirZA": "Z–A",
+    "sortHint": "Tap the selected sort again to reverse it.",
+    "sortA11yActive": "{{dim}}, {{dir}}. Double-tap to reverse.",
+    "sortA11yInactive": "Sort by {{dim}}"
   },
   "progress": {
     "title": "Progress",
@@ -431,7 +444,7 @@
     "comingSoon": "This setting is coming in a future update.",
     "featureUnlimited": "Unlimited words",
     "featureDecks": "Custom decks",
-    "featureLanguages": "Multiple languages",
+    "featureLanguages": "Up to 5 languages",
     "editProfileTitle": "Edit Profile",
     "displayName": "Display Name",
     "displayNamePlaceholder": "Your name",
@@ -439,17 +452,14 @@
     "emailNote": "To update your email, contact support.",
     "nativeLanguage": "Native Language",
     "nativeNote": "To change your native language, contact support.",
-    "learningLanguage": "Learning Language",
-    "changeLang": "Change",
     "deleteAccount": "Delete Account",
     "deleteAccountTitle": "Delete your account?",
     "deleteAccountBody": "This permanently deletes your account, all saved words, study history, and subscription. This cannot be undone.",
     "deleteAccountWarn": "If you have an active subscription, cancel it in the App Store or Google Play before deleting to avoid future charges.",
     "deleteConfirm": "Yes, delete my account",
-    "langPickerTitle": "Learning Language",
     "searchLanguages": "Search languages…",
-    "langMultiTitle": "Multiple languages with Premium",
-    "langMultiBody": "Switch or study multiple pairs at once.",
+    "langMultiTitle": "Learn up to 5 languages with Premium",
+    "langMultiBody": "Add languages and switch anytime — each keeps its own words and progress.",
     "notifTitle": "Study Reminders",
     "enableReminders": "Enable reminders",
     "enableRemindersSub": "Daily push notification",
@@ -503,7 +513,10 @@
     ],
     "prefsSaved": "Study preferences updated",
     "remindersOnAtDays": "On · {{time}} · {{count}} days/wk",
-    "save": "Save"
+    "save": "Save",
+    "learningLanguages": "Learning Languages",
+    "profileNative": "Native language: {{lang}}",
+    "profileSaved": "Profile updated"
   },
   "deckRow": {
     "studyA11y": "Study deck",
@@ -520,7 +533,7 @@
     "sub": "Upgrade to unlock everything Lexicamp offers.",
     "featureUnlimited": "Unlimited saved words",
     "featureDecks": "Custom study decks",
-    "featureLanguages": "Learn multiple languages at once",
+    "featureLanguages": "Learn up to 5 languages at once",
     "featureOffline": "The optimal route to vocabulary mastery",
     "annual": "Annual",
     "annualPrice": "$39.99/yr",
@@ -624,5 +637,16 @@
     "PRON": "pronoun",
     "VERB": "verb",
     "OTHER": "expression"
+  },
+  "langSwitcher": {
+    "title": "Learning Languages",
+    "reassure": "Your words and progress are saved per language — switch anytime, nothing is lost.",
+    "add": "Add a language",
+    "pickerTitle": "Add a Language",
+    "capReached": "You’re at the {{cap}}-language limit.",
+    "switched": "Now learning {{lang}}",
+    "added": "{{lang}} added — you’re learning it now",
+    "addFailed": "Couldn’t add the language — try again.",
+    "indicatorA11y": "Active language: {{lang}}. Opens the language switcher."
   }
 }

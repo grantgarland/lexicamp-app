@@ -297,10 +297,14 @@ const styles = StyleSheet.create((theme) => {
 
     detailsWrap: { marginHorizontal: 18, marginBottom: 12 },
     detailsList: { marginTop: 8 },
-    detailRow: { flexDirection: 'row', gap: 10, paddingVertical: 6 },
+    // Stacked label-over-value (Casey bug, 2026-07-16): the old fixed 66px label
+    // column mid-word-wrapped "other translations" ("translatio / ns") and would
+    // do worse in Spanish or at large Dynamic Type. Stacking removes the whole
+    // class of narrow-column wraps regardless of locale/font scale.
+    detailRow: { paddingVertical: 7 },
     detailRowBorder: { borderBottomWidth: theme.borderWidth.thin, borderBottomColor: palette.blue[100] },
-    detailLabel: { width: 66, flexShrink: 0, fontFamily: fonts.mono.regular, fontSize: 10, color: color.textFaint, paddingTop: 1 },
-    detailValue: { flex: 1, fontFamily: fonts.sans.regular, fontSize: 12, color: color.textBody, lineHeight: 18 },
+    detailLabel: { fontFamily: fonts.mono.regular, fontSize: 10, letterSpacing: 0.4, textTransform: 'uppercase', color: color.textFaint, marginBottom: 3 },
+    detailValue: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textBody, lineHeight: 18 },
 
     actionWrap: { paddingTop: 12, paddingHorizontal: 18, paddingBottom: 16 },
     action: {

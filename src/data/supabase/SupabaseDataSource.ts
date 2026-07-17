@@ -45,10 +45,13 @@ function bail(error: { message: string } | null): void {
   if (error) throw new Error(error.message);
 }
 
-/** cards joined to translation + fsrs — the projection words/due-cards share. */
+/** cards joined to translation + fsrs — the projection words/due-cards share.
+ *  Phase D: `decks!inner(target_lang)` scopes every card read to the ACTIVE
+ *  learning language (filtered per query via .eq('decks.target_lang', …)). */
 const CARD_JOIN =
   'id, deck_id, user_id, translation_id, user_note, custom_front, custom_back, suspended, created_at, ' +
-  'translations_cache ( id, display_source, translation, pos_tag, prefix_word, examples ), ' +
+  'decks!inner ( target_lang ), ' +
+  'translations_cache ( id, display_source, translation, pos_tag, prefix_word, examples, alt_translations, back_translations ), ' +
   'card_fsrs_state ( card_id, user_id, stability, difficulty, due_at, last_review_at, state, reps, lapses, learning_steps )';
 
 /** Due-queue variant: `!inner` makes the embedded filter actually EXCLUDE parent
@@ -103,6 +106,36 @@ export const supabaseDataSource: DataSource = {
     bail(error);
   },
 
+  async getLearningLanguages(): Promise<string[]> {
+    const { data, error } = await supabase.from('profile_languages').select('lang, added_at').order('added_at', { ascending: true });
+    bail(error);
+    return ((data ?? []) as { lang: string }[]).map((r) => r.lang);
+  },
+
+  async addLearningLanguage(lang: string): Promise<void> {
+    const { error } = await supabase.rpc('add_learning_language', { p_lang: lang });
+    bail(error);
+  },
+
+  async switchLearningLanguage(lang: string): Promise<void> {
+    const { error } = await supabase.rpc('switch_learning_language', { p_lang: lang });
+    bail(error);
+  },
+
+  async removeLearningLanguage(lang: string): Promise<void> {
+    const { error } = await supabase.rpc('remove_learning_language', { p_lang: lang });
+    bail(error);
+  },
+
+  async updateProfile(patch: { displayName?: string }): Promise<void> {
+    // D6 / UX-17e: direct PostgREST update under the own-profile-update policy.
+    const row: Record<string, unknown> = {};
+    if (patch.displayName != null) row.display_name = patch.displayName.trim() === '' ? null : patch.displayName.trim();
+    if (Object.keys(row).length === 0) return;
+    const { error } = await supabase.from('profiles').update(row).eq('id', await uid());
+    bail(error);
+  },
+
   async getExamples(translationId: string): Promise<UsageExample[]> {
     const { data, error } = await supabase.functions.invoke('examples', { body: { translationId } });
     if (error) throw new Error(error.message);
@@ -121,11 +154,14 @@ export const supabaseDataSource: DataSource = {
     return mapEntitlement(data as SubscriptionRow | null);
   },
 
-  async getActiveDeck(): Promise<Deck> {
-    // Free tier = 1 deck (00); the first deck is the active pair (03).
+  async getActiveDeck(lang?: string): Promise<Deck> {
+    // Phase D: the active deck is the oldest deck for the ACTIVE learning
+    // language (the hidden per-language main deck; RPCs guarantee it exists).
+    const target = lang ?? (await this.getProfile()).targetLang;
     const { data, error } = await supabase
       .from('decks')
       .select('*')
+      .eq('target_lang', target)
       .order('created_at', { ascending: true })
       .limit(1)
       .single();
@@ -133,8 +169,13 @@ export const supabaseDataSource: DataSource = {
     return mapDeck(data as DeckRowDb);
   },
 
-  async getDeckCards(): Promise<DeckCards> {
-    const { data, error } = await supabase.from('cards').select(CARD_JOIN).eq('suspended', false);
+  async getDeckCards(lang?: string): Promise<DeckCards> {
+    const target = lang ?? (await this.getProfile()).targetLang;
+    const { data, error } = await supabase
+      .from('cards')
+      .select(CARD_JOIN)
+      .eq('suspended', false)
+      .eq('decks.target_lang', target);
     bail(error);
     const rows = (data ?? []) as unknown as JoinedCardRow[];
     const cards: Card[] = rows.map(mapCard);
@@ -161,8 +202,12 @@ export const supabaseDataSource: DataSource = {
     };
   },
 
-  async getDecks(): Promise<DeckSummary[]> {
-    const { data, error } = await supabase.from('decks').select('id, name, created_at, cards(count)');
+  async getDecks(lang?: string): Promise<DeckSummary[]> {
+    const target = lang ?? (await this.getProfile()).targetLang;
+    const { data, error } = await supabase
+      .from('decks')
+      .select('id, name, created_at, cards(count)')
+      .eq('target_lang', target);
     bail(error);
     type Row = { id: string; name: string; created_at: string; cards: { count: number }[] };
     return ((data ?? []) as Row[]).map((d) => ({
@@ -175,28 +220,31 @@ export const supabaseDataSource: DataSource = {
     }));
   },
 
-  async getWords(): Promise<WordListItem[]> {
+  async getWords(lang?: string): Promise<WordListItem[]> {
+    const target = lang ?? (await this.getProfile()).targetLang;
     const { data, error } = await supabase
       .from('cards')
       .select(CARD_JOIN)
+      .eq('decks.target_lang', target)
       .order('created_at', { ascending: false });
     bail(error);
     const rows = (data ?? []) as unknown as JoinedCardRow[];
     return rows.map((r) => mapWordListItem(r, r.translations_cache, r.card_fsrs_state));
   },
 
-  async getDueCards(limit: number): Promise<QuizCardItem[]> {
+  async getDueCards(limit: number, lang?: string): Promise<QuizCardItem[]> {
     // 18 §2c fill composition — two ordered pulls: (1) everything due now,
     // oldest overdue first; (2) if the due count is under the session cap,
     // top up with the NEXT-due upcoming cards (dueAt asc). Reviewing ahead is
     // FSRS-legitimate (ts-fsrs schedules from actual elapsed time), and the
     // ordering guarantees the fill is always the highest-priority words.
-    const profile = await this.getProfile();
+    const target = lang ?? (await this.getProfile()).targetLang;
     const nowIso = new Date().toISOString();
     const { data: dueData, error: dueErr } = await supabase
       .from('cards')
       .select(DUE_JOIN)
       .eq('suspended', false)
+      .eq('decks.target_lang', target)
       .lte('card_fsrs_state.due_at', nowIso)
       .order('due_at', { referencedTable: 'card_fsrs_state', ascending: true })
       .limit(limit);
@@ -209,13 +257,14 @@ export const supabaseDataSource: DataSource = {
         .from('cards')
         .select(DUE_JOIN)
         .eq('suspended', false)
+        .eq('decks.target_lang', target)
         .gt('card_fsrs_state.due_at', nowIso)
         .order('due_at', { referencedTable: 'card_fsrs_state', ascending: true })
         .limit(remaining);
       bail(nextErr);
       rows.push(...((nextData ?? []) as unknown as JoinedCardRow[]).filter((r) => r.card_fsrs_state != null));
     }
-    return rows.map((r) => mapQuizItem(r, r.translations_cache, r.card_fsrs_state, profile.targetLang));
+    return rows.map((r) => mapQuizItem(r, r.translations_cache, r.card_fsrs_state, target));
   },
 
   async getNotificationPrefs(): Promise<NotificationPrefs> {

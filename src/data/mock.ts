@@ -13,6 +13,13 @@ import type { DataSource, DeckCards, DeckSummary, Engagement, ProgressStats, Wor
 const USER_ID = 'dev-user';
 const DECK_ID = 'dev-deck';
 
+// Phase D mock language state: two enrolled languages so the switcher is
+// demo-able offline. Spanish carries the scenario fixtures; French is a fresh
+// (empty) language, which makes the switch repaint unmistakable in dev.
+let mockLearningLangs: string[] = ['es', 'fr'];
+let mockActiveLang = 'es';
+let mockDisplayName = 'Casey';
+
 const PROFILE: Profile = {
   id: USER_ID,
   displayName: 'Casey',
@@ -103,6 +110,10 @@ const QUIZ_SESSION: Omit<QuizCardItem, 'fsrs'>[] = [
   { id: 'q_grateful', tierId: 'hc', mode: 'recall', content: { frontWord: 'grateful', frontSub: 'Feeling or showing thanks.', frontPrompt: 'Recall the Spanish word.', backWord: 'agradecido', backPhonetic: '/a.ɣɾa.ðeˈθi.ðo/', backPos: 'adjective', backExample: 'Estoy muy agradecido por tu ayuda.' } },
   { id: 'q_serendipity', tierId: 'sr', mode: 'recall', content: { frontWord: 'serendipity', frontSub: 'A fortunate chance discovery.', frontPrompt: 'Recall the Spanish word.', backWord: 'serendipia', backPhonetic: '/se.ɾen.ˈdi.pja/', backPos: 'noun', backExample: 'Fue pura serendipia que nos encontráramos.' } },
   { id: 'q_courage', tierId: 'summit', mode: 'recall', content: { frontWord: 'courage', frontSub: 'Bravery in the face of fear.', frontPrompt: 'Recall the Spanish word.', backWord: 'coraje', backPhonetic: '/koˈɾa.xe/', backPos: 'noun', backExample: 'Enfrentó el reto con coraje.' } },
+  // D10 multi-sense pair: same English headword, two RU cards with pre-flip sense
+  // hints — exercises the "which variant is this?" disambiguation end-to-end.
+  { id: 'q_togo_vehicle', tierId: 'hc', mode: 'recall', content: { frontWord: 'to go', frontSub: 'as in: ride, drive', frontPrompt: 'Recall the Russian word.', backWord: 'ехать', backPhonetic: '/ˈjexətʲ/', backPos: 'verb', backExample: 'Мы едем в город на машине.' } },
+  { id: 'q_togo_foot', tierId: 'hc', mode: 'recall', content: { frontWord: 'to go', frontSub: 'as in: walk', frontPrompt: 'Recall the Russian word.', backWord: 'идти', backPhonetic: '/ɪtʲˈtʲi/', backPos: 'verb', backExample: 'Мы идём в парк пешком.' } },
   // Long + multi-word recall test: RU "speed bump" is literally "lying policeman".
   // Verifies horizontal scroll + edge fade + focus traversal + spaces (multi-word).
   { id: 'q_speedbump', tierId: 'summit', mode: 'recall', content: { frontWord: 'speed bump / hump', frontSub: 'A raised ridge in a road to slow traffic.', frontPrompt: 'Recall the Russian phrase.', backWord: 'лежачий полицейский', backPhonetic: '/lʲɪˈʐatɕɪj pəlʲɪˈtsɛjskʲɪj/', backPos: 'noun', backExample: 'Впереди лежачий полицейский — сбавь скорость.' } },
@@ -329,7 +340,7 @@ export const mockDataSource: DataSource = {
       : [];
   },
   async getProfile() {
-    return PROFILE;
+    return { ...PROFILE, targetLang: mockActiveLang as Profile['targetLang'], displayName: mockDisplayName };
   },
   async getEntitlement() {
     return entitlementFor(scenario().plan);
@@ -337,7 +348,8 @@ export const mockDataSource: DataSource = {
   async getActiveDeck() {
     return DECK;
   },
-  async getDeckCards() {
+  async getDeckCards(lang) {
+    if ((lang ?? mockActiveLang) !== 'es') return { cards: [], states: [] }; // fresh language (Phase D demo)
     return buildDeckCards(scenario().userState);
   },
   async getEngagement(): Promise<Engagement> {
@@ -346,14 +358,17 @@ export const mockDataSource: DataSource = {
   async getProgressStats(): Promise<ProgressStats> {
     return PROGRESS_STATS[scenario().userState];
   },
-  async getDecks(): Promise<DeckSummary[]> {
+  async getDecks(lang): Promise<DeckSummary[]> {
+    if ((lang ?? mockActiveLang) !== 'es') return []; // fresh language (Phase D demo)
     // New user (empty scenario) has no decks yet → decks-tab empty state.
     return scenario().userState === 'empty' ? [] : DECKS;
   },
-  async getWords(): Promise<WordListItem[]> {
+  async getWords(lang?: string): Promise<WordListItem[]> {
+    if ((lang ?? mockActiveLang) !== 'es') return []; // fresh language (Phase D demo)
     return buildWords(scenario().userState);
   },
-  async getDueCards(limit: number): Promise<QuizCardItem[]> {
+  async getDueCards(limit: number, lang?: string): Promise<QuizCardItem[]> {
+    if ((lang ?? mockActiveLang) !== 'es') return []; // fresh language (Phase D demo)
     // Synthesize an in-band scheduling state per item so the results screen can
     // compute real FSRS tier transitions (domain/fsrs.tierTransition).
     // 18 §2c fill semantics, mirrored from the live source: the first items are
@@ -389,6 +404,26 @@ export const mockDataSource: DataSource = {
   },
   async registerPushToken(_token, _platform) {
     // Mock: nothing to register.
+  },
+
+  // ── Phase D: multi-language (mock) ──────────────────────────────────────
+  async getLearningLanguages() {
+    return [...mockLearningLangs];
+  },
+  async addLearningLanguage(lang) {
+    if (!mockLearningLangs.includes(lang)) mockLearningLangs = [...mockLearningLangs, lang];
+    mockActiveLang = lang;
+  },
+  async switchLearningLanguage(lang) {
+    if (!mockLearningLangs.includes(lang)) throw new Error('not_enrolled');
+    mockActiveLang = lang;
+  },
+  async removeLearningLanguage(lang) {
+    if (lang === mockActiveLang) throw new Error('language_active');
+    mockLearningLangs = mockLearningLangs.filter((l) => l !== lang);
+  },
+  async updateProfile(patch) {
+    if (patch.displayName != null) mockDisplayName = patch.displayName.trim() || 'Casey';
   },
   async commitQuizSession(_payload: { ratings: BufferedRating[] }): Promise<void> {
     // TODO(P4 data): batch-write per 03 (update card_fsrs_state via ts-fsrs, append

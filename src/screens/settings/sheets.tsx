@@ -3,16 +3,15 @@
 // that routes to the paywall via `onUpgrade`. Kept in their own module so SettingsScreen
 // stays a thin hub.
 import DateTimePicker, { type DateTimePickerChangeEvent } from '@react-native-community/datetimepicker';
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { Platform, Pressable, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
-import { findLanguage, TRANSLATABLE_LANGUAGES } from '@/constants';
 import { languageName } from '@/domain/derive';
 import type { LanguageCode, NotificationPrefs, Profile } from '@/domain/types';
 import { useTranslation } from '@/i18n';
 import { registerForPush } from '@/notifications/push';
-import { useNotificationPrefs, useUpdateNotificationPrefs } from '@/query/hooks';
+import { useNotificationPrefs, useUpdateNotificationPrefs, useUpdateProfile } from '@/query/hooks';
 import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
 import { useUiStore } from '@/store/uiStore';
 import {
@@ -26,7 +25,6 @@ import {
   IconMail,
   IconStar,
   Input,
-  LanguagePickerSheet,
   ListItem,
   RawText,
   Sheet,
@@ -94,12 +92,15 @@ function PremiumGate({ title, body, onUpgrade }: { title: string; body: string; 
 }
 
 // ── SE-01 Edit Profile ────────────────────────────────────────────────────────
-export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade }: { visible: boolean; profile: Profile | undefined; isPaid: boolean; onClose: () => void; onUpgrade: () => void }) {
-  const { theme } = useUnistyles();
+// Phase D (D6): learning-language editing moved OUT to the Learning Languages
+// flow (Settings row + global indicator → LanguageSwitcherSheet); this sheet is
+// identity only: display name (persisted for REAL now — UX-17e closed) + the
+// read-only native language + delete account.
+export function EditProfileSheet({ visible, profile, onClose }: { visible: boolean; profile: Profile | undefined; onClose: () => void }) {
   const { t } = useTranslation();
+  const showToast = useUiStore((s) => s.showToast);
+  const updateProfile = useUpdateProfile();
   const [name, setName] = useState(profile?.displayName ?? '');
-  const [learning, setLearning] = useState<string>(profile?.targetLang ?? 'es');
-  const [picker, setPicker] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   // Re-seed the draft each open (render-adjust, same as NotificationSheet) so
@@ -109,58 +110,34 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
   if (visible && !seededOpen) {
     setSeededOpen(true);
     setName(profile?.displayName ?? '');
-    setLearning(profile?.targetLang ?? 'es');
   }
-  // C4 pattern (Casey follow-up): Save stays disabled until something changed.
-  const dirty = name.trim() !== (profile?.displayName ?? '') || learning !== (profile?.targetLang ?? 'es');
+  // C4 pattern: Save stays disabled until something changed.
+  const dirty = name.trim() !== (profile?.displayName ?? '') && name.trim() !== '';
 
-  const nativeLang = profile?.nativeLang ?? 'en';
-  const learningLabel = findLanguage(learning)?.name ?? languageName(learning as LanguageCode);
-  // Learning target can be any translatable language except the user's native one.
-  const targetLanguages = useMemo(() => TRANSLATABLE_LANGUAGES.filter((l) => l.code.toLowerCase() !== nativeLang.toLowerCase()), [nativeLang]);
+  const save = () => {
+    updateProfile.mutate(
+      { displayName: name.trim() },
+      { onSuccess: () => showToast({ variant: 'success', message: t('settings.profileSaved') }) },
+    );
+    onClose(); // optimistic update repaints immediately; errors roll back + refetch
+  };
 
   return (
     <>
-      <Sheet visible={visible && !picker} onClose={onClose} title={t('settings.editProfileTitle')}>
+      <Sheet visible={visible} onClose={onClose} title={t('settings.editProfileTitle')}>
         <FieldLabel>{t('settings.displayName')}</FieldLabel>
         <Input placeholder={t('settings.displayNamePlaceholder')} value={name} onChangeText={setName} />
 
         <FieldLabel>{t('settings.nativeLanguage')}</FieldLabel>
         <ReadOnlyField value={languageName((profile?.nativeLang ?? 'en') as LanguageCode)} note={t('settings.nativeNote')} />
 
-        <FieldLabel>{t('settings.learningLanguage')}</FieldLabel>
-        {isPaid ? (
-          <Pressable onPress={() => setPicker(true)} style={({ pressed }) => [styles.fieldRow, pressed && { opacity: 0.7 }]} accessibilityRole="button">
-            <RawText style={styles.fieldValue}>{learningLabel}</RawText>
-            <RawText style={styles.fieldChange}>{t('settings.changeLang')}</RawText>
-          </Pressable>
-        ) : (
-          <>
-            <View style={styles.fieldLocked}>
-              <RawText style={styles.fieldValueMuted}>{learningLabel}</RawText>
-              <IconLock size={13} color={theme.color.textMuted} />
-            </View>
-            <PremiumGate title={t('settings.langMultiTitle')} body={t('settings.langMultiBody')} onUpgrade={onUpgrade} />
-          </>
-        )}
-
         <View style={styles.saveWrap}>
-          <Button title={t('settings.save')} variant="primary" disabled={!dirty} onPress={onClose} />
+          <Button title={t('settings.save')} variant="primary" disabled={!dirty || updateProfile.isPending} onPress={save} />
         </View>
         <Pressable onPress={() => setConfirmDelete(true)} style={({ pressed }) => [styles.deleteRow, pressed && { opacity: 0.7 }]} accessibilityRole="button">
           <RawText style={styles.deleteText}>{t('settings.deleteAccount')}</RawText>
         </Pressable>
       </Sheet>
-
-      <LanguagePickerSheet
-        visible={visible && picker}
-        current={learning}
-        languages={targetLanguages}
-        title={t('settings.langPickerTitle')}
-        searchPlaceholder={t('settings.searchLanguages')}
-        onSelect={(c) => { setLearning(c); setPicker(false); }}
-        onClose={() => setPicker(false)}
-      />
 
       <ConfirmDialog
         visible={confirmDelete}
@@ -276,8 +253,10 @@ export function NotificationSheet({ visible, isPaid, onClose, onUpgrade }: { vis
             </View>
           </Pressable>
         ) : (
+          // D12: free users see the DEFAULT that actually fires — their stored
+          // premium-era time is preserved server-side but not honored.
           <View style={styles.timeRow}>
-            <RawText style={styles.timeText}>{formatReminderTime(primaryTime)}</RawText>
+            <RawText style={styles.timeText}>{formatReminderTime(FALLBACK_WINDOW)}</RawText>
             <IconLock size={14} color={theme.color.textMuted} />
           </View>
         )}
@@ -287,7 +266,8 @@ export function NotificationSheet({ visible, isPaid, onClose, onUpgrade }: { vis
         <FieldLabel>{t('settings.reminderDays')}</FieldLabel>
         <View style={styles.dayRow}>
           {(t('settings.daysShort', { returnObjects: true }) as string[]).map((label, d) => {
-            const on = days.includes(d);
+            // D12: free tier fires every day — show that, not stored premium-era days.
+            const on = isPaid ? days.includes(d) : true;
             return (
               <Pressable
                 key={d}

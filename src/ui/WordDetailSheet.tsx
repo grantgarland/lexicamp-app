@@ -11,6 +11,7 @@ import { useExamples } from '@/query/hooks';
 import { getTierByStability } from '@/theme/tiers';
 import { DetailStats } from './DetailStats';
 import { IconTrash } from './icons';
+import { Button } from './Button';
 import { Sheet } from './Sheet';
 import { RawText as Text } from './Text';
 import { TierBadge } from './TierBadge';
@@ -78,6 +79,11 @@ export function WordDetailSheet({ word, onClose, onDelete }: WordDetailSheetProp
               <Text style={styles.deleteText}>{t('wordList.deleteWord')}</Text>
             </Pressable>
           )}
+          {/* 18-session: explicit large dismissal — tap-away works, but a clear
+              Close gives confident exit without discovering the gesture. */}
+          <View style={styles.closeWrap}>
+            <Button title={t('common.close')} variant="secondary" onPress={onClose} />
+          </View>
         </View>
       )}
     </Sheet>
@@ -105,5 +111,6 @@ const styles = StyleSheet.create((theme) => {
     stats: { marginBottom: 18 },
     delete: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(209, 73, 91, 0.12)', borderRadius: 10, paddingVertical: 12 },
     deleteText: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.danger },
+    closeWrap: { marginTop: 10 },
   };
 });

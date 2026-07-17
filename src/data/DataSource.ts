@@ -94,20 +94,23 @@ export interface DataSource {
   getExamples(translationId: string): Promise<UsageExample[]>;
   getProfile(): Promise<Profile>;
   getEntitlement(): Promise<Entitlement>;
-  getActiveDeck(): Promise<Deck>;
-  getDeckCards(): Promise<DeckCards>;
+  /** `lang` = the caller's ACTIVE language (query-key value). Passing it explicitly
+   *  removes the read-your-write race after a language switch — the server
+   *  profile may not have committed yet when the new key's query fires. */
+  getActiveDeck(lang?: string): Promise<Deck>;
+  getDeckCards(lang?: string): Promise<DeckCards>;
   getEngagement(): Promise<Engagement>;
   /** All-time study stats for the Progress screen. */
   getProgressStats(): Promise<ProgressStats>;
   /** Custom decks (Premium feature). */
-  getDecks(): Promise<DeckSummary[]>;
+  getDecks(lang?: string): Promise<DeckSummary[]>;
   /** The user's saved words for the Word List (newest first). */
-  getWords(): Promise<WordListItem[]>;
+  getWords(lang?: string): Promise<WordListItem[]>;
   /** The study-session queue (18 §2c): everything due now (dueAt asc — oldest
    *  overdue first), FILLED with the next-due upcoming cards when the due count
    *  is under `limit`, so a session always uses the user's full quiz length
    *  while words exist. Returns fewer only when the deck itself is smaller. */
-  getDueCards(limit: number): Promise<QuizCardItem[]>;
+  getDueCards(limit: number, lang?: string): Promise<QuizCardItem[]>;
   /** Commit a completed session's buffered ratings (03 batch write). */
   commitQuizSession(payload: { ratings: BufferedRating[] }): Promise<void>;
   /** Notification prefs (2.5) — read + partial update. */
@@ -116,4 +119,16 @@ export interface DataSource {
   /** Register this device's Expo push token (called once expo-notifications
    *  lands app-side; the server scheduler no-ops for users without tokens). */
   registerPushToken(token: string, platform: 'ios' | 'android'): Promise<void>;
+  // ── Phase D: multi-language (18 §2a) ──────────────────────────────────────
+  /** Enrolled learning languages, oldest first. Free = 1; premium ≤ 5. */
+  getLearningLanguages(): Promise<string[]>;
+  /** Enroll + switch to a language (server gates: premium past the first, cap 5,
+   *  idempotent re-add = switch; seeds the language's deck). */
+  addLearningLanguage(lang: string): Promise<void>;
+  /** Switch the active language (enrolled-only; seeds the deck if missing). */
+  switchLearningLanguage(lang: string): Promise<void>;
+  /** Un-enroll a non-active language. Data is NEVER deleted — re-adding restores it. */
+  removeLearningLanguage(lang: string): Promise<void>;
+  /** Update editable profile fields (D6 / UX-17e). */
+  updateProfile(patch: { displayName?: string }): Promise<void>;
 }

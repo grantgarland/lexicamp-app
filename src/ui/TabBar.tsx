@@ -40,7 +40,17 @@ function TabButton({ tab, active, onPress }: { tab: (typeof TABS)[number]; activ
   const color = active ? theme.color.brand : theme.color.textMuted;
   const { Icon } = tab;
   return (
-    <Pressable style={styles.tab} onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: active }}>
+    <Pressable
+      style={styles.tab}
+      onPress={onPress}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      // Stable hook for Maestro (`tapOn: id:`). Tapping tabs by TEXT is unsafe:
+      // the Android 3-button nav bar's system Home button also exposes "Home",
+      // and the 2026-07-16 nightly tapped IT and backgrounded the app. testID
+      // surfaces as resource-id on Android / accessibilityIdentifier on iOS.
+      testID={`tab-${tab.id}`}
+    >
       <Icon size={22} color={color} />
       <Text style={[styles.tabLabel, { color, fontFamily: active ? theme.fonts.sans.semibold : theme.fonts.sans.regular }]}>
         {t(`tabs.${tab.id}`)}

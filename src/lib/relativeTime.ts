@@ -36,6 +36,19 @@ export function dueLabel(dueAt: Date, t: TFunction): string {
   return t('wordList.dueInWeeks', { count: Math.round(days / 7) });
 }
 
+/** Row-cell variant of dueLabel (18-session): drops the "in " prefix — the
+ *  WordRow right cell reads as the word's memory-strength countdown, where
+ *  "6 days" scans cleaner than "in 6 days". Today/Tomorrow/Due now unchanged. */
+export function dueLabelShort(dueAt: Date, t: TFunction): string {
+  const ms = dueAt.getTime() - Date.now();
+  if (ms <= 0) return t('wordList.dueNow');
+  const days = Math.round(ms / DAY);
+  if (days === 0) return t('wordList.dueToday');
+  if (days === 1) return t('wordList.dueTomorrow');
+  if (days < 14) return t('wordList.dueDaysShort', { count: days });
+  return t('wordList.dueWeeksShort', { count: Math.round(days / 7) });
+}
+
 /** Short absolute date, e.g. "Jun 24". */
 export function shortDate(d: Date, t: TFunction): string {
   const months = t('date.months', { returnObjects: true }) as string[];

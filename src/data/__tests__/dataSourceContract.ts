@@ -63,6 +63,23 @@ export function describeDataSourceContract(name: string, source: DataSource): vo
       }
     });
 
+    it('multi-language contract (Phase D): enrolled set, switch flips active, remove guards the active language', async () => {
+      const langs = await source.getLearningLanguages();
+      expect(langs.length).toBeGreaterThan(0);
+      const before = (await source.getProfile()).targetLang;
+      const other = langs.find((l) => l !== before);
+      if (other != null) {
+        await source.switchLearningLanguage(other);
+        expect((await source.getProfile()).targetLang).toBe(other);
+        // The active language cannot be removed (server raises language_active).
+        await expect(source.removeLearningLanguage(other)).rejects.toThrow();
+        await source.switchLearningLanguage(before); // restore
+        expect((await source.getProfile()).targetLang).toBe(before);
+      }
+      // Switching to a non-enrolled language is rejected.
+      await expect(source.switchLearningLanguage('xx-not-enrolled')).rejects.toThrow();
+    });
+
     it('getDueCards composes the session per 18 §2c: due-first ordering, cap respected, whole deck when smaller', async () => {
       // Cap respected + dueAt ascending (due-now leads, next-due fills the tail).
       const capped = await source.getDueCards(3);

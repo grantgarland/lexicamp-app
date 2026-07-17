@@ -60,12 +60,25 @@ export interface FsrsRow {
   learning_steps: number;
 }
 
+interface BackTranslation {
+  displayText: string;
+}
+interface AltSense {
+  displayTarget: string;
+  prefixWord?: string;
+  backTranslations?: BackTranslation[];
+}
+
 export interface TranslationJoin {
   id: string;
   display_source: string;
   translation: string | null;
   pos_tag: string | null;
   prefix_word: string | null;
+  /** Full Azure sense list (D10) — source of the quiz pre-flip sense hints. */
+  alt_translations?: AltSense[] | null;
+  /** The PRIMARY sense's back-translations. */
+  back_translations?: BackTranslation[] | null;
   examples:
     | {
         sourcePrefix: string;
@@ -150,6 +163,34 @@ export function mapWordListItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRo
   };
 }
 
+/** D10 pre-flip sense hint: with multiple cards per headword ("to go" →
+ *  ехать/идти…), the front must say WHICH variant is being asked without
+ *  revealing the answer. Fallback chain (D10b — sparse rows, e.g. azure_mt
+ *  fallback translations that carry no dictionary senses):
+ *    1) the sense's back-translations minus the headword ("as in: ride, drive"),
+ *    2) the SOURCE-language example sentence — context implies the sense, and
+ *       the answer only ever lives on the target side, so nothing leaks.
+ *  POS was considered and rejected: sibling senses usually share it. */
+function senseHint(card: CardRow, tr: TranslationJoin): string | undefined {
+  const back =
+    card.custom_back != null
+      ? (tr.alt_translations ?? []).find(
+          (s) => s.displayTarget === card.custom_back || (s.prefixWord ? `${s.prefixWord} ${s.displayTarget}` : s.displayTarget) === card.custom_back,
+        )?.backTranslations
+      : tr.back_translations;
+  if (back != null && back.length > 0) {
+    const front = (card.custom_front ?? tr.display_source).toLowerCase();
+    const hints = back
+      .map((b) => b.displayText)
+      .filter((t) => t.toLowerCase() !== front)
+      .slice(0, 2);
+    if (hints.length > 0) return i18n.t('quiz.senseHint', { hints: hints.join(', ') });
+  }
+  const ex = tr.examples?.[0];
+  if (ex != null) return `“${ex.sourcePrefix}${ex.sourceTerm}${ex.sourceSuffix}”`;
+  return undefined;
+}
+
 /** Due card → quiz view-model (mode mirrors the mock: lower tiers = recognition). */
 export function mapQuizItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow, targetLang: string): QuizCardItem {
   const tier = getTierByStability(fsrs.stability);
@@ -161,6 +202,7 @@ export function mapQuizItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow, t
     fsrs: mapFsrsState(fsrs),
     content: {
       frontWord: card.custom_front ?? tr.display_source,
+      ...(senseHint(card, tr) != null ? { frontSub: senseHint(card, tr) } : {}),
       frontPrompt:
         mode === 'recognition'
           ? i18n.t('quiz.promptRecognition')

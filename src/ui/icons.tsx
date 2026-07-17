@@ -212,6 +212,14 @@ export function IconMinus({ size = 18, color = STROKE }: IconProps) {
   );
 }
 
+export function IconPlus({ size = 18, color = STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round">
+      <Path d="M12 5v14M5 12h14" />
+    </Svg>
+  );
+}
+
 export function IconSliders({ size = 18, color = STROKE }: IconProps) {
   // Vertical sliders ("tune") — three tracks with a handle at a different height each.
   return (

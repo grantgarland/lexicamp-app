@@ -37,7 +37,10 @@ export const useUiStore = create<UiState>((set) => ({
   toast: null,
   showToast: (config) => {
     const c: ToastConfig = typeof config === 'string' ? { message: config } : config;
-    const persistent = c.persistent ?? c.variant === 'destructive';
+    // 18-session: destructive toasts auto-dismiss like the rest — deletes no
+    // longer offer Undo (the confirm dialog is the safety), so there's nothing
+    // to wait around for. Pass `persistent: true` explicitly if ever needed.
+    const persistent = c.persistent ?? false;
     set({ toast: { id: Date.now(), ...c, persistent } });
   },
   hideToast: () => set({ toast: null }),

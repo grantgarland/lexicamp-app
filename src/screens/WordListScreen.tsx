@@ -9,19 +9,23 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { FlatList, Pressable, ScrollView, TextInput, View } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
-import { useDecks, useDeleteCard, useEntitlement, useWords } from '@/query/hooks';
+import { useActiveLang, useDecks, useDeleteCard, useEntitlement, useWords } from '@/query/hooks';
 import type { DeckSummary, WordListItem } from '@/data/DataSource';
 import { addedLabel } from '@/lib/relativeTime';
 import { useDeferredReady } from '@/lib/useDeferredReady';
+import { LanguageIndicator } from '@/screens/shared/LanguageSwitcher';
 import { useUiStore } from '@/store/uiStore';
 import { getTierByStability, TIERS, type TierId } from '@/theme/tiers';
 
 import {
   Button,
   ButtonRow,
+  IconArrowDown,
+  IconArrowUp,
   ConfirmDialog,
   DeckRow,
   DetailStats,
@@ -42,21 +46,27 @@ import {
   WordRow,
 } from '@/ui';
 
-type SortId = 'newest' | 'oldest' | 'az' | 'tier' | 'due';
+// 18-session sort model (Casey): three DIMENSIONS, each with a direction toggle.
+// The old flat radio list (incl. the tier sort) is gone — "memory strength"
+// covers it more honestly (weakest = due soonest = what needs attention).
+type SortDim = 'added' | 'strength' | 'alpha';
+export interface SortSel {
+  dim: SortDim;
+  /** Direction index into the dimension's two labels (0 = first). */
+  dir: 0 | 1;
+}
+const DEFAULT_SORT: SortSel = { dim: 'added', dir: 0 }; // newest first
+const sameSort = (a: SortSel, b: SortSel) => a.dim === b.dim && a.dir === b.dir;
 
-function sortWords(list: WordListItem[], sortBy: SortId): WordListItem[] {
+function sortWords(list: WordListItem[], sel: SortSel): WordListItem[] {
   const arr = [...list];
-  switch (sortBy) {
-    case 'due': // 18 §A4 — next review first (overdue → soonest → furthest)
-      return arr.sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
-    case 'oldest':
-      return arr.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-    case 'az':
-      return arr.sort((a, b) => a.native.localeCompare(b.native));
-    case 'tier': // Base Camp (low stability) → Summit (high)
-      return arr.sort((a, b) => a.stability - b.stability);
-    default:
-      return arr.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  switch (sel.dim) {
+    case 'strength': // weakest = due soonest (needs attention) ↔ strongest
+      return arr.sort((a, b) => (sel.dir === 0 ? a.dueAt.getTime() - b.dueAt.getTime() : b.dueAt.getTime() - a.dueAt.getTime()));
+    case 'alpha': // by the TARGET word — the bold lead column the user scans
+      return arr.sort((a, b) => (sel.dir === 0 ? a.target.localeCompare(b.target) : b.target.localeCompare(a.target)));
+    default: // added
+      return arr.sort((a, b) => (sel.dir === 0 ? b.createdAt.getTime() - a.createdAt.getTime() : a.createdAt.getTime() - b.createdAt.getTime()));
   }
 }
 
@@ -75,7 +85,7 @@ export function WordListScreen() {
   // true once interactions settle — heavy lists render behind a skeleton.
   const contentReady = useDeferredReady(subTab);
   const [query, setQuery] = useState('');
-  const [sortBy, setSortBy] = useState<SortId>('newest');
+  const [sortBy, setSortBy] = useState<SortSel>(DEFAULT_SORT);
   const [filterTiers, setFilterTiers] = useState<Set<TierId>>(new Set());
   const [filterOpen, setFilterOpen] = useState(false);
   const [detailWord, setDetailWord] = useState<WordListItem | null>(null);
@@ -95,6 +105,22 @@ export function WordListScreen() {
   // Local deck membership (deckId|wordId) — optimistic until the real write lands.
   const [added, setAdded] = useState<Set<string>>(new Set());
   const [removedDecks, setRemovedDecks] = useState<string[]>([]);
+
+  // Language switch: every optimistic overlay above references card/deck ids of
+  // the PREVIOUS language — carrying them over corrupts counts (the "-3 words"
+  // bug) and filters. Render-adjust reset on activeLang change.
+  const activeLang = useActiveLang();
+  const [prevLang, setPrevLang] = useState(activeLang);
+  if (prevLang !== activeLang) {
+    setPrevLang(activeLang);
+    setRemoved([]);
+    setExtraDecks([]);
+    setRemovedFromDeck(new Set());
+    setAdded(new Set());
+    setRemovedDecks([]);
+    setQuery('');
+  }
+
   const allDecks = [...decks, ...extraDecks].filter((d) => !removedDecks.includes(d.id));
 
   const openCreate = (initialWord: WordListItem | null = null) => {
@@ -106,7 +132,7 @@ export function WordListScreen() {
     setExtraDecks((e) => e.filter((x) => x.id !== d.id));
   };
 
-  const filterActive = sortBy !== 'newest' || filterTiers.size > 0;
+  const filterActive = !sameSort(sortBy, DEFAULT_SORT) || filterTiers.size > 0;
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -126,9 +152,12 @@ export function WordListScreen() {
       <View style={styles.header}>
         <View style={styles.titleRow}>
           <RawText style={styles.title}>{t('wordList.title')}</RawText>
-          <RawText style={styles.count}>
-            {subTab === 'words' ? t('wordList.count', { count: savedCount }) : t('wordList.deckCount', { count: allDecks.length })}
-          </RawText>
+          <View style={styles.titleRight}>
+            <LanguageIndicator compact />
+            <RawText style={styles.count}>
+              {subTab === 'words' ? t('wordList.count', { count: savedCount }) : t('wordList.deckCount', { count: allDecks.length })}
+            </RawText>
+          </View>
         </View>
         <SegmentedTabs
           active={subTab}
@@ -244,7 +273,7 @@ export function WordListScreen() {
           setFilterOpen(false);
         }}
         onReset={() => {
-          setSortBy('newest');
+          setSortBy(DEFAULT_SORT);
           setFilterTiers(new Set());
           setFilterOpen(false);
         }}
@@ -391,7 +420,10 @@ export function WordListScreen() {
   );
 }
 
-// W-02 — Filter & Sort bottom sheet: radio sort + multi-select tier filter (none = all).
+// W-02 — Filter & Sort bottom sheet (reworked, 18-session): sort DIMENSION rows,
+// each carrying its own inline direction toggle — tapping a direction selects
+// the dimension AND the direction in one gesture; tapping the row selects the
+// dimension keeping its last direction. Tier filter (multi-select) unchanged.
 function FilterSortSheet({
   visible,
   sortBy,
@@ -401,15 +433,15 @@ function FilterSortSheet({
   onReset,
 }: {
   visible: boolean;
-  sortBy: SortId;
+  sortBy: SortSel;
   filterTiers: Set<TierId>;
   onClose: () => void;
-  onApply: (sortBy: SortId, tiers: Set<TierId>) => void;
+  onApply: (sortBy: SortSel, tiers: Set<TierId>) => void;
   onReset: () => void;
 }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
-  const [localSort, setLocalSort] = useState<SortId>(sortBy);
+  const [localSort, setLocalSort] = useState<SortSel>(sortBy);
   const [localTiers, setLocalTiers] = useState<Set<TierId>>(new Set(filterTiers));
 
   // Re-sync local state each time the sheet opens.
@@ -430,26 +462,64 @@ function FilterSortSheet({
       return next;
     });
 
-  const sortOptions: { id: SortId; label: string }[] = [
-    { id: 'newest', label: t('wordList.sortNewest') },
-    { id: 'due', label: t('wordList.sortDue') }, // 18 §A4
-    { id: 'oldest', label: t('wordList.sortOldest') },
-    { id: 'az', label: t('wordList.sortAz') },
-    { id: 'tier', label: t('wordList.sortTier') },
+  const sortDims: { dim: SortDim; label: string; dirs: [string, string] }[] = [
+    { dim: 'added', label: t('wordList.sortDimAdded'), dirs: [t('wordList.dirNewest'), t('wordList.dirOldest')] },
+    { dim: 'strength', label: t('wordList.sortDimStrength'), dirs: [t('wordList.dirWeakest'), t('wordList.dirStrongest')] },
+    { dim: 'alpha', label: t('wordList.sortDimAlpha'), dirs: [t('wordList.dirAZ'), t('wordList.dirZA')] },
   ];
 
   return (
     <Sheet visible={visible} onClose={onClose} title={t('wordList.filterSortTitle')}>
       <View style={styles.sheetSection}>
         <RawText style={styles.sheetLabel}>{t('wordList.sortBy')}</RawText>
-        {sortOptions.map((opt) => {
-          const on = localSort === opt.id;
+        <RawText style={styles.sortHint}>{t('wordList.sortHint')}</RawText>
+        {/* Drive-pattern sort (18-session refactor): tap a row to select its
+            dimension; tap the SELECTED row again to reverse — the direction
+            pill (↓/↑ + label) appears only on the active row, so one row =
+            one control with progressive disclosure instead of 3×2 pills. */}
+        {sortDims.map(({ dim, label, dirs }) => {
+          const on = localSort.dim === dim;
+          const dirLabel = dirs[on ? localSort.dir : 0];
           return (
-            <Pressable key={opt.id} onPress={() => setLocalSort(opt.id)} style={styles.optionRow} accessibilityRole="radio" accessibilityState={{ selected: on }}>
+            <Pressable
+              key={dim}
+              onPress={() =>
+                setLocalSort((cur) => (cur.dim === dim ? { dim, dir: cur.dir === 0 ? 1 : 0 } : { dim, dir: 0 }))
+              }
+              style={styles.optionRow}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: on }}
+              accessibilityLabel={on ? t('wordList.sortA11yActive', { dim: label, dir: dirLabel }) : t('wordList.sortA11yInactive', { dim: label })}
+            >
               <View style={[styles.radio, { borderColor: on ? theme.color.brand : theme.palette.slate[300] }]}>
                 {on && <View style={styles.radioDot} />}
               </View>
-              <RawText style={styles.optionLabel}>{opt.label}</RawText>
+              <RawText style={[styles.optionLabel, on && styles.optionLabelOn]}>{label}</RawText>
+              {on && (
+                // Dual brand colors signal the direction at a glance (Casey):
+                // dir 0 (Newest / Weakest / A–Z) wears base-camp green; dir 1
+                // (Oldest / Strongest / Z–A) wears brand ember — the color flip
+                // doubles the toggle feedback.
+                <Animated.View
+                  key={`dir-${localSort.dir}`}
+                  entering={FadeIn.duration(140)}
+                  style={[
+                    styles.sortDirPill,
+                    localSort.dir === 0
+                      ? { backgroundColor: theme.color.evergreenTint, borderColor: theme.color.evergreenSoft }
+                      : { backgroundColor: theme.palette.amber[50], borderColor: theme.palette.amber[200] },
+                  ]}
+                >
+                  {localSort.dir === 0 ? (
+                    <IconArrowDown size={12} color={theme.color.evergreen} />
+                  ) : (
+                    <IconArrowUp size={12} color={theme.color.accent} />
+                  )}
+                  <RawText style={[styles.sortDirText, { color: localSort.dir === 0 ? theme.color.evergreen : theme.color.accent }]}>
+                    {dirLabel}
+                  </RawText>
+                </Animated.View>
+              )}
             </Pressable>
           );
         })}
@@ -742,6 +812,7 @@ const styles = StyleSheet.create((theme) => {
   return {
     header: { paddingHorizontal: 16, paddingTop: 4 },
     titleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 },
+    titleRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     title: { fontFamily: fonts.sans.extra, fontSize: 22, letterSpacing: -0.3, color: color.textStrong },
     count: { fontFamily: fonts.sans.medium, fontSize: 13, color: color.textMuted },
     // Matches the Custom Decks "Create new deck" container height/gap (both ~64px, bordered).
@@ -794,6 +865,10 @@ const styles = StyleSheet.create((theme) => {
     sheetHint: { fontFamily: fonts.sans.regular, fontSize: 10, letterSpacing: 0, textTransform: 'none', color: color.textFaint },
     optionRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.divider },
     optionLabel: { fontFamily: fonts.sans.regular, fontSize: 14, color: color.textBody },
+    optionLabelOn: { fontFamily: fonts.sans.bold, color: color.textStrong },
+    sortHint: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textFaint, marginBottom: 8 },
+    sortDirPill: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: theme.borderWidth.thin, borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10 },
+    sortDirText: { fontFamily: fonts.sans.semibold, fontSize: 12 },
     radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
     radioDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: theme.color.brand },
     checkbox: { width: 20, height: 20, borderRadius: 5, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },

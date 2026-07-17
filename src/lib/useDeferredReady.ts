@@ -1,10 +1,12 @@
 // useDeferredReady — paint-first tab traversal (18-session, Casey perf report).
 // Returns false on first mount and for the frame(s) immediately after `key`
-// changes, flipping true once current interactions settle. Screens gate their
+// changes, flipping true once the JS thread goes idle. Screens gate their
 // HEAVY content on it and show the skeleton meanwhile, so a tab press paints
 // its traversal instantly instead of blocking on a big synchronous mount.
+//
+// Uses requestIdleCallback per RN's InteractionManager deprecation guidance,
+// with a 300ms timeout so a busy thread can never strand the skeleton.
 import { useEffect, useState } from 'react';
-import { InteractionManager } from 'react-native';
 
 export function useDeferredReady(key: unknown): boolean {
   const [ready, setReady] = useState(false);
@@ -19,8 +21,8 @@ export function useDeferredReady(key: unknown): boolean {
   }
   useEffect(() => {
     if (ready) return;
-    const task = InteractionManager.runAfterInteractions(() => setReady(true));
-    return () => task.cancel();
+    const id = requestIdleCallback(() => setReady(true), { timeout: 300 });
+    return () => cancelIdleCallback(id);
   }, [ready]);
   return ready;
 }

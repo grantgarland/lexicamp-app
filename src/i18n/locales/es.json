@@ -8,7 +8,8 @@
     "filter": "Filtrar y ordenar",
     "cancel": "Cancelar",
     "undo": "Deshacer",
-    "done": "Listo"
+    "done": "Listo",
+    "close": "Cerrar"
   },
   "tabs": {
     "home": "Inicio",
@@ -243,7 +244,8 @@
     "promptRecall": "Recuerda la palabra en {{lang}}.",
     "promoHeadline": "¡Nuevo campamento alcanzado!",
     "promoSubtitle": "Estas palabras subieron a un campamento superior en esta sesión.",
-    "commitError": "No se pudo guardar tu progreso — revisa tu conexión y vuelve a estudiar estas palabras."
+    "commitError": "No se pudo guardar tu progreso — revisa tu conexión y vuelve a estudiar estas palabras.",
+    "senseHint": "como en: {{hints}}"
   },
   "wordRow": {
     "addToDeckA11y": "Añadir al mazo",
@@ -275,11 +277,6 @@
     "filterA11y": "Filtrar y ordenar",
     "filterSortTitle": "Filtrar y ordenar",
     "sortBy": "Ordenar por",
-    "sortNewest": "Más recientes primero",
-    "sortDue": "Vencen antes",
-    "sortOldest": "Más antiguas primero",
-    "sortAz": "A – Z",
-    "sortTier": "Por nivel (Campo base → Cumbre)",
     "filterByTier": "Filtrar por nivel",
     "filterByTierHint": "(ninguno = todos)",
     "reset": "Restablecer",
@@ -345,7 +342,23 @@
     "removeTitle": "¿Quitar «{{word}}»?",
     "removeBody": "Esto quita la palabra solo de este mazo. Permanece en tu biblioteca.",
     "removeConfirm": "Quitar del mazo",
-    "deleteFailed": "No se pudo eliminar “{{word}}” — revisa tu conexión e inténtalo de nuevo."
+    "deleteFailed": "No se pudo eliminar “{{word}}” — revisa tu conexión e inténtalo de nuevo.",
+    "dueDaysShort_one": "{{count}} día",
+    "dueDaysShort_other": "{{count}} días",
+    "dueWeeksShort_one": "{{count}} sem",
+    "dueWeeksShort_other": "{{count}} sem",
+    "sortDimAdded": "Fecha añadida",
+    "dirNewest": "Más nuevas",
+    "dirOldest": "Más antiguas",
+    "sortDimStrength": "Fuerza de memoria",
+    "dirWeakest": "Más débiles",
+    "dirStrongest": "Más fuertes",
+    "sortDimAlpha": "Alfabético",
+    "dirAZ": "A–Z",
+    "dirZA": "Z–A",
+    "sortHint": "Toca de nuevo el orden seleccionado para invertirlo.",
+    "sortA11yActive": "{{dim}}, {{dir}}. Doble toque para invertir.",
+    "sortA11yInactive": "Ordenar por {{dim}}"
   },
   "progress": {
     "title": "Progreso",
@@ -431,7 +444,7 @@
     "comingSoon": "Este ajuste llegará en una futura actualización.",
     "featureUnlimited": "Palabras ilimitadas",
     "featureDecks": "Mazos personalizados",
-    "featureLanguages": "Varios idiomas",
+    "featureLanguages": "Hasta 5 idiomas",
     "editProfileTitle": "Editar perfil",
     "displayName": "Nombre visible",
     "displayNamePlaceholder": "Tu nombre",
@@ -439,17 +452,14 @@
     "emailNote": "Para cambiar tu correo, contacta con soporte.",
     "nativeLanguage": "Idioma nativo",
     "nativeNote": "Para cambiar tu idioma nativo, contacta con soporte.",
-    "learningLanguage": "Idioma que aprendes",
-    "changeLang": "Cambiar",
     "deleteAccount": "Eliminar cuenta",
     "deleteAccountTitle": "¿Eliminar tu cuenta?",
     "deleteAccountBody": "Esto elimina permanentemente tu cuenta, todas las palabras guardadas, el historial y la suscripción. No se puede deshacer.",
     "deleteAccountWarn": "Si tienes una suscripción activa, cancélala en App Store o Google Play antes de eliminar para evitar cargos.",
     "deleteConfirm": "Sí, eliminar mi cuenta",
-    "langPickerTitle": "Idioma que aprendes",
     "searchLanguages": "Buscar idiomas…",
-    "langMultiTitle": "Varios idiomas con Premium",
-    "langMultiBody": "Cambia o estudia varios pares a la vez.",
+    "langMultiTitle": "Aprende hasta 5 idiomas con Premium",
+    "langMultiBody": "Añade idiomas y cambia cuando quieras — cada uno guarda sus propias palabras y progreso.",
     "notifTitle": "Recordatorios de estudio",
     "enableReminders": "Activar recordatorios",
     "enableRemindersSub": "Notificación diaria",
@@ -503,7 +513,10 @@
     ],
     "prefsSaved": "Preferencias de estudio actualizadas",
     "remindersOnAtDays": "Activados · {{time}} · {{count}} días/sem",
-    "save": "Guardar"
+    "save": "Guardar",
+    "learningLanguages": "Idiomas de aprendizaje",
+    "profileNative": "Idioma nativo: {{lang}}",
+    "profileSaved": "Perfil actualizado"
   },
   "deckRow": {
     "studyA11y": "Estudiar mazo",
@@ -520,7 +533,7 @@
     "sub": "Mejora tu plan y desbloquea todo lo que Lexicamp ofrece.",
     "featureUnlimited": "Palabras ilimitadas",
     "featureDecks": "Mazos personalizados",
-    "featureLanguages": "Aprende varios idiomas a la vez",
+    "featureLanguages": "Aprende hasta 5 idiomas a la vez",
     "featureOffline": "La ruta óptima hacia el dominio del vocabulario",
     "annual": "Anual",
     "annualPrice": "$39.99/año",
@@ -624,5 +637,16 @@
     "PRON": "pronombre",
     "VERB": "verbo",
     "OTHER": "expresión"
+  },
+  "langSwitcher": {
+    "title": "Idiomas de aprendizaje",
+    "reassure": "Tus palabras y progreso se guardan por idioma — cambia cuando quieras, no se pierde nada.",
+    "add": "Añadir un idioma",
+    "pickerTitle": "Añadir un idioma",
+    "capReached": "Alcanzaste el límite de {{cap}} idiomas.",
+    "switched": "Ahora aprendes {{lang}}",
+    "added": "{{lang}} añadido — ya lo estás aprendiendo",
+    "addFailed": "No se pudo añadir el idioma — inténtalo de nuevo.",
+    "indicatorA11y": "Idioma activo: {{lang}}. Abre el selector de idiomas."
   }
 }

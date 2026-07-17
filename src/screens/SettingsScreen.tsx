@@ -13,6 +13,9 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useTranslation } from '@/i18n';
 import { useEntitlement, useHomeData, useNotificationPrefs, useProfile } from '@/query/hooks';
 import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
+import { findLanguage } from '@/constants';
+import { useLearningLanguages } from '@/query/hooks';
+import { LanguageSwitcherSheet } from '@/screens/shared/LanguageSwitcher';
 import { AboutSheet, EditProfileSheet, formatReminderTime, HowItWorksSheet, NotificationSheet, QuizLengthSheet, SupportSheet } from './settings/sheets';
 import {
   Button,
@@ -21,6 +24,7 @@ import {
   IconBook,
   IconChevronRight,
   IconCheck,
+  IconGlobe,
   IconInfo,
   IconMail,
   IconMountain,
@@ -33,7 +37,7 @@ import {
 
 const FREE_WORD_LIMIT = 50;
 const FREE_FEATURES = ['featureUnlimited', 'featureDecks', 'featureLanguages'] as const;
-type SheetId = 'about' | 'signout' | 'editProfile' | 'notifications' | 'quizLength' | 'support' | 'howItWorks' | null;
+type SheetId = 'about' | 'signout' | 'editProfile' | 'notifications' | 'quizLength' | 'support' | 'howItWorks' | 'languages' | null;
 
 export function SettingsScreen() {
   const { theme } = useUnistyles();
@@ -50,19 +54,30 @@ export function SettingsScreen() {
   const openPaywall = () => router.push('/paywall');
 
   const initial = (profile?.displayName ?? 'L').charAt(0).toUpperCase();
-  const direction = `${t(`languages.${profile?.nativeLang ?? 'en'}`)} → ${t(`languages.${profile?.targetLang ?? 'es'}`)}`;
+  const profileSub = t('settings.profileNative', { lang: t(`languages.${profile?.nativeLang ?? 'en'}`) });
   const usagePct = Math.min(100, Math.round((wordsSaved / FREE_WORD_LIMIT) * 100));
   // Honest row state (17 §S1): the subtitle reflects the user's actual reminder
   // prefs; free users are NOT shown a premium badge here — the toggle is free,
   // only the custom time is gated (inside the sheet).
+  // D12: free users see the EFFECTIVE schedule (default time, every day) — their
+  // stored premium-era settings are preserved but not honored while unentitled.
+  const effectiveTime = isPaid ? (notifPrefs?.windows[0]?.time ?? '19:00') : '19:00';
   const remindersSubtitle =
     notifPrefs == null
       ? '…'
       : notifPrefs.enabled
-        ? notifPrefs.days.length < 7
-          ? t('settings.remindersOnAtDays', { time: formatReminderTime(notifPrefs.windows[0]?.time ?? '19:00'), count: notifPrefs.days.length })
-          : t('settings.remindersOnAt', { time: formatReminderTime(notifPrefs.windows[0]?.time ?? '19:00') })
+        ? isPaid && notifPrefs.days.length < 7
+          ? t('settings.remindersOnAtDays', { time: formatReminderTime(effectiveTime), count: notifPrefs.days.length })
+          : t('settings.remindersOnAt', { time: formatReminderTime(effectiveTime) })
         : t('settings.remindersOff');
+  // D6: enrolled languages summary — active first, endonyms.
+  const { languages: learningLangs } = useLearningLanguages();
+  const learningLangsSubtitle =
+    learningLangs.length === 0
+      ? '…'
+      : learningLangs
+          .map((l) => findLanguage(l)?.nativeName ?? l)
+          .join(' · ');
 
   return (
     <Screen edges={['top']}>
@@ -78,10 +93,20 @@ export function SettingsScreen() {
             </View>
             <View style={styles.profileBody}>
               <RawText style={styles.profileName} numberOfLines={1}>{profile?.displayName ?? '—'}</RawText>
-              <RawText style={styles.profileSub} numberOfLines={1}>{direction}</RawText>
+              <RawText style={styles.profileSub} numberOfLines={1}>{profileSub}</RawText>
             </View>
             <IconChevronRight size={16} color={theme.color.textFaint} />
           </Pressable>
+          {/* Phase D (D6): Learning Languages is the PRIMARY language flow — add,
+              switch, upgrade — one sheet shared with the global indicator. */}
+          <ListItem
+            leading={<IconTile><IconGlobe size={16} color={theme.color.brand} /></IconTile>}
+            title={t('settings.learningLanguages')}
+            subtitle={learningLangsSubtitle}
+            trailing={<Chevron />}
+            onPress={() => setSheet('languages')}
+            last
+          />
           {/* 18 §A8 (D3): no in-app UI-language switcher — the app follows the OS
               (per-app language in iOS/Android settings). Native language (content)
               stays an explicit onboarding choice; the two are deliberately separate. */}
@@ -189,12 +214,13 @@ export function SettingsScreen() {
       </ScrollView>
 
       {/* Deep-editor sheets */}
-      <EditProfileSheet visible={sheet === 'editProfile'} profile={profile} isPaid={isPaid} onClose={() => setSheet(null)} onUpgrade={openPaywall} />
+      <EditProfileSheet visible={sheet === 'editProfile'} profile={profile} onClose={() => setSheet(null)} />
       <NotificationSheet visible={sheet === 'notifications'} isPaid={isPaid} onClose={() => setSheet(null)} onUpgrade={openPaywall} />
       <QuizLengthSheet visible={sheet === 'quizLength'} isPaid={isPaid} onClose={() => setSheet(null)} onUpgrade={openPaywall} />
       <SupportSheet visible={sheet === 'support'} onClose={() => setSheet(null)} />
       <AboutSheet visible={sheet === 'about'} onClose={() => setSheet(null)} />
       <HowItWorksSheet visible={sheet === 'howItWorks'} onClose={() => setSheet(null)} />
+      <LanguageSwitcherSheet visible={sheet === 'languages'} onClose={() => setSheet(null)} />
 
       <ConfirmDialog
         visible={sheet === 'signout'}
