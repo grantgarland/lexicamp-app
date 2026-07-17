@@ -14,26 +14,41 @@ appId: com.lexicamp.app
 - launchApp:
     clearState: true
 
-# NOTE: eyebrow/section labels render via `textTransform: 'uppercase'`, so the
-# accessibility text Maestro sees is UPPERCASE. Maestro matches text as a case-SENSITIVE regex, so assertions use
-# the `(?i)` inline flag to match regardless of cosmetic casing.
+# NOTE (assertions): eyebrow/section labels render via `textTransform:
+# 'uppercase'`, so the accessibility text Maestro sees is UPPERCASE, and Maestro
+# matches text as a case-SENSITIVE regex — assertions use the `(?i)` inline flag.
+#
+# NOTE (tab taps): tabs are tapped by testID (`tab-<id>`, set in ui/TabBar.tsx),
+# NEVER by label text. The CI emulator uses 3-button navigation, and the system
+# nav bar's Home button exposes the accessibility text "Home" — on 2026-07-16
+# `tapOn: 'Home'` matched the SYSTEM button, backgrounded the app (launcher
+# TO_FRONT in the WindowManager log), and failed the final assertion. IDs also
+# hold if tab labels are ever localized.
 # ── Home ─────────────────────────────────────────────────────────────────────
 - extendedWaitUntil:
     visible: '(?i)Word Mastery'
     timeout: 20000
 
 # ── Word List ────────────────────────────────────────────────────────────────
-- tapOn: 'Word List'
+- tapOn:
+    id: 'tab-words'
 - assertVisible: '(?i)My Words'
 
 # ── Progress ─────────────────────────────────────────────────────────────────
-- tapOn: 'Progress'
+- tapOn:
+    id: 'tab-progress'
 - assertVisible: '(?i)You are here'
 
 # ── Settings ─────────────────────────────────────────────────────────────────
-- tapOn: 'Settings'
+- tapOn:
+    id: 'tab-settings'
 - assertVisible: '(?i)Account'
 
 # ── Back to Home (round trip — catches the dead-screen-after-nav class) ──────
-- tapOn: 'Home'
-- assertVisible: '(?i)Word Mastery'
+- tapOn:
+    id: 'tab-home'
+# extendedWait, not assertVisible: the CI emulator needed 20s for Home's first
+# render; give the return trip the same budget instead of the default assert wait.
+- extendedWaitUntil:
+    visible: '(?i)Word Mastery'
+    timeout: 20000

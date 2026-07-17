@@ -4,6 +4,10 @@
 # steps most likely to need tuning on a real emulator are the row `swipe` and
 # the `below:`-disambiguated confirm tap — if this flow alone is red, start there.
 #
+# Tab taps use testIDs (`tab-<id>`, ui/TabBar.tsx) — text 'Home' collides with
+# the system nav bar's Home button on 3-button-nav emulators (2026-07-16 smoke
+# failure). Keep in lockstep with smoke.yaml.
+#
 # What this verifies vs. what it CAN'T (mock-mode reality, 2026-07-13):
 #   CREATE — lookup renders + Save flips to "Saved!". Mock saveCard() is a
 #            no-op and getWords() serves fixtures, so the saved word does NOT
@@ -23,7 +27,7 @@
 # default = 60 words, melancólico present), MOCK_MISS='fly123456',
 # MOCK_ECHO='echoword', FLY_SENSES, en.json strings asserted below.
 #
-# Run locally: maestro test .maestro/word-capture-crud.yaml
+# Run locally: maestro test .maestro/word-capture.yaml
 appId: com.lexicamp.app
 tags:
   - candidate
@@ -83,7 +87,8 @@ tags:
 
 # ── DELETE UX: Word List swipe tray → confirm → toast + count drops ─────────
 - tapOn: 'Close search'
-- tapOn: 'Word List'
+- tapOn:
+    id: 'tab-words'
 - assertVisible: 'My Words'
 - assertVisible: '60 words' # DISTRIBUTION.summit total (default dev scenario)
 - swipe:
@@ -102,5 +107,8 @@ tags:
 - assertVisible: '59 words'
 
 # ── Round trip home (same dead-screen guard as smoke.yaml) ───────────────────
-- tapOn: 'Home'
-- assertVisible: '(?i)Word Mastery'
+- tapOn:
+    id: 'tab-home'
+- extendedWaitUntil:
+    visible: '(?i)Word Mastery'
+    timeout: 20000
