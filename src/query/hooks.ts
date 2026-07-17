@@ -277,6 +277,20 @@ export function useSaveCard() {
   });
 }
 
+/** Archive / unarchive a card (18 §E3) — the word keeps everything but leaves
+ *  the review queue while archived. */
+export function useSetCardSuspended() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { cardId: string; suspended: boolean }) => ds.setCardSuspended(input.cardId, input.suspended),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['deckCards'] });
+      qc.invalidateQueries({ queryKey: ['words'] });
+      qc.invalidateQueries({ queryKey: ['dueCards'] });
+    },
+  });
+}
+
 /** Delete a saved card (write → delete_card RPC; A12b). Destructive — the
  *  word's FSRS history cascades away with it. */
 export function useDeleteCard() {

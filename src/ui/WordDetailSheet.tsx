@@ -10,7 +10,7 @@ import { addedLabel, dueLabel } from '@/lib/relativeTime';
 import { useExamples } from '@/query/hooks';
 import { getTierByStability } from '@/theme/tiers';
 import { DetailStats } from './DetailStats';
-import { IconTrash } from './icons';
+import { IconArchive, IconTrash } from './icons';
 import { Button } from './Button';
 import { Sheet } from './Sheet';
 import { RawText as Text } from './Text';
@@ -21,9 +21,11 @@ export interface WordDetailSheetProps {
   onClose: () => void;
   /** Omit for read-only contexts (e.g. the Progress tier drawer, 18 §A6) — hides the delete action. */
   onDelete?: (w: WordListItem) => void;
+  /** 18 §E3: archive / unarchive (label follows word.suspended). Omit to hide. */
+  onToggleArchive?: (w: WordListItem) => void;
 }
 
-export function WordDetailSheet({ word, onClose, onDelete }: WordDetailSheetProps) {
+export function WordDetailSheet({ word, onClose, onDelete, onToggleArchive }: WordDetailSheetProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const tier = word ? getTierByStability(word.stability) : null;
@@ -73,6 +75,12 @@ export function WordDetailSheet({ word, onClose, onDelete }: WordDetailSheetProp
               { label: t('wordList.addedLabel'), value: addedLabel(word.createdAt, t) },
             ]}
           />
+          {onToggleArchive != null && (
+            <Pressable onPress={() => onToggleArchive(word)} accessibilityRole="button" style={({ pressed }) => [styles.archive, pressed && { opacity: 0.85 }]}>
+              <IconArchive size={16} color={theme.color.textMuted} />
+              <Text style={styles.archiveText}>{word.suspended ? t('wordList.unarchiveWord') : t('wordList.archiveWord')}</Text>
+            </Pressable>
+          )}
           {onDelete != null && (
             <Pressable onPress={() => onDelete(word)} accessibilityRole="button" style={({ pressed }) => [styles.delete, pressed && { opacity: 0.85 }]}>
               <IconTrash size={17} color={theme.color.danger} />
@@ -109,6 +117,8 @@ const styles = StyleSheet.create((theme) => {
     exampleTight: { marginBottom: 4 },
     exampleTranslation: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 19, color: color.textMuted, marginBottom: 16 },
     stats: { marginBottom: 18 },
+    archive: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: palette.slate[100], borderRadius: 10, paddingVertical: 12, marginBottom: 10 },
+    archiveText: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.textMuted },
     delete: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(209, 73, 91, 0.12)', borderRadius: 10, paddingVertical: 12 },
     deleteText: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.danger },
     closeWrap: { marginTop: 10 },

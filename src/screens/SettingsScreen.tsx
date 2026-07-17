@@ -11,10 +11,9 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
-import { useEntitlement, useHomeData, useNotificationPrefs, useProfile } from '@/query/hooks';
+import { useEntitlement, useHomeData, useLearningLanguages, useNotificationPrefs, useProfile } from '@/query/hooks';
 import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
 import { findLanguage } from '@/constants';
-import { useLearningLanguages } from '@/query/hooks';
 import { LanguageSwitcherSheet } from '@/screens/shared/LanguageSwitcher';
 import { AboutSheet, EditProfileSheet, formatReminderTime, HowItWorksSheet, NotificationSheet, QuizLengthSheet, SupportSheet } from './settings/sheets';
 import {

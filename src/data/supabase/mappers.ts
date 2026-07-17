@@ -160,6 +160,7 @@ export function mapWordListItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRo
     reps: fsrs.reps,
     createdAt: new Date(card.created_at),
     dueAt: new Date(fsrs.due_at),
+    suspended: card.suspended,
   };
 }
 

@@ -29,12 +29,17 @@ export interface TooltipProps {
   style?: StyleProp<ViewStyle>;
   /** Notified when the popover opens/closes — lets a parent drive active/dim state. */
   onOpenChange?: (open: boolean) => void;
+  /** Horizontal anchor within the trigger: 'center' (default) or 'end'. Use 'end'
+   *  for full-width row triggers so the bubble + arrow hug the trailing cell —
+   *  the arrow then unambiguously points at ONE row's info affordance instead of
+   *  floating mid-screen between rows. */
+  anchor?: 'center' | 'end';
   accessibilityLabel?: string;
 }
 
 const BUBBLE_BG = 'rgba(24, 32, 38, 0.97)';
 
-export function Tooltip({ content, title, children, indicator = true, style, onOpenChange, accessibilityLabel }: TooltipProps) {
+export function Tooltip({ content, title, children, indicator = true, style, onOpenChange, anchor: anchorEdge = 'center', accessibilityLabel }: TooltipProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const triggerRef = useRef<View>(null);
@@ -56,7 +61,7 @@ export function Tooltip({ content, title, children, indicator = true, style, onO
 
   const bubbleW = Math.min(240, winW - 24);
   const below = anchor.y + anchor.h < winH * 0.6; // enough room below the trigger?
-  const cx = anchor.x + anchor.w / 2;
+  const cx = anchorEdge === 'end' ? anchor.x + anchor.w - 40 : anchor.x + anchor.w / 2;
   const left = Math.max(12, Math.min(cx - bubbleW / 2, winW - bubbleW - 12));
   const arrowLeft = Math.max(10, Math.min(cx - left - 6, bubbleW - 22));
 

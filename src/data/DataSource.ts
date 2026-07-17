@@ -40,6 +40,8 @@ export interface WordListItem {
   createdAt: Date;
   /** Next scheduled review. */
   dueAt: Date;
+  /** Archived (cards.suspended, 18 §E3): kept forever, excluded from reviews. */
+  suspended: boolean;
 }
 
 /** A custom deck summary for the Word List → Decks tab (Premium). */
@@ -131,4 +133,7 @@ export interface DataSource {
   removeLearningLanguage(lang: string): Promise<void>;
   /** Update editable profile fields (D6 / UX-17e). */
   updateProfile(patch: { displayName?: string }): Promise<void>;
+  /** Archive / unarchive a card (18 §E3). Suspended cards keep everything but
+   *  leave the review queue; unarchive restores them untouched. */
+  setCardSuspended(cardId: string, suspended: boolean): Promise<void>;
 }

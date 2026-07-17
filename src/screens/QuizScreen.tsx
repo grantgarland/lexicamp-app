@@ -11,10 +11,11 @@ import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
-import { sessionPromotions, tierTransition, type PromotedWord } from '@/domain/fsrs';
+import { applyReview, sessionPromotions, type PromotedWord } from '@/domain/fsrs';
 import type { BufferedRating, QuizCardItem, UiRating } from '@/domain/quiz';
 import { sessionStats, uiRatingToFsrs } from '@/domain/quiz';
 import { useTranslation } from '@/i18n';
+import { dueLabel } from '@/lib/relativeTime';
 import { useCommitQuizSession, useDueCards, useEntitlement, useHomeData } from '@/query/hooks';
 import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
 import { type TierId } from '@/theme/tiers';
@@ -29,6 +30,7 @@ import {
   IconX,
   QuizCardBack,
   QuizCardFront,
+  QuizRevealButton,
   RatingButtons,
   RawText,
   Screen,
@@ -46,20 +48,30 @@ type Phase = 'quiz' | 'end' | 'stats' | 'promo';
 // Summit celebration confetti (Q-10) — warm golds + a few accent flecks (milestone spec).
 const SUMMIT_CONFETTI = ['#e87722', '#f7a855', '#f5b91e', '#d97706', '#2f5e7e', '#459a6b', '#f472b6'];
 
-// Per-word review outcome for the results tooltip — the REAL FSRS tier
-// transition (2.2; replaces the session-29 heuristic). Tiers are stability
-// bands, so promoted/held falls out of the actual recompute the commit persists.
-function outcomeTip(t: TFunction, card: QuizCardItem, rating: UiRating): { title: string; content: string } {
-  const name = (id: TierId) => t(`tier.${id}.name`);
-  const { from, to, promoted } = tierTransition(card.fsrs, uiRatingToFsrs(rating));
-  if (promoted) {
-    if (to === 'summit') return { title: t('quiz.resultSummitTitle'), content: t('quiz.resultSummit') };
-    return { title: t('quiz.resultPromotedTitle'), content: t('quiz.resultPromoted', { from: name(from), to: name(to) }) };
-  }
-  if (rating === 'again')
-    return { title: t('quiz.resultReviewedTitle'), content: t('quiz.resultLimited', { tier: name(to) }) };
-  return { title: t('quiz.resultReviewedTitle'), content: t('quiz.resultHeld', { tier: name(to) }) };
+// Per-word review outcome for the results screen — the ACTUAL FSRS recompute
+// the commit persists, expressed as memory strength (days), never tiers.
+// 18-session (Casey): tier promotion belongs exclusively to the milestone
+// screen shown after results; conflating the two here was confusing, and the
+// render-time tier recompute could even disagree with the milestone list.
+// A single frozen `now` keeps every row consistent with the committed batch.
+interface RowOutcome {
+  before: number; // stability (days) going in
+  after: number; // stability (days) after this rating
+  gained: number; // after - before, floored at 0 for display
+  nextLabel: string; // localized next-review label ("in 6 days", "Tomorrow"…)
 }
+function rowOutcome(t: TFunction, card: QuizCardItem, rating: UiRating, now: Date): RowOutcome {
+  const { next } = applyReview(card.fsrs, uiRatingToFsrs(rating), now);
+  const before = card.fsrs.stability;
+  return {
+    before,
+    after: next.stability,
+    gained: Math.max(0, next.stability - before),
+    nextLabel: dueLabel(next.dueAt, t),
+  };
+}
+/** Whole days for copy; sub-day strength reads as "<1". */
+const fmtDays = (d: number) => (d < 1 ? '<1' : String(Math.round(d)));
 
 export function QuizScreen() {
   const router = useRouter();
@@ -185,17 +197,25 @@ export function QuizScreen() {
         <View style={styles.cardArea}>
           <ScrollView contentContainerStyle={styles.cardScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             {!revealed ? (
-              <QuizCardFront key={card.id} tier={card.tierId} card={card.content} mode={card.mode} onReveal={() => setRevealed(true)} />
+              <QuizCardFront key={card.id} tier={card.tierId} card={card.content} mode={card.mode} revealCta={false} onReveal={() => setRevealed(true)} />
             ) : (
               <Animated.View key={card.id} entering={FadeIn.duration(220)}>
                 <QuizCardBack tier={card.tierId} card={card.content} />
               </Animated.View>
             )}
           </ScrollView>
-          {revealed && (
+          {/* Bottom gutter: reveal pre-flip, ratings post-flip — SAME position, so
+              the thumb never travels (18-session ergonomics). In recall mode the
+              open keyboard covers this gutter until dismissed (auto on a correct
+              type-out, or manually) — intentional. */}
+          {revealed ? (
             <Animated.View entering={FadeIn.duration(220)} style={styles.ratingArea}>
               <RatingButtons onRate={rate} />
             </Animated.View>
+          ) : (
+            <View style={styles.ratingArea}>
+              <QuizRevealButton tier={card.tierId} mode={card.mode} onPress={() => setRevealed(true)} style={styles.gutterReveal} />
+            </View>
           )}
         </View>
       )}
@@ -328,6 +348,10 @@ function StatsScreen({ cards, ratings, onStudyAgain, onDone }: { cards: QuizCard
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const s = sessionStats(ratings);
+  // Frozen once so every row's recompute matches the committed batch (a ticking
+  // `now` could otherwise drift a row's numbers between renders). State (not a
+  // ref) so the value is safe to read during render.
+  const [now] = useState(() => new Date());
   return (
     <Screen edges={['top', 'bottom']}>
       <View style={styles.statsHeader}>
@@ -337,7 +361,7 @@ function StatsScreen({ cards, ratings, onStudyAgain, onDone }: { cards: QuizCard
             <View style={[styles.statsDot, { backgroundColor: theme.palette.green[100] }]}>
               <IconArrowUp size={10} color={theme.palette.green[600]} />
             </View>
-            <RawText style={styles.statsSummaryText}>{t('quiz.promotedCount', { count: s.promoted })}</RawText>
+            <RawText style={styles.statsSummaryText}>{t('quiz.strengthenedCount', { count: s.promoted })}</RawText>
           </View>
           <View style={styles.statsSummaryItem}>
             <View style={[styles.statsDot, { backgroundColor: theme.palette.slate[100] }]}>
@@ -351,13 +375,21 @@ function StatsScreen({ cards, ratings, onStudyAgain, onDone }: { cards: QuizCard
       <ScrollView style={styles.statsList} contentContainerStyle={styles.statsListContent}>
         {cards.map((c, i) => {
           const rating = ratings[i]?.rating ?? 'again';
-          const tip = outcomeTip(t, c, rating);
+          const o = rowOutcome(t, c, rating, now);
+          const tip =
+            rating === 'again'
+              ? { title: t('quiz.resultAgainTitle'), content: t('quiz.resultAgain', { next: o.nextLabel }) }
+              : {
+                  title: t('quiz.resultGainTitle'),
+                  content: t('quiz.resultGain', { before: fmtDays(o.before), after: fmtDays(o.after), next: o.nextLabel }),
+                };
           return (
             <Tooltip
               key={c.id}
               title={tip.title}
               content={tip.content}
               indicator={false}
+              anchor="end"
               accessibilityLabel={t('quiz.resultA11y', { word: c.content.backWord })}
             >
               <View style={styles.statRow}>
@@ -367,7 +399,7 @@ function StatsScreen({ cards, ratings, onStudyAgain, onDone }: { cards: QuizCard
                   <RawText style={styles.statSource}>{c.content.frontWord}</RawText>
                 </View>
                 <IconInfo size={13} color={theme.color.textFaint} />
-                <RatingPill rating={rating} />
+                <RatingPill rating={rating} gained={o.gained} />
               </View>
             </Tooltip>
           );
@@ -385,29 +417,26 @@ function StatsScreen({ cards, ratings, onStudyAgain, onDone }: { cards: QuizCard
     </Screen>
   );
 }
-function RatingPill({ rating }: { rating: UiRating }) {
+// Pill = the FSRS outcome itself: "+Nd" of memory strength (green for a clean
+// recall, blue for a hard one), "Review" when the word comes back. No tier
+// language — the milestone screen owns promotion (18-session item 2).
+function RatingPill({ rating, gained }: { rating: UiRating; gained: number }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
-  if (rating === 'got_it') {
+  if (rating === 'again') {
     return (
-      <View style={[styles.pill, { backgroundColor: theme.palette.green[100] }]}>
-        <IconArrowUp size={11} color={theme.palette.green[600]} />
-        <RawText style={[styles.pillText, { color: theme.palette.green[700] }]}>{t('quiz.pillPromoted')}</RawText>
+      <View style={[styles.pill, { backgroundColor: theme.palette.slate[100] }]}>
+        <IconArrowDown size={11} color={theme.color.textMuted} />
+        <RawText style={[styles.pillText, { color: theme.color.textMuted }]}>{t('quiz.pillReview')}</RawText>
       </View>
     );
   }
-  if (rating === 'almost') {
-    return (
-      <View style={[styles.pill, { backgroundColor: theme.palette.blue[50] }]}>
-        <IconArrowUp size={11} color={theme.palette.blue[500]} />
-        <RawText style={[styles.pillText, { color: theme.palette.blue[700] }]}>{t('quiz.pillAlmost')}</RawText>
-      </View>
-    );
-  }
+  const label = gained >= 1 ? t('quiz.pillGainDays', { count: Math.round(gained) }) : t('quiz.pillGainSmall');
+  const strong = rating === 'got_it';
   return (
-    <View style={[styles.pill, { backgroundColor: theme.palette.slate[100] }]}>
-      <IconArrowDown size={11} color={theme.color.textMuted} />
-      <RawText style={[styles.pillText, { color: theme.color.textMuted }]}>{t('quiz.pillReview')}</RawText>
+    <View style={[styles.pill, { backgroundColor: strong ? theme.palette.green[100] : theme.palette.blue[50] }]}>
+      <IconArrowUp size={11} color={strong ? theme.palette.green[600] : theme.palette.blue[500]} />
+      <RawText style={[styles.pillText, { color: strong ? theme.palette.green[700] : theme.palette.blue[700] }]}>{label}</RawText>
     </View>
   );
 }
@@ -495,6 +524,7 @@ const styles = StyleSheet.create((theme) => {
     cardArea: { flex: 1, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20, gap: 14 },
     cardScroll: { flexGrow: 1, justifyContent: 'center' },
     ratingArea: {},
+    gutterReveal: { marginTop: 0 },
     emptyFill: { flex: 1, justifyContent: 'center' },
 
     // end screen

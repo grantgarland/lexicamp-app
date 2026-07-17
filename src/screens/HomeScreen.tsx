@@ -192,8 +192,10 @@ function StatTiles({ mastered, addedToday, dueTomorrow }: { mastered: number; ad
     },
   ];
   return (
-    <View style={styles.statRow}>
-      {tiles.map((tile) => (
+    <View style={styles.statCard}>
+      <RawText style={styles.statCardHeader}>{t('home.wordTilesHeader')}</RawText>
+      <View style={styles.statRow}>
+        {tiles.map((tile) => (
         // The WHOLE tile is the tooltip trigger (press anywhere on the card). The ⓘ in
         // the corner is a static cue — the Tooltip's own indicator is off since the tile
         // isn't a tiny target.
@@ -213,7 +215,8 @@ function StatTiles({ mastered, addedToday, dueTomorrow }: { mastered: number; ad
             <RawText style={styles.statLabel}>{tile.label}</RawText>
           </View>
         </Tooltip>
-      ))}
+        ))}
+      </View>
     </View>
   );
 }
@@ -429,6 +432,8 @@ const styles = StyleSheet.create((theme) => {
     eduDismiss: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderTopWidth: theme.borderWidth.thin, borderTopColor: color.divider, paddingTop: 12, paddingBottom: 2 },
     eduDismissText: { fontFamily: fonts.sans.semibold, fontSize: 13, color: color.brand },
 
+    statCard: { backgroundColor: color.surfaceCard, borderWidth: theme.borderWidth.thin, borderColor: color.border, borderRadius: theme.radius.lg, padding: 12 },
+    statCardHeader: { fontFamily: fonts.sans.bold, fontSize: 11, letterSpacing: 0.8, textTransform: 'uppercase', color: color.textMuted, marginBottom: 10, marginLeft: 2 },
     statRow: { flexDirection: 'row', gap: 10 },
     statTileTrigger: { flex: 1 },
     statTile: { position: 'relative', borderWidth: theme.borderWidth.thin, borderRadius: theme.radius.md, paddingVertical: 11, paddingHorizontal: 8, alignItems: 'center' },

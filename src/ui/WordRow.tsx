@@ -14,7 +14,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useTranslation } from '@/i18n';
 import { dueLabelShort, wordHealth } from '@/lib/relativeTime';
 import { getTierByStability } from '@/theme/tiers';
-import { IconFolderPlus, IconLock, IconMinus, IconTrash } from './icons';
+import { IconArchive, IconFolderPlus, IconLock, IconMinus, IconTrash } from './icons';
 import { ListItem } from './List';
 import { Text } from './Text';
 import { TierBadge } from './TierBadge';
@@ -28,6 +28,8 @@ export interface WordItem {
   dueAt?: Date;
   /** Completed review count → the small right cell under the due label. */
   reps?: number;
+  /** Archived (18 §E3): dims the row; tray offers Unarchive instead of Add-to-Deck. */
+  suspended?: boolean;
 }
 
 export interface WordRowProps {
@@ -35,6 +37,8 @@ export interface WordRowProps {
   onPress?: () => void;
   onDelete?: () => void;
   onAddToDeck?: () => void;
+  /** 18 §E3: archive (or unarchive when the word is archived). */
+  onToggleArchive?: () => void;
   /** Deck context: replaces the Add/Delete tray with a single "Remove from deck". */
   onRemoveFromDeck?: () => void;
   /** Free tier shows a lock on Add-to-Deck. */
@@ -45,7 +49,7 @@ export interface WordRowProps {
 
 const ACTION_W = 76;
 
-export function WordRow({ word, onPress, onDelete, onAddToDeck, onRemoveFromDeck, isPremium = false, compact = false }: WordRowProps) {
+export function WordRow({ word, onPress, onDelete, onAddToDeck, onToggleArchive, onRemoveFromDeck, isPremium = false, compact = false }: WordRowProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const ref = useRef<SwipeableMethods>(null);
@@ -71,6 +75,22 @@ export function WordRow({ word, onPress, onDelete, onAddToDeck, onRemoveFromDeck
       </View>
     ) : (
       <View style={styles.tray}>
+        {onToggleArchive != null && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={word.suspended ? t('wordRow.unarchiveA11y') : t('wordRow.archiveA11y')}
+            style={[styles.action, { backgroundColor: theme.palette.slate[500] }]}
+            onPress={() => {
+              ref.current?.close();
+              onToggleArchive();
+            }}
+          >
+            <IconArchive size={18} color="#fff" />
+            <Text variant="label" style={styles.actionLabel}>
+              {word.suspended ? t('wordRow.unarchive') : t('wordRow.archive')}
+            </Text>
+          </Pressable>
+        )}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('wordRow.addToDeckA11y')}
@@ -139,7 +159,7 @@ export function WordRow({ word, onPress, onDelete, onAddToDeck, onRemoveFromDeck
     />
   );
 
-  if (compact) return <View style={styles.container}>{face}</View>;
+  if (compact) return <View style={[styles.container, word.suspended && styles.archived]}>{face}</View>;
 
   return (
     <ReanimatedSwipeable
@@ -148,7 +168,7 @@ export function WordRow({ word, onPress, onDelete, onAddToDeck, onRemoveFromDeck
       rightThreshold={40}
       overshootRight={false}
       renderRightActions={renderRightActions}
-      containerStyle={styles.container}
+      containerStyle={[styles.container, word.suspended && styles.archived]}
     >
       {face}
     </ReanimatedSwipeable>
@@ -169,6 +189,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: 16,
     backgroundColor: theme.color.surfaceCard,
   },
+  archived: { opacity: 0.55 },
   trailing: { alignItems: 'flex-end', gap: 2 },
   due: { fontFamily: theme.fonts.sans.semibold },
   tray: { flexDirection: 'row' },

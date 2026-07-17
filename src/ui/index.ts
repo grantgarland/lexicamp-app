@@ -51,6 +51,7 @@ export {
   IconArrowUp,
   IconArrowDown,
   IconMountain,
+  IconArchive,
   IconPlus,
   IconInfo,
   IconSliders,
@@ -81,6 +82,7 @@ export { MasteryCard, type MasteryCardProps } from './MasteryCard';
 export {
   QuizCardFront,
   QuizCardBack,
+  QuizRevealButton,
   type QuizCardFrontProps,
   type QuizCardBackProps,
   type QuizCardData,

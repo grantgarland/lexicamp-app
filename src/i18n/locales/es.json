@@ -97,8 +97,8 @@
     "dayStreak": "días de racha",
     "dayStreakA11y_one": "racha de {{count}} día",
     "dayStreakA11y_other": "racha de {{count}} días",
-    "ready": "Listo para repasar",
-    "studySub": "Refuerza tu memoria antes de que se desvanezcan.",
+    "ready": "Repaso de hoy",
+    "studySub": "Programadas justo antes de que las olvides — el momento en que repasar más refuerza la memoria.",
     "studyNow": "Estudiar ahora",
     "statAddedToday": "Añadidas hoy",
     "statAddedTodayTip": "El hábito constante de capturar es lo que hace crecer tu vocabulario: unas pocas palabras al día se acumulan rápido.",
@@ -121,7 +121,7 @@
       "dismiss": "Entendido — ocultar tarjeta",
       "dismissA11y": "Ocultar la tarjeta Cómo funciona Lexicamp. Puedes reabrirla desde Ajustes."
     },
-    "wordsReady": "palabras listas para repasar",
+    "wordsReady": "palabras pendientes hoy",
     "statMastered": "Dominadas",
     "statMasteredTip": "Las palabras dominadas aguantan más de 30 días sin repaso. Salieron de tu cola y cuentan para tu rango en la montaña.",
     "caughtUpTitle": "¡Todo al día!",
@@ -133,7 +133,8 @@
     "streakBest": "Mejor",
     "streakRule": "Termina una sesión de repaso al día para mantener tu racha — cualquier duración cuenta.",
     "studyAhead": "Estudiar por adelantado",
-    "studyAheadA11y": "Estudiar por adelantado — repasa antes tus próximas palabras programadas"
+    "studyAheadA11y": "Estudiar por adelantado — repasa antes tus próximas palabras programadas",
+    "wordTilesHeader": "Tus palabras"
   },
   "masteryCard": {
     "eyebrow": "Dominio de palabras",
@@ -204,14 +205,10 @@
     "daysValue_other": "{{count}} días",
     "seeResults": "Ver resultados",
     "sessionResults": "Resultados de la sesión",
-    "promotedCount_one": "{{count}} promovida",
-    "promotedCount_other": "{{count}} promovidas",
     "reviewAgainCount_one": "{{count}} para repasar de nuevo",
     "reviewAgainCount_other": "{{count}} para repasar de nuevo",
     "studyAgain": "Estudiar de nuevo",
     "done": "Listo",
-    "pillPromoted": "Promovida",
-    "pillAlmost": "Casi",
     "pillReview": "Repasar",
     "summitBadge": "CUMBRE",
     "reachedMastery_one": "¡{{count}} palabra alcanzó el Dominio!",
@@ -226,13 +223,6 @@
     "reviewed": "Repasadas",
     "wordsValue_one": "{{count}} palabra",
     "wordsValue_other": "{{count}} palabras",
-    "resultPromotedTitle": "Ascendida",
-    "resultPromoted": "{{from}} → {{to}} — este repaso llevó su estabilidad de memoria más allá del umbral de {{to}}.",
-    "resultSummitTitle": "Repasada en la Cumbre",
-    "resultSummit": "Ya dominada: este repaso la reforzó; la estabilidad se mantiene por encima de 30 días.",
-    "resultReviewedTitle": "Repasada",
-    "resultHeld": "La estabilidad subió pero se quedó en {{tier}}. Un par de recuerdos claros más para ascender.",
-    "resultLimited": "El recuerdo fue limitado, así que se queda en {{tier}} y volverá antes.",
     "resultA11y": "{{word}} — detalles del repaso",
     "pikaGoodJobA11y": "Pika levantando el pulgar",
     "pikaHugsA11y": "Pika dando un abrazo de ánimo",
@@ -245,7 +235,16 @@
     "promoHeadline": "¡Nuevo campamento alcanzado!",
     "promoSubtitle": "Estas palabras subieron a un campamento superior en esta sesión.",
     "commitError": "No se pudo guardar tu progreso — revisa tu conexión y vuelve a estudiar estas palabras.",
-    "senseHint": "como en: {{hints}}"
+    "senseHint": "como en: {{hints}}",
+    "strengthenedCount_one": "{{count}} reforzada",
+    "strengthenedCount_other": "{{count}} reforzadas",
+    "pillGainDays_one": "+{{count}}d",
+    "pillGainDays_other": "+{{count}}d",
+    "pillGainSmall": "+<1d",
+    "resultGainTitle": "Memoria reforzada",
+    "resultGain": "La fuerza de memoria creció de {{before}} a {{after}} días. Próximo repaso {{next}}.",
+    "resultAgainTitle": "Vuelve a repaso",
+    "resultAgain": "Marcada como olvidada: vuelve a un intervalo corto. Próximo repaso {{next}}."
   },
   "wordRow": {
     "addToDeckA11y": "Añadir al mazo",
@@ -255,7 +254,11 @@
     "removeA11y": "Quitar del mazo",
     "remove": "Quitar",
     "reviewsCount_one": "{{count}} repaso",
-    "reviewsCount_other": "{{count}} repasos"
+    "reviewsCount_other": "{{count}} repasos",
+    "archive": "Archivar",
+    "unarchive": "Restaurar",
+    "archiveA11y": "Archivar esta palabra",
+    "unarchiveA11y": "Devolver esta palabra a los repasos"
   },
   "wordList": {
     "title": "Mis palabras",
@@ -358,7 +361,14 @@
     "dirZA": "Z–A",
     "sortHint": "Toca de nuevo el orden seleccionado para invertirlo.",
     "sortA11yActive": "{{dim}}, {{dir}}. Doble toque para invertir.",
-    "sortA11yInactive": "Ordenar por {{dim}}"
+    "sortA11yInactive": "Ordenar por {{dim}}",
+    "showArchived": "Palabras archivadas",
+    "showArchivedHint": "Se conservan para siempre, fuera de los repasos",
+    "archivedEmpty": "Nada archivado. Desliza una palabra a la izquierda para archivarla.",
+    "archiveWord": "Archivar palabra",
+    "unarchiveWord": "Devolver a los repasos",
+    "archivedToast": "«{{word}}» archivada — fuera de tu cola de repaso",
+    "unarchivedToast": "«{{word}}» devuelta a los repasos"
   },
   "progress": {
     "title": "Progreso",

@@ -212,6 +212,16 @@ export function IconMinus({ size = 18, color = STROKE }: IconProps) {
   );
 }
 
+export function IconArchive({ size = 18, color = STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M21 8v13H3V8" />
+      <Path d="M1 3h22v5H1z" />
+      <Path d="M10 12h4" />
+    </Svg>
+  );
+}
+
 export function IconPlus({ size = 18, color = STROKE }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round">

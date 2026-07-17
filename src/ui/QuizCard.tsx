@@ -43,10 +43,15 @@ export interface QuizCardFrontProps {
   onReveal: () => void;
   /** recall mode: focus the first cell on mount (opens the keyboard). Default true. */
   autoFocus?: boolean;
+  /** Render the reveal CTA inside the card (default true). The quiz screen passes
+   *  false and renders `QuizRevealButton` in the bottom gutter instead, so the
+   *  reveal target sits where the rating buttons appear — one thumb position for
+   *  the whole session (18-session ergonomics). */
+  revealCta?: boolean;
   style?: ViewStyle;
 }
 
-export function QuizCardFront({ tier, card, mode = 'recognition', onReveal, autoFocus = true, style }: QuizCardFrontProps) {
+export function QuizCardFront({ tier, card, mode = 'recognition', onReveal, autoFocus = true, revealCta = true, style }: QuizCardFrontProps) {
   const { t: translate } = useTranslation();
   const tr = toTier(tier);
   const recall = mode === 'recall';
@@ -76,25 +81,39 @@ export function QuizCardFront({ tier, card, mode = 'recognition', onReveal, auto
         )}
       </View>
 
-      {recall ? (
-        <Pressable
-          onPress={onReveal}
-          accessibilityRole="button"
-          style={({ pressed }) => [styles.revealSolid, { backgroundColor: tr.accent }, pressed && styles.pressedOpacity]}
-        >
-          <RNText style={styles.revealSolidText}>{translate('quizCard.reveal')}</RNText>
-        </Pressable>
-      ) : (
-        <Pressable
-          onPress={onReveal}
-          accessibilityRole="button"
-          style={({ pressed }) => [styles.revealOutline, { borderColor: tr.border }, pressed && styles.pressedScale]}
-        >
-          <RNText style={[styles.revealOutlineText, { color: tr.accent }]}>{translate('quizCard.tapToReveal')}</RNText>
-          <IconChevronDown size={16} color={tr.accent} />
-        </Pressable>
-      )}
+      {revealCta && <QuizRevealButton tier={tr} mode={mode} onPress={onReveal} />}
     </View>
+  );
+}
+
+/** The reveal CTA, extracted so the quiz screen can place it in the bottom
+ *  gutter (same position as the rating buttons — minimal thumb travel). In
+ *  recall mode the open keyboard covers the gutter until it's dismissed
+ *  (auto on a correct type-out, or manually) — intentional: typing IS the
+ *  interaction while the keyboard is up. */
+export function QuizRevealButton({ tier, mode = 'recognition', onPress, style }: { tier: Tier | TierId | string; mode?: QuizMode; onPress: () => void; style?: ViewStyle }) {
+  const { t: translate } = useTranslation();
+  const tr = toTier(tier);
+  if (mode === 'recall') {
+    return (
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.revealSolid, { backgroundColor: tr.accent }, style, pressed && styles.pressedOpacity]}
+      >
+        <RNText style={styles.revealSolidText}>{translate('quizCard.reveal')}</RNText>
+      </Pressable>
+    );
+  }
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={({ pressed }) => [styles.revealOutline, { borderColor: tr.border }, style, pressed && styles.pressedScale]}
+    >
+      <RNText style={[styles.revealOutlineText, { color: tr.accent }]}>{translate('quizCard.tapToReveal')}</RNText>
+      <IconChevronDown size={16} color={tr.accent} />
+    </Pressable>
   );
 }
 

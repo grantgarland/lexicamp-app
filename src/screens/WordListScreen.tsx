@@ -13,7 +13,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
-import { useActiveLang, useDecks, useDeleteCard, useEntitlement, useWords } from '@/query/hooks';
+import { useActiveLang, useDecks, useDeleteCard, useEntitlement, useSetCardSuspended, useWords } from '@/query/hooks';
 import type { DeckSummary, WordListItem } from '@/data/DataSource';
 import { addedLabel } from '@/lib/relativeTime';
 import { useDeferredReady } from '@/lib/useDeferredReady';
@@ -42,6 +42,7 @@ import {
   Sheet,
   SkeletonRows,
   TierBadge,
+  Toggle,
   WordDetailSheet,
   WordRow,
 } from '@/ui';
@@ -77,6 +78,7 @@ export function WordListScreen() {
   const showToast = useUiStore((s) => s.showToast);
   const { words, isLoading: wordsLoading } = useWords();
   const deleteCard = useDeleteCard();
+  const setSuspended = useSetCardSuspended();
   const { decks, isLoading: decksLoading } = useDecks();
   const { isPaid } = useEntitlement();
 
@@ -87,6 +89,8 @@ export function WordListScreen() {
   const [query, setQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortSel>(DEFAULT_SORT);
   const [filterTiers, setFilterTiers] = useState<Set<TierId>>(new Set());
+  // 18 §E3: false = active words (default); true = the archived shelf.
+  const [showArchived, setShowArchived] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [detailWord, setDetailWord] = useState<WordListItem | null>(null);
   const [pendingDelete, setPendingDelete] = useState<WordListItem | null>(null);
@@ -119,6 +123,7 @@ export function WordListScreen() {
     setAdded(new Set());
     setRemovedDecks([]);
     setQuery('');
+    setShowArchived(false);
   }
 
   const allDecks = [...decks, ...extraDecks].filter((d) => !removedDecks.includes(d.id));
@@ -132,17 +137,34 @@ export function WordListScreen() {
     setExtraDecks((e) => e.filter((x) => x.id !== d.id));
   };
 
-  const filterActive = !sameSort(sortBy, DEFAULT_SORT) || filterTiers.size > 0;
+  const filterActive = !sameSort(sortBy, DEFAULT_SORT) || filterTiers.size > 0 || showArchived;
+
+  // E3: archive/unarchive — no confirm (fully reversible), toast states the effect.
+  const toggleArchive = (w: WordListItem) => {
+    const next = !w.suspended;
+    setSuspended.mutate(
+      { cardId: w.id, suspended: next },
+      {
+        onSuccess: () =>
+          showToast({ variant: 'success', message: next ? t('wordList.archivedToast', { word: w.target }) : t('wordList.unarchivedToast', { word: w.target }) }),
+      },
+    );
+    setDetailWord(null);
+  };
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = words
+      .filter((w) => w.suspended === showArchived) // E3: active list vs archived shelf
       .filter((w) => !removed.includes(w.id))
       .filter((w) => q === '' || w.native.toLowerCase().includes(q) || w.target.toLowerCase().includes(q))
       .filter((w) => filterTiers.size === 0 || filterTiers.has(getTierByStability(w.stability).id));
     return sortWords(filtered, sortBy);
-  }, [words, removed, query, filterTiers, sortBy]);
+  }, [words, removed, query, filterTiers, sortBy, showArchived]);
 
+  // Count = ALL saved words, archived included (Casey ruling, post-E3): archiving
+  // a mastered word removes it from lists/reviews, never from what you've earned —
+  // tier counts and this header stay whole.
   const savedCount = words.length - removed.length;
   const noneSaved = savedCount === 0;
 
@@ -196,11 +218,11 @@ export function WordListScreen() {
       {subTab === 'words' &&
         (wordsLoading || !contentReady ? (
           <SkeletonRows />
-        ) : noneSaved ? (
+        ) : noneSaved && !showArchived ? (
           <EmptyState title={t('wordList.emptyTitle')} body={t('wordList.emptyBody')} style={styles.empty} />
         ) : visible.length === 0 ? (
           <View style={styles.noMatch}>
-            <RawText style={styles.noMatchText}>{t('wordList.noMatch')}</RawText>
+            <RawText style={styles.noMatchText}>{showArchived ? t('wordList.archivedEmpty') : t('wordList.noMatch')}</RawText>
           </View>
         ) : (
           // Virtualized (18 §2b perf guardrail): rows mount lazily instead of
@@ -211,11 +233,12 @@ export function WordListScreen() {
             keyExtractor={(w) => w.id}
             renderItem={({ item: w }) => (
               <WordRow
-                word={{ native: w.native, target: w.target, stability: w.stability, dueAt: w.dueAt, reps: w.reps }}
+                word={{ native: w.native, target: w.target, stability: w.stability, dueAt: w.dueAt, reps: w.reps, suspended: w.suspended }}
                 isPremium={isPaid}
                 onPress={() => setDetailWord(w)}
                 onDelete={() => setPendingDelete(w)}
                 onAddToDeck={() => (isPaid ? setAddToDeckWord(w) : setSubTab('decks'))}
+                onToggleArchive={() => toggleArchive(w)}
               />
             )}
             keyboardShouldPersistTaps="handled"
@@ -266,15 +289,18 @@ export function WordListScreen() {
         visible={filterOpen}
         sortBy={sortBy}
         filterTiers={filterTiers}
+        showArchived={showArchived}
         onClose={() => setFilterOpen(false)}
-        onApply={(s, tiers) => {
+        onApply={(s, tiers, archived) => {
           setSortBy(s);
           setFilterTiers(tiers);
+          setShowArchived(archived);
           setFilterOpen(false);
         }}
         onReset={() => {
           setSortBy(DEFAULT_SORT);
           setFilterTiers(new Set());
+          setShowArchived(false);
           setFilterOpen(false);
         }}
       />
@@ -283,6 +309,7 @@ export function WordListScreen() {
       <WordDetailSheet
         word={detailWord}
         onClose={() => setDetailWord(null)}
+        onToggleArchive={toggleArchive}
         onDelete={(w) => {
           setDetailWord(null);
           setPendingDelete(w);
@@ -428,6 +455,7 @@ function FilterSortSheet({
   visible,
   sortBy,
   filterTiers,
+  showArchived,
   onClose,
   onApply,
   onReset,
@@ -435,14 +463,16 @@ function FilterSortSheet({
   visible: boolean;
   sortBy: SortSel;
   filterTiers: Set<TierId>;
+  showArchived: boolean;
   onClose: () => void;
-  onApply: (sortBy: SortSel, tiers: Set<TierId>) => void;
+  onApply: (sortBy: SortSel, tiers: Set<TierId>, showArchived: boolean) => void;
   onReset: () => void;
 }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const [localSort, setLocalSort] = useState<SortSel>(sortBy);
   const [localTiers, setLocalTiers] = useState<Set<TierId>>(new Set(filterTiers));
+  const [localArchived, setLocalArchived] = useState(showArchived);
 
   // Re-sync local state each time the sheet opens.
   const [wasVisible, setWasVisible] = useState(visible);
@@ -451,6 +481,7 @@ function FilterSortSheet({
     if (visible) {
       setLocalSort(sortBy);
       setLocalTiers(new Set(filterTiers));
+      setLocalArchived(showArchived);
     }
   }
 
@@ -546,10 +577,21 @@ function FilterSortSheet({
         </List>
       </View>
 
+      {/* E3: the archived shelf — words kept forever but excluded from reviews. */}
+      <View style={styles.sheetSection}>
+        <View style={styles.archivedRow}>
+          <View style={styles.archivedText}>
+            <RawText style={styles.sheetLabel}>{t('wordList.showArchived')}</RawText>
+            <RawText style={styles.sheetHint}>{t('wordList.showArchivedHint')}</RawText>
+          </View>
+          <Toggle value={localArchived} onValueChange={setLocalArchived} />
+        </View>
+      </View>
+
       <ButtonRow
         style={styles.sheetActions}
         left={{ title: t('wordList.reset'), onPress: onReset }}
-        right={{ title: t('wordList.apply'), variant: 'primary', onPress: () => onApply(localSort, localTiers) }}
+        right={{ title: t('wordList.apply'), variant: 'primary', onPress: () => onApply(localSort, localTiers, localArchived) }}
       />
     </Sheet>
   );
@@ -856,6 +898,8 @@ const styles = StyleSheet.create((theme) => {
     createNewTile: { width: 38, height: 38, borderRadius: 9, borderWidth: 1.5, borderColor: palette.slate[300], borderStyle: 'dashed', backgroundColor: palette.slate[50], alignItems: 'center', justifyContent: 'center' },
     createNewPlus: { fontFamily: fonts.sans.regular, fontSize: 20, color: color.textMuted, lineHeight: 22 },
     createNewText: { fontFamily: fonts.sans.semibold, fontSize: 14, color: color.brand },
+    archivedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+    archivedText: { flex: 1 },
     noMatch: { paddingVertical: 48, paddingHorizontal: 24, alignItems: 'center' },
     noMatchText: { fontFamily: fonts.sans.regular, fontSize: 15, color: color.textMuted },
 

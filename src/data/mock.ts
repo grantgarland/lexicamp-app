@@ -19,6 +19,8 @@ const DECK_ID = 'dev-deck';
 let mockLearningLangs: string[] = ['es', 'fr'];
 let mockActiveLang = 'es';
 let mockDisplayName = 'Casey';
+// E3: archived word ids (mock words rebuild per call; this overlays the flag).
+let mockArchived = new Set<string>();
 
 const PROFILE: Profile = {
   id: USER_ID,
@@ -192,6 +194,7 @@ function buildWords(userState: DevUserState): WordListItem[] {
         reps: 2 + (g % 9),
         createdAt,
         dueAt,
+        suspended: mockArchived.has(`w${tierIdx}_${j}`),
       });
     }
   });
@@ -424,6 +427,12 @@ export const mockDataSource: DataSource = {
   },
   async updateProfile(patch) {
     if (patch.displayName != null) mockDisplayName = patch.displayName.trim() || 'Casey';
+  },
+  async setCardSuspended(cardId, suspended) {
+    const next = new Set(mockArchived);
+    if (suspended) next.add(cardId);
+    else next.delete(cardId);
+    mockArchived = next;
   },
   async commitQuizSession(_payload: { ratings: BufferedRating[] }): Promise<void> {
     // TODO(P4 data): batch-write per 03 (update card_fsrs_state via ts-fsrs, append

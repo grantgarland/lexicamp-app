@@ -100,6 +100,12 @@ export const supabaseDataSource: DataSource = {
     return (data as string | null) ?? null;
   },
 
+  async setCardSuspended(cardId: string, suspended: boolean): Promise<void> {
+    // 18 §E3: archival — the RPC logs the analytics event alongside the flag.
+    const { error } = await supabase.rpc('set_card_suspended', { p_card_id: cardId, p_suspended: suspended });
+    bail(error);
+  },
+
   async deleteCard(cardId: string): Promise<void> {
     // A12b: the real delete — cascades FSRS state server-side + logs word_deleted.
     const { error } = await supabase.rpc('delete_card', { p_card_id: cardId });
@@ -207,10 +213,14 @@ export const supabaseDataSource: DataSource = {
     const { data, error } = await supabase
       .from('decks')
       .select('id, name, created_at, cards(count)')
-      .eq('target_lang', target);
+      .eq('target_lang', target)
+      .order('created_at', { ascending: true });
     bail(error);
     type Row = { id: string; name: string; created_at: string; cards: { count: number }[] };
-    return ((data ?? []) as Row[]).map((d) => ({
+    // 18 §E1: the OLDEST deck per language is the hidden main deck (same rule
+    // getActiveDeck uses) — reachable only via Home "Study now". Custom Decks
+    // lists user-created decks only.
+    return ((data ?? []) as Row[]).slice(1).map((d) => ({
       id: d.id,
       name: d.name,
       wordCount: d.cards[0]?.count ?? 0,
