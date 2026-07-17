@@ -197,6 +197,7 @@ function TranslationItem({
                   style={[styles.action, styles.actionDisabled]}
                   accessibilityRole="button"
                   accessibilityState={{ disabled: true }}
+                  testID="result-unsaveable"
                 >
                   <IconLock size={15} color={theme.color.textFaint} />
                   <RNText style={styles.actionTextDisabled}>{t('translationCard.cantSave')}</RNText>
@@ -204,19 +205,21 @@ function TranslationItem({
               </>
             )}
             {saveable && buttonState === 'save' && (
-              <Pressable onPress={onSave} style={[styles.action, styles.actionSave]} accessibilityRole="button">
+              /* Maestro action-state ids: only the EXPANDED sense renders its
+                 action block, so at most one of these exists at a time. */
+              <Pressable onPress={onSave} style={[styles.action, styles.actionSave]} accessibilityRole="button" testID="result-save">
                 <IconBook size={16} color="#fff" />
                 <RNText style={styles.actionTextLight}>{t('translationCard.saveWord')}</RNText>
               </Pressable>
             )}
             {saveable && buttonState === 'saved' && (
-              <Animated.View key="saved" entering={FadeIn.duration(200)} style={[styles.action, styles.actionSaved]}>
+              <Animated.View key="saved" entering={FadeIn.duration(200)} style={[styles.action, styles.actionSaved]} testID="result-saved">
                 <IconCheck size={17} color="#fff" />
                 <RNText style={styles.actionTextLight}>{t('translationCard.saved')}</RNText>
               </Animated.View>
             )}
             {saveable && buttonState === 'delete' && (
-              <Pressable onPress={onDelete} style={[styles.action, styles.actionDelete]} accessibilityRole="button">
+              <Pressable onPress={onDelete} style={[styles.action, styles.actionDelete]} accessibilityRole="button" testID="result-delete">
                 <IconTrash size={15} color={theme.color.danger} />
                 <RNText style={styles.actionTextDanger}>{t('translationCard.deleteWord')}</RNText>
               </Pressable>

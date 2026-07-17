@@ -1,18 +1,26 @@
 # CI-4b — search/capture flow smoke: the CRUD surfaces that exist today,
 # against the mock DataSource (`smoke` EAS profile / dev builds).
-# In CI via .maestro/config.yaml since 2026-07-13. First-run caveat: the two
-# steps most likely to need tuning on a real emulator are the row `swipe` and
-# the `below:`-disambiguated confirm tap — if this flow alone is red, start there.
+# First-run caveat: the step most likely to need tuning on a real emulator is
+# the row `swipe` — if this flow alone is red, start there.
 #
-# Tab taps use testIDs (`tab-<id>`, ui/TabBar.tsx) — text 'Home' collides with
-# the system nav bar's Home button on 3-button-nav emulators (2026-07-16 smoke
-# failure). Keep in lockstep with smoke.yaml.
+# SELECTOR POLICY (2026-07-17): tap by testID, assert by TEXT.
+#   - Taps/gestures only need to FIND an element → ids are locale-proof, immune
+#     to copy changes, and collision-free (the 2026-07-16 system-Home-button bug;
+#     the old tray-vs-confirm 'Delete' ambiguity that needed a `below:` anchor).
+#     Ids: fab-search / search-input / search-clear / search-close (SearchScreen,
+#     TabBar) · word-row-delete (WordRow tray) · confirm-accept (ConfirmDialog).
+#   - Assertions VERIFY rendered content → they stay text on purpose. An id-only
+#     assert passes on an empty or wrong render. Text drift is guarded at commit
+#     time by src/test/maestroStrings.test.ts.
+#   - Exception: the swipe anchors on text 'melancólico' — it doubles as a
+#     content check (fixture word rendered), and row testIDs would need unicode/
+#     index-based ids for no gain.
 #
 # What this verifies vs. what it CAN'T (mock-mode reality, 2026-07-13):
 #   CREATE — lookup renders + Save flips to "Saved!". Mock saveCard() is a
 #            no-op and getWords() serves fixtures, so the saved word does NOT
 #            appear in Word List. True create→read persistence needs the live
-#            (Supabase) path + a seeded account — separate, later flow.
+#            (Supabase) path + a seeded account — CI-7, deferred.
 #   READ   — deterministic mock fixtures: 'fly' → volar + mosca (Azure docs
 #            example), phrase path fabricates '<phrase>·es'.
 #   UPDATE — no update operation exists in DataSource; nothing to test yet.
@@ -23,9 +31,10 @@
 # input; Maestro inputText is ASCII-only on Android, so that case lives in the
 # jest capture tests, not here.
 #
-# Fixture couplings (update together): mock.ts WORD_BANK/DISTRIBUTION (summit
-# default = 60 words, melancólico present), MOCK_MISS='fly123456',
-# MOCK_ECHO='echoword', FLY_SENSES, en.json strings asserted below.
+# Fixture couplings (update together): mock.ts SMOKE_FIXTURES (WORD_BANK/
+# DISTRIBUTION — summit = 60 words, melancólico present; MOCK_MISS='fly123456';
+# MOCK_ECHO='echoword'; FLY_SENSES), en.json strings asserted below. All of
+# these are enforced by src/test/maestroStrings.test.ts.
 #
 # Run locally: maestro test .maestro/word-capture.yaml
 appId: com.lexicamp.app
@@ -38,12 +47,14 @@ tags:
     visible: '(?i)Word Mastery'
     timeout: 20000
 
-# ── Open search (FAB, a11y label "Search") ───────────────────────────────────
-- tapOn: 'Search'
-- assertVisible: 'Type a word in .*'
+# ── Open search (FAB) ────────────────────────────────────────────────────────
+- tapOn:
+    id: 'fab-search'
+- assertVisible: 'Type a word in .*' # placeholder = search sheet actually open
 
 # ── READ: happy path — mock fixture 'fly' → volar (verb) + mosca (noun) ──────
-- tapOn: 'Type a word in .*'
+- tapOn:
+    id: 'search-input'
 - inputText: 'fly'
 - extendedWaitUntil:
     visible: 'volar'
@@ -51,12 +62,15 @@ tags:
 - assertVisible: 'mosca'
 
 # ── CREATE: save flips to optimistic saved state ─────────────────────────────
-- tapOn: 'Save word'
+- tapOn:
+    id: 'result-save'
 - assertVisible: 'Saved!'
 
 # ── READ: phrase path (unknown Latin phrase → fabricated '<phrase>·es') ──────
-- tapOn: 'Clear'
-- tapOn: 'Type a word in .*'
+- tapOn:
+    id: 'search-clear'
+- tapOn:
+    id: 'search-input'
 - inputText: 'buenos dias'
 - extendedWaitUntil:
     visible: 'buenos dias·es'
@@ -64,45 +78,49 @@ tags:
 - assertVisible: 'Save word'
 
 # ── Gate: not_found (MOCK_MISS reserved token) ───────────────────────────────
-- tapOn: 'Clear'
-- tapOn: 'Type a word in .*'
+- tapOn:
+    id: 'search-clear'
+- tapOn:
+    id: 'search-input'
 - inputText: 'fly123456'
 - extendedWaitUntil:
     visible: "We couldn't find that one."
     timeout: 10000
 
 # ── Gate: identity-echo → unsaveable card (Save replaced, notice shown) ──────
-- tapOn: 'Clear'
-- tapOn: 'Type a word in .*'
+- tapOn:
+    id: 'search-clear'
+- tapOn:
+    id: 'search-input'
 - inputText: 'echoword'
 - extendedWaitUntil:
     visible: "Can't save this"
     timeout: 10000
 
 # ── Gate: Tier-0 not_a_word (digits only; instant, no debounce/API) ──────────
-- tapOn: 'Clear'
-- tapOn: 'Type a word in .*'
+- tapOn:
+    id: 'search-clear'
+- tapOn:
+    id: 'search-input'
 - inputText: '12345'
 - assertVisible: "Hmm — that's not quite a card"
 
 # ── DELETE UX: Word List swipe tray → confirm → toast + count drops ─────────
-- tapOn: 'Close search'
+- tapOn:
+    id: 'search-close'
 - tapOn:
     id: 'tab-words'
 - assertVisible: 'My Words'
-- assertVisible: '60 words' # DISTRIBUTION.summit total (default dev scenario)
+- assertVisible: '60 words' # SMOKE_FIXTURES.DISTRIBUTION.summit total
 - swipe:
     from:
-      text: 'melancólico'
+      text: 'melancólico' # text on purpose — content anchor (see policy above)
     direction: LEFT
-- tapOn: 'Delete' # tray action (only visible 'Delete' at this point)
-- assertVisible: 'Delete “melancólico”\?'
-# Confirm button shares the exact text 'Delete' with the tray action behind the
-# sheet — disambiguate by position relative to the dialog body.
 - tapOn:
-    text: 'Delete'
-    below:
-      text: 'This removes the word from your library.*'
+    id: 'word-row-delete' # tray action (tray mounts only while swiped open)
+- assertVisible: 'Delete “melancólico”\?'
+- tapOn:
+    id: 'confirm-accept' # ConfirmDialog confirm — no `below:` anchor needed
 - assertVisible: 'Deleted “melancólico”'
 - assertVisible: '59 words'
 

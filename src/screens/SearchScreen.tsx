@@ -268,7 +268,7 @@ export function SearchView({ onClose }: { onClose: () => void }) {
     <View style={styles.fill}>
       <View style={styles.handle} />
       <View style={styles.header}>
-        <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('common.closeSearch')} style={styles.close}>
+        <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('common.closeSearch')} testID="search-close" style={styles.close}>
           <IconXClose />
         </Pressable>
         <DirectionToggle direction={direction} onChange={setDirection} profile={profile} />
@@ -419,11 +419,14 @@ function SearchBar({ value, onChange, placeholder }: { value: string; onChange: 
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
+          // Maestro tap target (word-capture.yaml) — taps by id, never by
+          // placeholder text (placeholder is locale/profile-dependent).
+          testID="search-input"
           maxFontSizeMultiplier={FONT_SCALE_MAX}
           style={[styles.searchInput, { fontFamily: hasValue ? theme.fonts.serif.regular : theme.fonts.sans.regular }]}
         />
         {hasValue && (
-          <Pressable onPress={() => onChange('')} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('search.clear')} style={styles.clear}>
+          <Pressable onPress={() => onChange('')} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('search.clear')} testID="search-clear" style={styles.clear}>
             <IconX size={11} color={theme.color.textMuted} />
           </Pressable>
         )}

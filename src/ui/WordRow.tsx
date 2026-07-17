@@ -61,6 +61,7 @@ export function WordRow({ word, onPress, onDelete, onAddToDeck, onToggleArchive,
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('wordRow.removeA11y')}
+          testID="word-row-remove-deck"
           style={[styles.action, { backgroundColor: theme.color.brand }]}
           onPress={() => {
             ref.current?.close();
@@ -79,6 +80,7 @@ export function WordRow({ word, onPress, onDelete, onAddToDeck, onToggleArchive,
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={word.suspended ? t('wordRow.unarchiveA11y') : t('wordRow.archiveA11y')}
+            testID="word-row-archive"
             style={[styles.action, { backgroundColor: theme.palette.slate[500] }]}
             onPress={() => {
               ref.current?.close();
@@ -94,6 +96,7 @@ export function WordRow({ word, onPress, onDelete, onAddToDeck, onToggleArchive,
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('wordRow.addToDeckA11y')}
+          testID="word-row-add-deck"
           style={[styles.action, { backgroundColor: isPremium ? theme.color.brand : theme.palette.slate[400] }]}
           onPress={() => {
             ref.current?.close();
@@ -108,6 +111,9 @@ export function WordRow({ word, onPress, onDelete, onAddToDeck, onToggleArchive,
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('wordRow.deleteA11y')}
+          // Maestro tap target — trays only mount while swiped open, so at most
+          // one row's actions exist at a time and the ids stay unique.
+          testID="word-row-delete"
           style={[styles.action, { backgroundColor: theme.color.danger }]}
           onPress={() => {
             ref.current?.close();

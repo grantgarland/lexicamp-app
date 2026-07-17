@@ -95,6 +95,9 @@ export function TabBar({ activeTab, onTabChange, sheetOpen = false, onFabPress, 
           ref={fabRef}
           accessibilityRole="button"
           accessibilityLabel={sheetOpen ? t('common.closeSearch') : t('common.search')}
+          // Maestro tap target (word-capture.yaml) — same rule as tab-<id>: taps
+          // by id, never by label text (locale-proof, no a11y-text collisions).
+          testID="fab-search"
           onPress={onFabPress}
           style={({ pressed }) => [
             styles.fab,

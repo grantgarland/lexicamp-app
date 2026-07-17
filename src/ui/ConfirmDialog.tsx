@@ -31,9 +31,13 @@ export function ConfirmDialog({ visible, title, body, icon, confirmLabel, cancel
         {icon != null && <View style={styles.icon}>{icon}</View>}
         <Text style={styles.title}>{title}</Text>
         {body != null && <Text style={styles.body}>{body}</Text>}
-        <Button title={confirmLabel} variant={destructive ? 'destructive' : 'primary'} onPress={onConfirm} />
+        {/* Maestro tap targets (only one ConfirmDialog is ever visible, so the
+            ids are unique at runtime). Confirm labels often collide with the
+            action that opened the dialog (e.g. the swipe-tray 'Delete') — id
+            taps need no positional disambiguation. */}
+        <Button title={confirmLabel} variant={destructive ? 'destructive' : 'primary'} onPress={onConfirm} testID="confirm-accept" />
         <View style={styles.cancel}>
-          <Button title={cancelLabel ?? t('common.cancel')} variant="secondary" onPress={onClose} />
+          <Button title={cancelLabel ?? t('common.cancel')} variant="secondary" onPress={onClose} testID="confirm-cancel" />
         </View>
       </View>
     </Sheet>

@@ -7,4 +7,4 @@
 # selectors before suspecting the app — see notes in the flow header.
 flows:
   - smoke.yaml
-  # - word-capture.yaml
+  - word-capture.yaml
