@@ -45,6 +45,8 @@ interface PrefsState {
   quizLength: number;
   /** Home "How Lexicamp works" card dismissed (17 §H3). Content stays reachable in Settings. */
   eduCardDismissed: boolean;
+  /** First-run walkthrough completed or skipped (18 §F2) — the tour never auto-fires twice. */
+  walkthroughDone: boolean;
   setSearchDirection: (d: SearchDirection) => void;
   addRecent: (userId: string, word: string) => void;
   removeRecent: (userId: string, word: string) => void;
@@ -52,6 +54,7 @@ interface PrefsState {
   setLocale: (locale: AppLocale) => void;
   setQuizLength: (n: number) => void;
   setEduCardDismissed: (v: boolean) => void;
+  setWalkthroughDone: (v: boolean) => void;
 }
 
 export const usePrefsStore = create<PrefsState>()(
@@ -63,6 +66,7 @@ export const usePrefsStore = create<PrefsState>()(
       locale: i18n.language as AppLocale,
       quizLength: QUIZ_LENGTH_DEFAULT,
       eduCardDismissed: false,
+      walkthroughDone: false,
       setSearchDirection: (searchDirection) => set({ searchDirection }),
       setLocale: (locale) => {
         i18n.changeLanguage(locale);
@@ -70,6 +74,7 @@ export const usePrefsStore = create<PrefsState>()(
       },
       setQuizLength: (quizLength) => set({ quizLength }),
       setEduCardDismissed: (eduCardDismissed) => set({ eduCardDismissed }),
+      setWalkthroughDone: (walkthroughDone) => set({ walkthroughDone }),
       addRecent: (userId, word) =>
         set((s) => {
           const cur = s.recentsByUser[userId] ?? [];
@@ -104,6 +109,7 @@ export const usePrefsStore = create<PrefsState>()(
         recentsByUser: s.recentsByUser,
         quizLength: s.quizLength,
         eduCardDismissed: s.eduCardDismissed,
+        walkthroughDone: s.walkthroughDone,
       }),
     },
   ),

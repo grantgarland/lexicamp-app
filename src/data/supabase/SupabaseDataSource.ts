@@ -142,8 +142,12 @@ export const supabaseDataSource: DataSource = {
     bail(error);
   },
 
-  async getExamples(translationId: string): Promise<UsageExample[]> {
-    const { data, error } = await supabase.functions.invoke('examples', { body: { translationId } });
+  async getExamples(translationId: string, targetTerm?: string): Promise<UsageExample[]> {
+    // targetTerm = the sense's normalized target (per-sense examples,
+    // 2026-07-17); the fn defaults to the primary sense when omitted.
+    const { data, error } = await supabase.functions.invoke('examples', {
+      body: { translationId, ...(targetTerm != null && targetTerm !== '' ? { targetTerm } : {}) },
+    });
     if (error) throw new Error(error.message);
     return (data as { examples: UsageExample[] }).examples ?? [];
   },

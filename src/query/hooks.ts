@@ -227,12 +227,14 @@ export function useLookup(query: string, direction: SearchDirection, enabled: bo
   return { outcome: enabled ? (q.data ?? null) : null, isLoading: enabled && q.isPending };
 }
 
-/** Lazy example sentences (16 §3) — fetched once per translation, cached
- *  server-side forever. Pass null to disable (nothing to fetch / already have). */
-export function useExamples(translationId: string | null) {
+/** Lazy example sentences (16 §3) — fetched once per (translation, sense),
+ *  cached server-side forever. Pass null to disable (nothing to fetch /
+ *  already have). `targetTerm` = the sense's normalized target (per-sense
+ *  examples, 2026-07-17); omitted → the primary sense. */
+export function useExamples(translationId: string | null, targetTerm?: string) {
   const q = useQuery({
-    queryKey: ['examples', translationId],
-    queryFn: () => ds.getExamples(translationId as string),
+    queryKey: ['examples', translationId, targetTerm ?? null],
+    queryFn: () => ds.getExamples(translationId as string, targetTerm),
     enabled: translationId != null,
     staleTime: Infinity,
   });

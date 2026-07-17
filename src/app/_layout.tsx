@@ -25,6 +25,7 @@ import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-c
 import { DevBadge } from '@/dev/DevBadge';
 import { queryClient } from '@/query/queryClient';
 import { PortalHost, Toast } from '@/ui';
+import { WalkthroughProvider } from '@/tour/walkthrough';
 
 // Minimal root. Real navigation (NavShell / tabs) lands in P3–P4.
 // Registered names MUST match `theme.fonts.*` in `@/theme/theme` — one family per
@@ -54,6 +55,9 @@ export default function RootLayout() {
             must inset content themselves. initialWindowMetrics avoids a first-frame flash. */}
         <SafeAreaProvider initialMetrics={initialWindowMetrics}>
           <BottomSheetModalProvider>
+            {/* Walkthrough context at the ROOT: the quiz fullScreenModal mounts its
+                own overlay host and must share the tabs layout's tour state. */}
+            <WalkthroughProvider>
             <Stack screenOptions={{ headerShown: false }}>
               {/* Search is a route, presented as a slide-up modal sheet (from the Home FAB). */}
               <Stack.Screen name="search" options={{ presentation: 'modal' }} />
@@ -65,6 +69,7 @@ export default function RootLayout() {
               <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
               <Stack.Screen name="auth" options={{ gestureEnabled: false }} />
             </Stack>
+            </WalkthroughProvider>
             {/* In-app overlays (sheets/dialogs) + toasts render above everything, on top
                 of the persistent nav — see ui/Portal + ui/Sheet + ui/Toast. */}
             <PortalHost />

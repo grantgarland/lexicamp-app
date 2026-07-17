@@ -12,6 +12,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { captureReasonI18nKey, evaluateCaptureInput } from '@/domain/capture';
+import { tourTargets } from '@/tour/walkthrough';
 import { directionLangs } from '@/domain/derive';
 import { type LookupResult, posTagI18nKey, qualityReasonI18nKey } from '@/domain/translation';
 import type { Profile, SearchDirection } from '@/domain/types';
@@ -278,7 +279,10 @@ export function SearchView({ onClose }: { onClose: () => void }) {
         </View>
       </View>
 
-      <SearchBar value={query} onChange={setQuery} placeholder={placeholder} />
+      {/* 18 §F2: walkthrough anchor (w3 — "search & save here"). */}
+      <View ref={(node) => { tourTargets.searchInput.current = node; }} collapsable={false}>
+        <SearchBar value={query} onChange={setQuery} placeholder={placeholder} />
+      </View>
 
       {/* Recents live OUTSIDE the content scroll: the fade mask must stay fixed
           relative to the search input while the list scrolls beneath it. */}

@@ -13,6 +13,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useTranslation } from '@/i18n';
 import { useEntitlement, useHomeData, useLearningLanguages, useNotificationPrefs, useProfile } from '@/query/hooks';
 import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
+import { useUiStore } from '@/store/uiStore';
 import { findLanguage } from '@/constants';
 import { LanguageSwitcherSheet } from '@/screens/shared/LanguageSwitcher';
 import { AboutSheet, EditProfileSheet, formatReminderTime, HowItWorksSheet, NotificationSheet, QuizLengthSheet, SupportSheet } from './settings/sheets';
@@ -42,6 +43,7 @@ export function SettingsScreen() {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const router = useRouter();
+  const setWalkthroughRequested = useUiStore((s) => s.setWalkthroughRequested);
   const profile = useProfile();
   const { isPaid } = useEntitlement();
   const { snapshot } = useHomeData();
@@ -218,7 +220,18 @@ export function SettingsScreen() {
       <QuizLengthSheet visible={sheet === 'quizLength'} isPaid={isPaid} onClose={() => setSheet(null)} onUpgrade={openPaywall} />
       <SupportSheet visible={sheet === 'support'} onClose={() => setSheet(null)} />
       <AboutSheet visible={sheet === 'about'} onClose={() => setSheet(null)} />
-      <HowItWorksSheet visible={sheet === 'howItWorks'} onClose={() => setSheet(null)} />
+      {/* 18 §F2: the guided-tour CTA lives INSIDE the How-it-works accordion
+          (Casey). Close the sheet, flag the replay, return Home — the
+          WalkthroughController picks it up there. */}
+      <HowItWorksSheet
+        visible={sheet === 'howItWorks'}
+        onClose={() => setSheet(null)}
+        onStartTour={() => {
+          setSheet(null);
+          setWalkthroughRequested(true);
+          router.navigate('/');
+        }}
+      />
       <LanguageSwitcherSheet visible={sheet === 'languages'} onClose={() => setSheet(null)} />
 
       <ConfirmDialog

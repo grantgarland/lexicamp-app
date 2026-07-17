@@ -18,6 +18,7 @@ import { useTranslation } from '@/i18n';
 import { dueLabel } from '@/lib/relativeTime';
 import { useCommitQuizSession, useDueCards, useEntitlement, useHomeData } from '@/query/hooks';
 import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
+import { tourTargets, WalkthroughOverlayHost } from '@/tour/walkthrough';
 import { type TierId } from '@/theme/tiers';
 import {
   Button,
@@ -59,6 +60,11 @@ interface RowOutcome {
   after: number; // stability (days) after this rating
   gained: number; // after - before, floored at 0 for display
   nextLabel: string; // localized next-review label ("in 6 days", "Tomorrow"…)
+  /** Still in FSRS learning steps: strength (days) and schedule (minutes)
+   *  legitimately diverge — "grew to 2 days" but the next quick check is
+   *  today. The tooltip uses a variant line so it doesn't read as a
+   *  contradiction (Casey bug, 2026-07-17). */
+  learning: boolean;
 }
 function rowOutcome(t: TFunction, card: QuizCardItem, rating: UiRating, now: Date): RowOutcome {
   const { next } = applyReview(card.fsrs, uiRatingToFsrs(rating), now);
@@ -68,6 +74,7 @@ function rowOutcome(t: TFunction, card: QuizCardItem, rating: UiRating, now: Dat
     after: next.stability,
     gained: Math.max(0, next.stability - before),
     nextLabel: dueLabel(next.dueAt, t),
+    learning: next.state === 1, // Learning (relearning=3 only follows 'again', which uses resultAgain)
   };
 }
 /** Whole days for copy; sub-day strength reads as "<1". */
@@ -185,6 +192,9 @@ export function QuizScreen() {
             />
           </>
         )}
+        {/* Walkthrough w6/w7 land here on fresh accounts (empty queue) — the
+            tooltips center (no anchor) but must still present from this modal. */}
+        <WalkthroughOverlayHost scope="quiz" />
       </Screen>
     );
   }
@@ -208,15 +218,18 @@ export function QuizScreen() {
               the thumb never travels (18-session ergonomics). In recall mode the
               open keyboard covers this gutter until dismissed (auto on a correct
               type-out, or manually) — intentional. */}
-          {revealed ? (
-            <Animated.View entering={FadeIn.duration(220)} style={styles.ratingArea}>
-              <RatingButtons onRate={rate} />
-            </Animated.View>
-          ) : (
-            <View style={styles.ratingArea}>
-              <QuizRevealButton tier={card.tierId} mode={card.mode} onPress={() => setRevealed(true)} style={styles.gutterReveal} />
-            </View>
-          )}
+          {/* 18 §F2: walkthrough anchor (w6 — flip + honest self-rating). */}
+          <View ref={(node) => { tourTargets.quizGutter.current = node; }} collapsable={false}>
+            {revealed ? (
+              <Animated.View entering={FadeIn.duration(220)} style={styles.ratingArea}>
+                <RatingButtons onRate={rate} />
+              </Animated.View>
+            ) : (
+              <View style={styles.ratingArea}>
+                <QuizRevealButton tier={card.tierId} mode={card.mode} onPress={() => setRevealed(true)} style={styles.gutterReveal} />
+              </View>
+            )}
+          </View>
         </View>
       )}
 
@@ -224,6 +237,10 @@ export function QuizScreen() {
           fullScreenModal; on iOS the root PortalHost sits BEHIND that modal, so a
           portalled sheet here would be invisible and the close button would look dead.
           Keeping this inside the screen guarantees it paints above the quiz. */}
+      {/* 18 §F2: quiz-scope walkthrough host — the quiz fullScreenModal paints
+          above tab-tree Modals, so w6/w7 tooltips must be presented from HERE. */}
+      <WalkthroughOverlayHost scope="quiz" />
+
       {showExit && (
         <View style={styles.exitOverlay} accessibilityViewIsModal>
           <Pressable style={styles.exitScrim} onPress={() => setShowExit(false)} accessibilityLabel={t('common.dismiss')} />
@@ -381,7 +398,12 @@ function StatsScreen({ cards, ratings, onStudyAgain, onDone }: { cards: QuizCard
               ? { title: t('quiz.resultAgainTitle'), content: t('quiz.resultAgain', { next: o.nextLabel }) }
               : {
                   title: t('quiz.resultGainTitle'),
-                  content: t('quiz.resultGain', { before: fmtDays(o.before), after: fmtDays(o.after), next: o.nextLabel }),
+                  // Learning-step cards: schedule (minutes) ≠ strength (days) —
+                  // the variant copy explains the quick check instead of
+                  // reading as a contradiction next to the +Nd pill.
+                  content: o.learning
+                    ? t('quiz.resultGainLearning', { before: fmtDays(o.before), after: fmtDays(o.after) })
+                    : t('quiz.resultGain', { before: fmtDays(o.before), after: fmtDays(o.after), next: o.nextLabel }),
                 };
           return (
             <Tooltip

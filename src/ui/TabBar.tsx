@@ -32,15 +32,19 @@ export interface TabBarProps {
   onTabChange?: (id: TabId) => void;
   sheetOpen?: boolean;
   onFabPress?: () => void;
+  /** Walkthrough spotlight anchors (18 §F2) — optional; kit stays tour-agnostic. */
+  tabRefs?: Partial<Record<TabId, React.Ref<View>>>;
+  fabRef?: React.Ref<View>;
 }
 
-function TabButton({ tab, active, onPress }: { tab: (typeof TABS)[number]; active: boolean; onPress?: () => void }) {
+function TabButton({ tab, active, onPress, anchorRef }: { tab: (typeof TABS)[number]; active: boolean; onPress?: () => void; anchorRef?: React.Ref<View> }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const color = active ? theme.color.brand : theme.color.textMuted;
   const { Icon } = tab;
   return (
     <Pressable
+      ref={anchorRef}
       style={styles.tab}
       onPress={onPress}
       accessibilityRole="tab"
@@ -59,7 +63,7 @@ function TabButton({ tab, active, onPress }: { tab: (typeof TABS)[number]; activ
   );
 }
 
-export function TabBar({ activeTab, onTabChange, sheetOpen = false, onFabPress }: TabBarProps) {
+export function TabBar({ activeTab, onTabChange, sheetOpen = false, onFabPress, tabRefs, fabRef }: TabBarProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -74,11 +78,11 @@ export function TabBar({ activeTab, onTabChange, sheetOpen = false, onFabPress }
 
   const tabs = (
     <>
-      <TabButton tab={TABS[0]} active={activeTab === 'home'} onPress={() => onTabChange?.('home')} />
-      <TabButton tab={TABS[1]} active={activeTab === 'words'} onPress={() => onTabChange?.('words')} />
+      <TabButton tab={TABS[0]} active={activeTab === 'home'} onPress={() => onTabChange?.('home')} anchorRef={tabRefs?.home} />
+      <TabButton tab={TABS[1]} active={activeTab === 'words'} onPress={() => onTabChange?.('words')} anchorRef={tabRefs?.words} />
       <View style={styles.gap} />
-      <TabButton tab={TABS[2]} active={activeTab === 'progress'} onPress={() => onTabChange?.('progress')} />
-      <TabButton tab={TABS[3]} active={activeTab === 'settings'} onPress={() => onTabChange?.('settings')} />
+      <TabButton tab={TABS[2]} active={activeTab === 'progress'} onPress={() => onTabChange?.('progress')} anchorRef={tabRefs?.progress} />
+      <TabButton tab={TABS[3]} active={activeTab === 'settings'} onPress={() => onTabChange?.('settings')} anchorRef={tabRefs?.settings} />
     </>
   );
 
@@ -88,6 +92,7 @@ export function TabBar({ activeTab, onTabChange, sheetOpen = false, onFabPress }
     <View style={styles.container}>
       <View style={styles.fabWrap} pointerEvents="box-none">
         <Pressable
+          ref={fabRef}
           accessibilityRole="button"
           accessibilityLabel={sheetOpen ? t('common.closeSearch') : t('common.search')}
           onPress={onFabPress}

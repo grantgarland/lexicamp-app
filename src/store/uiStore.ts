@@ -22,7 +22,11 @@ export interface ToastState extends ToastConfig {
 
 interface UiState {
   searchOpen: boolean;
+  /** Settings → Replay walkthrough handshake (18 §F2): Settings sets it, the
+   *  WalkthroughController (tabs layout) consumes it after navigating Home. */
+  walkthroughRequested: boolean;
   setSearchOpen: (v: boolean) => void;
+  setWalkthroughRequested: (v: boolean) => void;
   toggleSearch: () => void;
   toast: ToastState | null;
   /** Show a toast. Pass a string for a plain info toast, or a config object. */
@@ -32,7 +36,9 @@ interface UiState {
 
 export const useUiStore = create<UiState>((set) => ({
   searchOpen: false,
+  walkthroughRequested: false,
   setSearchOpen: (v) => set({ searchOpen: v }),
+  setWalkthroughRequested: (v) => set({ walkthroughRequested: v }),
   toggleSearch: () => set((s) => ({ searchOpen: !s.searchOpen })),
   toast: null,
   showToast: (config) => {

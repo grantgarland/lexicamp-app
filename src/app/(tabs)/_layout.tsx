@@ -17,6 +17,7 @@ import { SearchView } from '@/screens/SearchScreen';
 import { useProfile } from '@/query/hooks';
 import { useUiStore } from '@/store/uiStore';
 import { TAB_BAR_CORE_HEIGHT, TabBar, type TabId } from '@/ui';
+import { tourTargets, WalkthroughController, WalkthroughOverlayHost } from '@/tour/walkthrough';
 
 export default function TabsLayout() {
   const router = useRouter();
@@ -74,6 +75,8 @@ export default function TabsLayout() {
         <TabBar
           activeTab={active}
           sheetOpen={searchOpen}
+          tabRefs={{ progress: tourTargets.progressTab }}
+          fabRef={tourTargets.fab}
           onFabPress={() => setSearchOpen(!searchOpen)}
           onTabChange={(id) => {
             if (searchOpen) setSearchOpen(false);
@@ -84,6 +87,14 @@ export default function TabsLayout() {
           }}
         />
       </View>
+
+      {/* 18 §F2 walkthrough: controller owns auto-start (live-mode only —
+          smoke/mock never auto-fires) + replay. The scope="main" host renders
+          the overlay for every step EXCEPT the quiz-interior ones (the quiz
+          fullScreenModal hosts its own — see walkthrough.tsx). Provider lives
+          in the ROOT layout so the quiz screen shares the tour context. */}
+      <WalkthroughController activeTab={active} />
+      <WalkthroughOverlayHost scope="main" />
     </View>
   );
 }

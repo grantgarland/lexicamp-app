@@ -31,7 +31,9 @@ export function WordDetailSheet({ word, onClose, onDelete, onToggleArchive }: Wo
   const tier = word ? getTierByStability(word.stability) : null;
   // W-03 is the "first card view" of 16 §3 — fetch the example lazily when the
   // row doesn't carry one yet (cached server-side once, free thereafter).
-  const { examples } = useExamples(word != null && word.example === '' ? word.translationId : null);
+  // senseTarget scopes the fetch to THIS card's sense (per-sense examples,
+  // 2026-07-17 — sibling sense cards used to share the primary's example).
+  const { examples } = useExamples(word != null && word.example === '' ? word.translationId : null, word?.senseTarget);
   const fetched = examples?.[0];
   const example = word?.example || (fetched ? `${fetched.sourcePrefix}${fetched.sourceTerm}${fetched.sourceSuffix}` : '');
   // Target-side line, mirroring the search card's example pair.

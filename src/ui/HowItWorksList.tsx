@@ -10,10 +10,16 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useTranslation } from '@/i18n';
 
 import { CardSorter, DailyPractice, ForgettingCurve } from './illustrations';
-import { IconChevronDown, IconChevronUp } from './icons';
+import { IconChevronDown, IconChevronUp, IconPlay } from './icons';
 import { RawText } from './Text';
 
-export function HowItWorksList() {
+export interface HowItWorksListProps {
+  /** 18 §F2: renders a "See how Lexicamp works" guided-tour CTA under the
+   *  accordion. Optional so call sites without tour access stay unchanged. */
+  onStartTour?: () => void;
+}
+
+export function HowItWorksList({ onStartTour }: HowItWorksListProps = {}) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   // Accordion: only one section open at a time (opening one closes the others).
@@ -53,6 +59,16 @@ export function HowItWorksList() {
           </View>
         );
       })}
+      {onStartTour != null && (
+        <Pressable
+          onPress={onStartTour}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.tourCta, pressed && { opacity: 0.85 }]}
+        >
+          <IconPlay size={14} color={theme.color.accent} />
+          <RawText style={styles.tourCtaText}>{t('walkthrough.replayCta')}</RawText>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -60,6 +76,8 @@ export function HowItWorksList() {
 const styles = StyleSheet.create((theme) => {
   const { color, fonts } = theme;
   return {
+    tourCta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 12, paddingVertical: 12, borderRadius: 10, borderWidth: theme.borderWidth.thin, borderColor: theme.color.border, backgroundColor: theme.color.surfaceCard },
+    tourCtaText: { fontFamily: theme.fonts.sans.semibold, fontSize: 14, color: theme.color.accent },
     item: { borderTopWidth: theme.borderWidth.thin, borderTopColor: color.divider },
     itemHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11 },
     itemTitle: { flex: 1, fontFamily: fonts.sans.semibold, fontSize: 13, color: color.textStrong },

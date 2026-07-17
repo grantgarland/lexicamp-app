@@ -243,6 +243,7 @@
     "pillGainSmall": "+<1d",
     "resultGainTitle": "Memory strengthened",
     "resultGain": "Memory strength grew from {{before}} to {{after}} days. Next review {{next}}.",
+    "resultGainLearning": "Memory strength grew from {{before}} to {{after}} days. One more quick check today locks it in.",
     "resultAgainTitle": "Back for review",
     "resultAgain": "Marked forgotten, so it resets to a short interval. Next review {{next}}."
   },
@@ -658,5 +659,28 @@
     "added": "{{lang}} added — you’re learning it now",
     "addFailed": "Couldn’t add the language — try again.",
     "indicatorA11y": "Active language: {{lang}}. Opens the language switcher."
+  },
+  "walkthrough": {
+    "w1Title": "Your home base",
+    "w1Body": "This card is your home base. It shows how many words need review and starts a review session. No words yet? Let's add some now.",
+    "w2Title": "Capture words",
+    "w2Body": "Look up words here and save them to your word bank. Every word you capture is automatically added to your review schedule.",
+    "w3Title": "Search & save",
+    "w3Body": "Type a word to see its translations, then save it with one tap. Come back here after the tour to add your first words.",
+    "w4Title": "Your word list",
+    "w4Body": "Every word you’ve saved lives here. Search, filter, and see word details.",
+    "w5Title": "Time to review",
+    "w5Body": "When words are due, Study now starts your review session. Let’s look inside one.",
+    "w6Title": "Reveal, then rate yourself",
+    "w6Body": "Tap to reveal the answer, then grade your own recall. Honest ratings help ensure the right words show up in your review queue at the right time.",
+    "w7Title": "Session results",
+    "w7Body": "After each session you’ll see your results — how much stronger each word’s memory got and when it comes back for review.",
+    "w8Title": "Watch yourself climb",
+    "w8Body": "See the progress you are making over time. The climb to mastery is not as far as you think!",
+    "next": "Next",
+    "back": "Back",
+    "skip": "Skip",
+    "done": "Done",
+    "replayCta": "See how Lexicamp works"
   }
 }

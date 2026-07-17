@@ -16,6 +16,7 @@ import { useHomeData, useProgressData } from '@/query/hooks';
 import { LanguageIndicator } from '@/screens/shared/LanguageSwitcher';
 import { usePrefsStore } from '@/store/prefsStore';
 import { useUiStore } from '@/store/uiStore';
+import { tourTargets, useWalkthroughActive } from '@/tour/walkthrough';
 
 import {
   HowItWorksList,
@@ -55,6 +56,10 @@ export function HomeScreen() {
   // afterwards it honors the persisted dismissal (17 §H3 — content stays
   // reachable via Settings → How Lexicamp works).
   const showEdu = isEmpty || !eduCardDismissed;
+  // 18 §F2 (Casey): while the walkthrough runs, ALWAYS show the "Today's
+  // review" card — w1/w5 spotlight it, and most fresh users would otherwise be
+  // on the caught-up/empty variants (pointing at elements that don't exist).
+  const tourActive = useWalkthroughActive();
   return (
     <Screen edges={['top']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -62,16 +67,20 @@ export function HomeScreen() {
         {snapshot != null && (
           <>
             <MasteryCard tierCounts={snapshot.tierCounts} wordsSaved={snapshot.wordsSaved} isEmpty={isEmpty} />
-            {isEmpty ? (
+            {isEmpty && !tourActive ? (
               <AddFirstWordCard onAdd={() => setSearchOpen(true)} />
             ) : (
               <>
                 {/* ONE due number app-wide (17 §H1/X1): everything ready now, incl. overdue. */}
-                {snapshot.needRecallTotal > 0 ? (
-                  <StudyCard due={snapshot.needRecallTotal} onStudy={() => router.push('/quiz')} />
-                ) : (
-                  <CaughtUpCard dueTomorrow={snapshot.dueTomorrow} onStudyAhead={() => router.push('/quiz')} />
-                )}
+                {/* collapsable={false}: Android optimizes plain Views away, which
+                    breaks the walkthrough's measure() on these anchors. */}
+                <View ref={(node) => { tourTargets.studyCard.current = node; }} collapsable={false}>
+                  {snapshot.needRecallTotal > 0 || tourActive ? (
+                    <StudyCard due={snapshot.needRecallTotal} onStudy={() => router.push('/quiz')} />
+                  ) : (
+                    <CaughtUpCard dueTomorrow={snapshot.dueTomorrow} onStudyAhead={() => router.push('/quiz')} />
+                  )}
+                </View>
                 <StatTiles mastered={snapshot.masteredCount} addedToday={snapshot.addedToday} dueTomorrow={snapshot.dueTomorrow} />
               </>
             )}
@@ -230,6 +239,8 @@ function HowItWorksCard({ defaultOpen = false, dismissible = false }: { defaultO
   const { t } = useTranslation();
   const [open, setOpen] = useState(defaultOpen);
   const setEduCardDismissed = usePrefsStore((s) => s.setEduCardDismissed);
+  // 18 §F2: guided-tour CTA inside the accordion; already on Home, so just flag it.
+  const setWalkthroughRequested = useUiStore((s) => s.setWalkthroughRequested);
   return (
     <View style={styles.eduCard}>
       <Pressable
@@ -254,7 +265,7 @@ function HowItWorksCard({ defaultOpen = false, dismissible = false }: { defaultO
       </Pressable>
       {open && (
         <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(140)} style={styles.eduList}>
-          <HowItWorksList />
+          <HowItWorksList onStartTour={() => setWalkthroughRequested(true)} />
           {dismissible && (
             <Pressable
               onPress={() => setEduCardDismissed(true)}

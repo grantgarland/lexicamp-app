@@ -40,22 +40,33 @@ const FSRS: FsrsRow = {
   learning_steps: 0,
 };
 
+const PRIMARY_EXAMPLE = {
+  sourcePrefix: 'Una ',
+  sourceTerm: 'mosca',
+  sourceSuffix: ' en la sopa.',
+  targetPrefix: 'A ',
+  targetTerm: 'fly',
+  targetSuffix: ' in the soup.',
+};
+
+const HOUSEFLY_EXAMPLE = {
+  sourcePrefix: 'La ',
+  sourceTerm: 'mosca',
+  sourceSuffix: ' doméstica es común.',
+  targetPrefix: 'The ',
+  targetTerm: 'housefly',
+  targetSuffix: ' is common.',
+};
+
+// Per-sense examples map (2026-07-17): keyed by the sense's normalized target.
 const TR: TranslationJoin = {
   id: 't1',
   display_source: 'mosca',
   translation: 'fly',
   pos_tag: 'NOUN',
   prefix_word: 'la',
-  examples: [
-    {
-      sourcePrefix: 'Una ',
-      sourceTerm: 'mosca',
-      sourceSuffix: ' en la sopa.',
-      targetPrefix: 'A ',
-      targetTerm: 'fly',
-      targetSuffix: ' in the soup.',
-    },
-  ],
+  alt_translations: [{ normalizedTarget: 'housefly', displayTarget: 'housefly' }],
+  examples: { fly: [PRIMARY_EXAMPLE], housefly: [HOUSEFLY_EXAMPLE] },
 };
 
 describe('mapProfile / mapEntitlement', () => {
@@ -125,6 +136,28 @@ describe('mapWordListItem', () => {
     expect(w.native).toBe('la mosca');
     expect(w.target).toBe('housefly');
   });
+
+  // Per-sense examples (2026-07-17) — the "two Korean houses, one example" bug.
+  it('a sibling-sense card gets ITS OWN example, never the primary sense’s', () => {
+    const w = mapWordListItem({ ...CARD, custom_back: 'housefly' }, TR, FSRS);
+    expect(w.senseTarget).toBe('housefly');
+    expect(w.exampleTranslation).toBe('The housefly is common.');
+    const primary = mapWordListItem(CARD, TR, FSRS);
+    expect(primary.senseTarget).toBe('fly');
+    expect(primary.exampleTranslation).toBe('A fly in the soup.');
+  });
+
+  it('sibling sense with no cached entry → empty example (lazy-fetch trigger), not the primary’s', () => {
+    const w = mapWordListItem({ ...CARD, custom_back: 'housefly' }, { ...TR, examples: { fly: [PRIMARY_EXAMPLE] } }, FSRS);
+    expect(w.example).toBe('');
+    expect(w.exampleTranslation).toBe('');
+  });
+
+  it('legacy ARRAY examples (pre-migration) map to the primary sense only', () => {
+    const legacy = { ...TR, examples: [PRIMARY_EXAMPLE] };
+    expect(mapWordListItem(CARD, legacy, FSRS).exampleTranslation).toBe('A fly in the soup.');
+    expect(mapWordListItem({ ...CARD, custom_back: 'housefly' }, legacy, FSRS).exampleTranslation).toBe('');
+  });
 });
 
 describe('mapQuizItem', () => {
@@ -148,6 +181,11 @@ describe('mapQuizItem', () => {
     expect(q.content.backExample).toBe('A fly in the soup.');
     const noEx = mapQuizItem(CARD, { ...TR, examples: null }, FSRS, 'es');
     expect(noEx.content.backExample).toBeUndefined();
+  });
+
+  it('sibling-sense card back shows ITS sense’s example (per-sense, 2026-07-17)', () => {
+    const q = mapQuizItem({ ...CARD, custom_back: 'housefly' }, TR, FSRS, 'es');
+    expect(q.content.backExample).toBe('The housefly is common.');
   });
 });
 

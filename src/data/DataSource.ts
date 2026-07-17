@@ -25,6 +25,9 @@ export interface WordListItem {
   id: string;
   /** translations_cache row id — keys the lazy examples fetch (16 §3). */
   translationId: string;
+  /** Normalized target term of THIS card's sense — the examples-map key /
+   *  `targetTerm` for the lazy fetch (per-sense examples, 2026-07-17). */
+  senseTarget: string;
   native: string;
   target: string;
   /** Part of speech (noun / verb / adj. …). */
@@ -92,8 +95,10 @@ export interface DataSource {
   /** Delete a saved card (delete_card RPC — cascades FSRS state + logs the
    *  analytics event; A12b). Destructive: study history goes with it. */
   deleteCard(cardId: string): Promise<void>;
-  /** Lazy example sentences for a saved/looked-up translation (16 §3). */
-  getExamples(translationId: string): Promise<UsageExample[]>;
+  /** Lazy example sentences for a saved/looked-up translation (16 §3).
+   *  `targetTerm` = the sense's normalized target (per-sense examples,
+   *  2026-07-17); omitted → the primary sense. */
+  getExamples(translationId: string, targetTerm?: string): Promise<UsageExample[]>;
   getProfile(): Promise<Profile>;
   getEntitlement(): Promise<Entitlement>;
   /** `lang` = the caller's ACTIVE language (query-key value). Passing it explicitly

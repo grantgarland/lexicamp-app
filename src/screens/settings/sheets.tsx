@@ -400,12 +400,12 @@ export function QuizLengthSheet({ visible, isPaid, onClose, onUpgrade }: { visib
 
 // ── How Lexicamp works (17 §H3) — the Home educator content, permanently reachable
 // here after the Home card is dismissed. Same shared accordion component.
-export function HowItWorksSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+export function HowItWorksSheet({ visible, onClose, onStartTour }: { visible: boolean; onClose: () => void; onStartTour?: () => void }) {
   const { t } = useTranslation();
   return (
     <Sheet visible={visible} onClose={onClose} title={t('home.edu.title')}>
       <RawText style={styles.quizIntro}>{t('home.edu.teaser')}</RawText>
-      <HowItWorksList />
+      <HowItWorksList onStartTour={onStartTour} />
     </Sheet>
   );
 }

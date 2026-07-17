@@ -19,6 +19,7 @@ import { addedLabel } from '@/lib/relativeTime';
 import { useDeferredReady } from '@/lib/useDeferredReady';
 import { LanguageIndicator } from '@/screens/shared/LanguageSwitcher';
 import { useUiStore } from '@/store/uiStore';
+import { tourTargets } from '@/tour/walkthrough';
 import { getTierByStability, TIERS, type TierId } from '@/theme/tiers';
 
 import {
@@ -202,14 +203,17 @@ export function WordListScreen() {
       {/* Search sits UNDER the tabs (words tab only) so switching tabs never moves the
           tab row across routes. */}
       {subTab === 'words' && (
-        <SearchBar
-          value={query}
-          onChange={setQuery}
-          placeholder={t('wordList.searchPlaceholder')}
-          onFilter={() => setFilterOpen(true)}
-          filterActive={filterActive}
-          style={styles.searchUnderTabs}
-        />
+        /* 18 §F2: walkthrough anchor (w4 — search/filter/details toolbar). */
+        <View ref={(node) => { tourTargets.wordsToolbar.current = node; }} collapsable={false}>
+          <SearchBar
+            value={query}
+            onChange={setQuery}
+            placeholder={t('wordList.searchPlaceholder')}
+            onFilter={() => setFilterOpen(true)}
+            filterActive={filterActive}
+            style={styles.searchUnderTabs}
+          />
+        </View>
       )}
 
       {/* Words tab. `contentReady` gates the HEAVY mounts (18-session perf fix):

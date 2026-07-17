@@ -144,6 +144,16 @@ function rowToOutcome(row: any): Record<string, unknown> {
   // whose translation equals the source) renders read-only. Mirror of
   // src/domain/translation.ts#assessResultQuality.
   const unsaveable = isEcho || primary.normalizedTarget === row.source_text;
+  // Per-sense examples (2026-07-17): row.examples is a jsonb map keyed by the
+  // sense's normalized target. LookupResult.examples stays the PRIMARY sense's
+  // list (the search card attaches the example to the primary sense only);
+  // legacy array rows (pre-migration) were primary-sense examples.
+  const primaryExamples =
+    row.examples == null
+      ? null
+      : Array.isArray(row.examples)
+        ? row.examples
+        : (row.examples[primary.normalizedTarget] ?? null);
   return {
     status: 'found',
     result: {
@@ -155,7 +165,7 @@ function rowToOutcome(row: any): Record<string, unknown> {
       senses: [primary, ...((row.alt_translations ?? []) as AzureSense[])],
       entryKind: row.entry_kind,
       provider: row.provider,
-      ...(row.examples ? { examples: row.examples } : {}),
+      ...(primaryExamples ? { examples: primaryExamples } : {}),
       ...(unsaveable ? { quality: 'unsaveable', qualityReason: 'echo' } : {}),
     },
   };

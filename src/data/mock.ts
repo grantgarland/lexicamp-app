@@ -185,6 +185,7 @@ function buildWords(userState: DevUserState): WordListItem[] {
       out.push({
         id: `w${tierIdx}_${j}`,
         translationId: `mock-t:${w.native}`,
+        senseTarget: w.target.toLowerCase(),
         native: w.native,
         target: w.target,
         pos: POS_POOL[g % POS_POOL.length],
@@ -308,6 +309,11 @@ function mockLookupResult(query: string, direction: SearchDirection): LookupOutc
   return { status: 'found', result };
 }
 
+// CI smoke-strings guard (src/test/maestroStrings.test.ts): the Maestro flows in
+// `.maestro/` assert these fixture strings, so a fixture drift must fail at jest
+// time — not at 3am in the nightly. Keep in lockstep with the flow headers.
+export const SMOKE_FIXTURES = { WORD_BANK, DISTRIBUTION, MOCK_MISS, MOCK_ECHO, FLY_SENSES } as const;
+
 const scenario = () => useDevStore.getState();
 
 // In-memory notification prefs (03 onboarding defaults).
@@ -327,8 +333,10 @@ export const mockDataSource: DataSource = {
   async deleteCard(_cardId) {
     // Mock: nothing persisted to delete; screens keep optimistic removal state.
   },
-  async getExamples(translationId) {
+  async getExamples(translationId, _targetTerm) {
     // One canned example so W-03/detail UIs have something to render.
+    // (_targetTerm: per-sense examples, 2026-07-17 — mock serves the same
+    // sentence for any sense; the real per-sense behavior lives server-side.)
     return translationId === 'mock-t:fly'
       ? [
           {

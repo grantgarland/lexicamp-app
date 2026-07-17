@@ -243,6 +243,7 @@
     "pillGainSmall": "+<1d",
     "resultGainTitle": "Memoria reforzada",
     "resultGain": "La fuerza de memoria creció de {{before}} a {{after}} días. Próximo repaso {{next}}.",
+    "resultGainLearning": "La fuerza de memoria creció de {{before}} a {{after}} días. Un repaso rápido más hoy la consolida.",
     "resultAgainTitle": "Vuelve a repaso",
     "resultAgain": "Marcada como olvidada: vuelve a un intervalo corto. Próximo repaso {{next}}."
   },
@@ -658,5 +659,28 @@
     "added": "{{lang}} añadido — ya lo estás aprendiendo",
     "addFailed": "No se pudo añadir el idioma — inténtalo de nuevo.",
     "indicatorA11y": "Idioma activo: {{lang}}. Abre el selector de idiomas."
+  },
+  "walkthrough": {
+    "w1Title": "Tu base de operaciones",
+    "w1Body": "Esta tarjeta es tu base. Muestra cuántas palabras necesitan repaso e inicia una sesión de repaso. ¿Aún sin palabras? Añadamos algunas ahora.",
+    "w2Title": "Captura palabras",
+    "w2Body": "Busca palabras aquí y guárdalas en tu banco de palabras. Cada palabra que capturas se añade automáticamente a tu calendario de repasos.",
+    "w3Title": "Busca y guarda",
+    "w3Body": "Escribe una palabra para ver sus traducciones y guárdala con un toque. Vuelve aquí después del recorrido para añadir tus primeras palabras.",
+    "w4Title": "Tu lista de palabras",
+    "w4Body": "Cada palabra que has guardado vive aquí. Busca, filtra y consulta los detalles de cada palabra.",
+    "w5Title": "Hora de repasar",
+    "w5Body": "Cuando haya palabras pendientes, «Estudiar ahora» inicia tu sesión de repaso. Veamos una por dentro.",
+    "w6Title": "Revela y evalúate",
+    "w6Body": "Toca para revelar la respuesta y luego califica tu propio recuerdo. Las calificaciones honestas ayudan a que las palabras correctas aparezcan en tu cola de repaso en el momento adecuado.",
+    "w7Title": "Resultados de la sesión",
+    "w7Body": "Tras cada sesión verás tus resultados: cuánto se fortaleció la memoria de cada palabra y cuándo vuelve a repaso.",
+    "w8Title": "Mira cómo asciendes",
+    "w8Body": "Observa el progreso que haces con el tiempo. ¡La subida a la maestría no está tan lejos como crees!",
+    "next": "Siguiente",
+    "back": "Atrás",
+    "skip": "Omitir",
+    "done": "Listo",
+    "replayCta": "Ver cómo funciona Lexicamp"
   }
 }

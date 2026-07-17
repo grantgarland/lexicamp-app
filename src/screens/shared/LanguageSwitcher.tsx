@@ -70,9 +70,10 @@ export function LanguageSwitcherSheet({ visible, onClose }: { visible: boolean; 
 
   const doSwitch = (lang: string) => {
     if (lang === activeLang) return;
-    // D12: switching is premium (free tier = 1 working language). The rows are
-    // disabled for free users; this guard + the RPC's premium_required back it up.
-    if (!isPaid) return;
+    // D12 REVISED (Casey, 2026-07-17): switching between ENROLLED languages is
+    // free for everyone — a free user with multiple languages got them via
+    // premium, and demotion never takes away access to what they earned.
+    // Only ADDING a language stays premium (the doAdd path).
     switchLang.mutate(lang, {
       onSuccess: () => showToast({ variant: 'success', message: t('langSwitcher.switched', { lang: languageName(lang as LanguageCode) }) }),
     });
@@ -112,8 +113,7 @@ export function LanguageSwitcherSheet({ visible, onClose }: { visible: boolean; 
                 title={info?.nativeName ?? languageName(lang as LanguageCode)}
                 subtitle={info?.name ?? undefined}
                 trailing={active ? <IconCheck size={16} color={theme.color.brand} /> : undefined}
-                onPress={isPaid || active ? () => doSwitch(lang) : undefined}
-                disabled={!isPaid && !active}
+                onPress={() => doSwitch(lang)}
                 last={i === languages.length - 1}
               />
             );

@@ -64,9 +64,20 @@ interface BackTranslation {
   displayText: string;
 }
 interface AltSense {
+  /** Cache-key form — the per-sense examples map key (2026-07-17). */
+  normalizedTarget?: string;
   displayTarget: string;
   prefixWord?: string;
   backTranslations?: BackTranslation[];
+}
+
+interface ExampleRow {
+  sourcePrefix: string;
+  sourceTerm: string;
+  sourceSuffix: string;
+  targetPrefix: string;
+  targetTerm: string;
+  targetSuffix: string;
 }
 
 export interface TranslationJoin {
@@ -79,16 +90,35 @@ export interface TranslationJoin {
   alt_translations?: AltSense[] | null;
   /** The PRIMARY sense's back-translations. */
   back_translations?: BackTranslation[] | null;
-  examples:
-    | {
-        sourcePrefix: string;
-        sourceTerm: string;
-        sourceSuffix: string;
-        targetPrefix: string;
-        targetTerm: string;
-        targetSuffix: string;
-      }[]
-    | null;
+  /** Per-sense examples map keyed by normalized target term (2026-07-17 fix:
+   *  sibling sense cards were sharing the primary sense's examples). A legacy
+   *  ARRAY (pre-migration rows) = the primary sense's examples. */
+  examples: Record<string, ExampleRow[]> | ExampleRow[] | null;
+}
+
+/** The examples-map key for THIS card's sense: primary unless custom_back says
+ *  the user saved a sibling sense (A12c) — then that sense's normalizedTarget.
+ *  Matching mirrors senseHint's custom_back ↔ alt-sense resolution (with or
+ *  without the gendered prefixWord). */
+export function cardSenseKey(card: Pick<CardRow, 'custom_back'>, tr: TranslationJoin): string {
+  const primary = (tr.translation ?? '').toLowerCase();
+  if (card.custom_back == null || card.custom_back.toLowerCase() === primary) return primary;
+  const alt = (tr.alt_translations ?? []).find(
+    (s) => s.displayTarget === card.custom_back || (s.prefixWord ? `${s.prefixWord} ${s.displayTarget}` : s.displayTarget) === card.custom_back,
+  );
+  return (alt?.normalizedTarget ?? alt?.displayTarget ?? card.custom_back).toLowerCase();
+}
+
+/** First cached example for THIS card's sense (never a sibling's — the bug this
+ *  replaces showed the primary sense's example on every sibling card). */
+function senseExample(card: Pick<CardRow, 'custom_back'>, tr: TranslationJoin): ExampleRow | undefined {
+  if (tr.examples == null) return undefined;
+  const key = cardSenseKey(card, tr);
+  if (Array.isArray(tr.examples)) {
+    // Legacy shape: primary-sense examples only.
+    return key === (tr.translation ?? '').toLowerCase() ? tr.examples[0] : undefined;
+  }
+  return tr.examples[key]?.[0];
 }
 
 // ── Mappers ───────────────────────────────────────────────────────────────────
@@ -147,10 +177,11 @@ export const mapFsrsState = (r: FsrsRow): CardFsrsState => ({
 
 /** cards ⋈ translations_cache ⋈ card_fsrs_state → Word List row. */
 export function mapWordListItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow): WordListItem {
-  const ex = tr.examples?.[0];
+  const ex = senseExample(card, tr);
   return {
     id: card.id,
     translationId: tr.id,
+    senseTarget: cardSenseKey(card, tr),
     native: card.custom_front ?? tr.display_source,
     target: card.custom_back ?? tr.translation ?? '',
     pos: tr.pos_tag ? i18n.t(`pos.${tr.pos_tag}`, { defaultValue: tr.pos_tag.toLowerCase() }) : '',
@@ -187,7 +218,9 @@ function senseHint(card: CardRow, tr: TranslationJoin): string | undefined {
       .slice(0, 2);
     if (hints.length > 0) return i18n.t('quiz.senseHint', { hints: hints.join(', ') });
   }
-  const ex = tr.examples?.[0];
+  // Per-sense (2026-07-17): the fallback example must be THIS sense's — a
+  // sibling's sentence would hint the wrong meaning.
+  const ex = senseExample(card, tr);
   if (ex != null) return `“${ex.sourcePrefix}${ex.sourceTerm}${ex.sourceSuffix}”`;
   return undefined;
 }
@@ -211,9 +244,11 @@ export function mapQuizItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow, t
       backWord: card.custom_back ?? tr.translation ?? '',
       ...(tr.pos_tag ? { backPos: i18n.t(`pos.${tr.pos_tag}`, { defaultValue: tr.pos_tag.toLowerCase() }) } : {}),
       // Cached example only — display-side; the quiz never adds network calls.
-      ...(tr.examples?.[0]
-        ? { backExample: `${tr.examples[0].targetPrefix}${tr.examples[0].targetTerm}${tr.examples[0].targetSuffix}` }
-        : {}),
+      // Per-sense (2026-07-17): THIS card's sense, never a sibling's.
+      ...(() => {
+        const ex = senseExample(card, tr);
+        return ex ? { backExample: `${ex.targetPrefix}${ex.targetTerm}${ex.targetSuffix}` } : {};
+      })(),
     },
   };
 }

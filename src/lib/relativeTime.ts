@@ -4,6 +4,12 @@ import type { TFunction } from 'i18next';
 
 const DAY = 24 * 60 * 60 * 1000;
 
+/** Days-vs-weeks cutoff for due labels (Casey bug, 2026-07-17): was 14, which
+ *  rounded "18 days" to "in 3 weeks" right next to the results tooltip's exact
+ *  "grew to 18 days" — the two read as conflicting. Exact day counts up to four
+ *  weeks; weeks only beyond that (where nobody cross-checks the arithmetic). */
+const WEEKS_CUTOFF_DAYS = 28;
+
 /** "Today / Yesterday / N days · weeks · months ago". */
 export function addedLabel(createdAt: Date, t: TFunction): string {
   const days = Math.floor((Date.now() - createdAt.getTime()) / DAY);
@@ -32,7 +38,7 @@ export function dueLabel(dueAt: Date, t: TFunction): string {
   const days = Math.round(ms / DAY);
   if (days === 0) return t('wordList.dueToday');
   if (days === 1) return t('wordList.dueTomorrow');
-  if (days < 14) return t('wordList.dueInDays', { count: days });
+  if (days < WEEKS_CUTOFF_DAYS) return t('wordList.dueInDays', { count: days });
   return t('wordList.dueInWeeks', { count: Math.round(days / 7) });
 }
 
@@ -45,7 +51,7 @@ export function dueLabelShort(dueAt: Date, t: TFunction): string {
   const days = Math.round(ms / DAY);
   if (days === 0) return t('wordList.dueToday');
   if (days === 1) return t('wordList.dueTomorrow');
-  if (days < 14) return t('wordList.dueDaysShort', { count: days });
+  if (days < WEEKS_CUTOFF_DAYS) return t('wordList.dueDaysShort', { count: days });
   return t('wordList.dueWeeksShort', { count: Math.round(days / 7) });
 }
 

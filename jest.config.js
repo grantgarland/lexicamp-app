@@ -9,5 +9,10 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   testMatch: ['<rootDir>/src/**/*.test.@(ts|tsx)'],
+  // jest-expo's default allowlist + @wrack (walkthrough lib ships untranspiled
+  // ESM; QuizScreen imports it via the tour module — 18 §F2).
+  transformIgnorePatterns: [
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg|@wrack/.*))',
+  ],
   clearMocks: true,
 };
