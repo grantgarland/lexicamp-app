@@ -29,6 +29,7 @@ const PROFILE: Profile = {
   targetLang: 'es',
   timezone: 'America/New_York',
   onboardingComplete: true,
+  quizLength: 20,
 };
 
 const DECK: Deck = { id: DECK_ID, userId: USER_ID, name: 'Spanish', sourceLang: 'en', targetLang: 'es' };
@@ -435,6 +436,10 @@ export const mockDataSource: DataSource = {
   },
   async updateProfile(patch) {
     if (patch.displayName != null) mockDisplayName = patch.displayName.trim() || 'Casey';
+    // quizLength mirror is a server concern; mock keeps the prefsStore value authoritative.
+  },
+  async logEvent() {
+    // 3.4: analytics are live-mode only; mock swallows emits.
   },
   async setCardSuspended(cardId, suspended) {
     const next = new Set(mockArchived);

@@ -527,7 +527,9 @@
     "save": "Guardar",
     "learningLanguages": "Idiomas de aprendizaje",
     "profileNative": "Idioma nativo: {{lang}}",
-    "profileSaved": "Perfil actualizado"
+    "profileSaved": "Perfil actualizado",
+    "notifOsBlocked": "Las notificaciones están bloqueadas en los ajustes de tu dispositivo, así que los recordatorios no pueden llegar.",
+    "notifOpenSettings": "Abrir ajustes del sistema →"
   },
   "deckRow": {
     "studyA11y": "Estudiar mazo",

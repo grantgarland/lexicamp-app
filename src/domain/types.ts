@@ -15,6 +15,8 @@ export interface Profile {
   targetLang: LanguageCode;
   timezone: string;
   onboardingComplete: boolean;
+  /** UX-17b: server mirror of the quiz-length pref (10/20/40/80; default 20). */
+  quizLength: number;
 }
 
 /** subscriptions (mirror of RevenueCat) */

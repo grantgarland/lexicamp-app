@@ -3,12 +3,13 @@
 // selection → notification opt-in, then hands off to the auth screen (O-10/O-11).
 // Uses the shared illustrations, ProgressDots, Button, and ButtonRow.
 import { useRouter } from 'expo-router';
-import { type ComponentType, useMemo, useState } from 'react';
+import { type ComponentType, useMemo, useState, useEffect } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { findLanguage, TRANSLATABLE_LANGUAGES } from '@/constants';
 import { useTranslation } from '@/i18n';
+import { useLogEvent } from '@/query/hooks';
 import { useOnboardingStore } from '@/store/onboardingStore';
 import {
   Button,
@@ -51,6 +52,13 @@ export function OnboardingScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const [step, setStep] = useState(0);
+  // 3.4: activation-funnel start — completion is logged server-side by
+  // complete_onboarding's word/deck writes; this bookends the funnel.
+  const logEvent = useLogEvent();
+  useEffect(() => {
+    logEvent('onboarding_started');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [target, setTarget] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
   const targetLanguages = useMemo(() => TRANSLATABLE_LANGUAGES.filter((l) => l.code.toLowerCase() !== NATIVE_LANG), []);

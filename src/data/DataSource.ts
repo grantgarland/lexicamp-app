@@ -137,7 +137,12 @@ export interface DataSource {
   /** Un-enroll a non-active language. Data is NEVER deleted — re-adding restores it. */
   removeLearningLanguage(lang: string): Promise<void>;
   /** Update editable profile fields (D6 / UX-17e). */
-  updateProfile(patch: { displayName?: string }): Promise<void>;
+  updateProfile(patch: { displayName?: string; quizLength?: number }): Promise<void>;
+  /** 3.4 app-side analytics emits (paywall_viewed, onboarding/walkthrough
+   *  funnel). Fire-and-forget; implementations must never throw into UI paths.
+   *  Event names are allowlisted in the implementation — server-written events
+   *  (word_saved, quiz_completed…) stay server-only. */
+  logEvent(event: string, props?: Record<string, unknown>): Promise<void>;
   /** Archive / unarchive a card (18 §E3). Suspended cards keep everything but
    *  leave the review queue; unarchive restores them untouched. */
   setCardSuspended(cardId: string, suspended: boolean): Promise<void>;

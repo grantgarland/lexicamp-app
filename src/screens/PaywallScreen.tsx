@@ -4,11 +4,12 @@
 // post-purchase success state. Entitlement writes land with RevenueCat later; the CTA
 // currently just shows the success confirmation.
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
+import { useLogEvent } from '@/query/hooks';
 import { Button, IconChart, IconCheck, IconFolderPlus, IconGlobe, IconInfinity, IconStar, IconX, RawText, Screen } from '@/ui';
 
 type Plan = 'annual' | 'monthly';
@@ -19,6 +20,12 @@ export function PaywallScreen() {
   const router = useRouter();
   const [plan, setPlan] = useState<Plan>('annual');
   const [purchased, setPurchased] = useState(false);
+  // 3.4: conversion-funnel top — one emit per paywall presentation.
+  const logEvent = useLogEvent();
+  useEffect(() => {
+    logEvent('paywall_viewed');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const close = () => (router.canGoBack() ? router.back() : router.replace('/'));
 

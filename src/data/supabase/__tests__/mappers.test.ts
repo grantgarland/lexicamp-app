@@ -78,6 +78,7 @@ describe('mapProfile / mapEntitlement', () => {
       learning_lang: 'es',
       timezone: 'America/New_York',
       onboarding_complete: true,
+      quiz_length: 20,
     });
     expect(p).toEqual({
       id: 'u1',
@@ -86,6 +87,7 @@ describe('mapProfile / mapEntitlement', () => {
       targetLang: 'es',
       timezone: 'America/New_York',
       onboardingComplete: true,
+      quizLength: 20,
     });
   });
 

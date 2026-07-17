@@ -3,14 +3,16 @@
 // that routes to the paywall via `onUpgrade`. Kept in their own module so SettingsScreen
 // stays a thin hub.
 import DateTimePicker, { type DateTimePickerChangeEvent } from '@react-native-community/datetimepicker';
-import { type ReactNode, useState } from 'react';
-import { Platform, Pressable, View } from 'react-native';
+import { type ReactNode, useEffect, useState } from 'react';
+import { Linking, Platform, Pressable, View } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { languageName } from '@/domain/derive';
 import type { LanguageCode, NotificationPrefs, Profile } from '@/domain/types';
 import { useTranslation } from '@/i18n';
 import { registerForPush } from '@/notifications/push';
+import { LEGAL_URLS } from '@/constants/legal';
 import { useNotificationPrefs, useUpdateNotificationPrefs, useUpdateProfile } from '@/query/hooks';
 import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
 import { useUiStore } from '@/store/uiStore';
@@ -173,6 +175,22 @@ export function NotificationSheet({ visible, isPaid, onClose, onUpgrade }: { vis
   const [editing, setEditing] = useState<number | null>(null); // window index open in the native picker
   const [saveAttempted, setSaveAttempted] = useState(false);
   const [seededFor, setSeededFor] = useState<NotificationPrefs | null>(null);
+  // UX-17d: honest UI — if reminders are ON here but the OS permission is
+  // denied, no push can ever arrive. Probe on each open (the user may return
+  // from system settings) and surface the fix.
+  const [osBlocked, setOsBlocked] = useState(false);
+  useEffect(() => {
+    if (!visible) return;
+    let alive = true;
+    Notifications.getPermissionsAsync()
+      .then((p) => {
+        if (alive) setOsBlocked(!p.granted && !p.canAskAgain);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [visible]);
 
   // Seed the draft from server prefs once per open (or when prefs land just
   // after opening) — the same render-phase "adjust state during render"
@@ -241,6 +259,14 @@ export function NotificationSheet({ visible, isPaid, onClose, onUpgrade }: { vis
         </View>
         <Toggle value={enabled} onValueChange={setEnabled} />
       </View>
+
+      {/* UX-17d: permission-denied hint — shown only when it matters. */}
+      {enabled && osBlocked && (
+        <Pressable onPress={() => void Linking.openSettings()} accessibilityRole="button" style={({ pressed }) => [styles.osBlocked, pressed && { opacity: 0.8 }]}>
+          <RawText style={styles.osBlockedText}>{t('settings.notifOsBlocked')}</RawText>
+          <RawText style={styles.osBlockedLink}>{t('settings.notifOpenSettings')}</RawText>
+        </Pressable>
+      )}
 
       <View style={{ opacity: enabled ? 1 : 0.4 }} pointerEvents={enabled ? 'auto' : 'none'}>
         <FieldLabel>{t('settings.reminderTime')}</FieldLabel>
@@ -357,8 +383,13 @@ export function QuizLengthSheet({ visible, isPaid, onClose, onUpgrade }: { visib
   // C4 pattern (Casey follow-up): Save stays disabled until the choice changed.
   const dirty = isPaid && selected !== quizLength;
 
+  // UX-17b: local pref is the read model; the profile mirror makes it survive
+  // reinstalls + sync across devices (write-through; server adopts via
+  // useQuizLengthSync on other devices).
+  const updateProfile = useUpdateProfile();
   const save = () => {
     setQuizLength(selected);
+    updateProfile.mutate({ quizLength: selected });
     showToast({ variant: 'success', message: t('settings.prefsSaved') });
     onClose();
   };
@@ -452,8 +483,16 @@ export function AboutSheet({ visible, onClose }: { visible: boolean; onClose: ()
         <RawText style={styles.aboutVersion}>{t('settings.aboutVersion', { version: '1.0.0', build: 1 })}</RawText>
       </View>
       <View style={styles.aboutLinks}>
-        {[t('settings.terms'), t('settings.privacy'), t('settings.acknowledgments')].map((label, i, arr) => (
-          <ListItem key={label} title={label} onPress={() => {}} last={i === arr.length - 1} />
+        {/* UX-17c: real links (constants/legal.ts — single edit point when the
+            domain lands; URLs must be live before store submission, 4.1). */}
+        {(
+          [
+            [t('settings.terms'), LEGAL_URLS.terms],
+            [t('settings.privacy'), LEGAL_URLS.privacy],
+            [t('settings.acknowledgments'), LEGAL_URLS.acknowledgments],
+          ] as const
+        ).map(([label, url], i, arr) => (
+          <ListItem key={label} title={label} onPress={() => void Linking.openURL(url)} last={i === arr.length - 1} />
         ))}
       </View>
       <RawText style={styles.aboutCopyright}>{t('settings.aboutCopyright')}{'\n'}{t('settings.aboutMadeWith')}</RawText>
@@ -479,6 +518,9 @@ function ReadOnlyField({ value, note }: { value: string; note?: string }) {
 const styles = StyleSheet.create((theme) => {
   const { color, fonts, radius, palette } = theme;
   return {
+    osBlocked: { backgroundColor: 'rgba(217, 119, 6, 0.10)', borderWidth: theme.borderWidth.thin, borderColor: theme.palette.amber[300], borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 14 },
+    osBlockedText: { fontFamily: theme.fonts.sans.medium, fontSize: 13, lineHeight: 19, color: theme.palette.amber[700] },
+    osBlockedLink: { fontFamily: theme.fonts.sans.bold, fontSize: 13, color: theme.palette.amber[700], marginTop: 4 },
     flex1: { flex: 1 },
     fieldLabel: { fontFamily: fonts.sans.semibold, fontSize: 12, letterSpacing: 0.5, textTransform: 'uppercase', color: color.textMuted, marginBottom: 6, marginTop: 4 },
 

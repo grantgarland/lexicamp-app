@@ -2,6 +2,8 @@
 // or derivations directly). Each keys on the dev scenario so DevBadge toggles
 // invalidate + refetch automatically. Mutations (save word, commit quiz) land here
 // as `useMutation` when those screens are built.
+import { useEffect } from 'react';
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { dataSource as ds } from '@/data';
@@ -11,6 +13,7 @@ import type { BufferedRating } from '@/domain/quiz';
 import type { LookupOutcome } from '@/domain/translation';
 import { type Entitlement, isPaid, type NotificationPrefs, type SearchDirection } from '@/domain/types';
 import { useSession } from '@/auth/session';
+import { usePrefsStore } from '@/store/prefsStore';
 import { useDevStore } from '@/store/devStore';
 
 /** The authenticated user id ('anon' in mock mode / signed-out) — part of EVERY
@@ -102,13 +105,19 @@ export function useUpdateProfile() {
   const qc = useQueryClient();
   const uid = useUserKey();
   return useMutation({
-    mutationFn: (patch: { displayName?: string }) => ds.updateProfile(patch),
+    mutationFn: (patch: { displayName?: string; quizLength?: number }) => ds.updateProfile(patch),
     onMutate: async (patch) => {
       await qc.cancelQueries({ queryKey: ['profile', uid] });
       const prev = qc.getQueryData(['profile', uid]);
-      if (patch.displayName != null) {
-        qc.setQueryData(['profile', uid], (p: unknown) => (p == null ? p : { ...(p as object), displayName: patch.displayName }));
-      }
+      qc.setQueryData(['profile', uid], (p: unknown) =>
+        p == null
+          ? p
+          : {
+              ...(p as object),
+              ...(patch.displayName != null ? { displayName: patch.displayName } : {}),
+              ...(patch.quizLength != null ? { quizLength: patch.quizLength } : {}),
+            },
+      );
       return { prev };
     },
     onError: (_e, _p, ctx) => {
@@ -118,6 +127,27 @@ export function useUpdateProfile() {
       qc.invalidateQueries({ queryKey: ['profile'] });
     },
   });
+}
+
+/** 3.4: fire-and-forget analytics emit (allowlisted client events). */
+export function useLogEvent() {
+  return (event: string, props?: Record<string, unknown>) => {
+    void ds.logEvent(event, props);
+  };
+}
+
+/** UX-17b: adopt the server quiz-length mirror on profile load (server wins —
+ *  it's the cross-device source of truth; local edits write through to it via
+ *  QuizLengthSheet). Mount once (tabs layout). */
+export function useQuizLengthSync() {
+  const profile = useProfile();
+  const quizLength = usePrefsStore((s) => s.quizLength);
+  const setQuizLength = usePrefsStore((s) => s.setQuizLength);
+  const server = profile?.quizLength;
+  useEffect(() => {
+    if (server != null && server !== quizLength) setQuizLength(server);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [server]);
 }
 
 export interface EntitlementResult {

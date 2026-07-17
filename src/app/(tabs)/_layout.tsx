@@ -14,7 +14,7 @@ import { StyleSheet } from 'react-native-unistyles';
 import { useSession } from '@/auth/session';
 import { USE_SUPABASE } from '@/data';
 import { SearchView } from '@/screens/SearchScreen';
-import { useProfile } from '@/query/hooks';
+import { useProfile, useQuizLengthSync } from '@/query/hooks';
 import { useUiStore } from '@/store/uiStore';
 import { TAB_BAR_CORE_HEIGHT, TabBar, type TabId } from '@/ui';
 import { tourTargets, WalkthroughController, WalkthroughOverlayHost } from '@/tour/walkthrough';
@@ -26,6 +26,8 @@ export default function TabsLayout() {
   const { session, isLoading: sessionLoading } = useSession();
   const profile = useProfile();
   const searchOpen = useUiStore((s) => s.searchOpen);
+  // UX-17b: adopt the server quiz-length mirror (cross-device sync).
+  useQuizLengthSync();
   const setSearchOpen = useUiStore((s) => s.setSearchOpen);
 
   // First-run gate. Live backend: no session → the onboarding arc (→ auth) —

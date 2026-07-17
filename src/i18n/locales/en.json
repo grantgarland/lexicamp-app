@@ -527,7 +527,9 @@
     "save": "Save",
     "learningLanguages": "Learning Languages",
     "profileNative": "Native language: {{lang}}",
-    "profileSaved": "Profile updated"
+    "profileSaved": "Profile updated",
+    "notifOsBlocked": "Notifications are blocked in your device settings, so reminders can’t be delivered.",
+    "notifOpenSettings": "Open system settings →"
   },
   "deckRow": {
     "studyA11y": "Study deck",

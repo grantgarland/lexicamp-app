@@ -37,7 +37,7 @@ import {
 
 import { USE_SUPABASE } from '@/data';
 import { useTranslation } from '@/i18n';
-import { useProfile } from '@/query/hooks';
+import { useLogEvent, useProfile } from '@/query/hooks';
 import { usePrefsStore } from '@/store/prefsStore';
 import { useUiStore } from '@/store/uiStore';
 import { lightTheme as appTheme } from '@/theme/theme';
@@ -113,6 +113,7 @@ export function WalkthroughController({ activeTab }: { activeTab: string }) {
   const replayRequested = useUiStore((s) => s.walkthroughRequested);
   const setReplayRequested = useUiStore((s) => s.setWalkthroughRequested);
   const setSearchOpen = useUiStore((s) => s.setSearchOpen);
+  const logEvent = useLogEvent(); // 3.4 funnel emits
   // Tracks where the tour IS, for end-of-tour cleanup (skip can fire mid-quiz).
   const lastStepIdRef = useRef('w1');
 
@@ -200,6 +201,7 @@ export function WalkthroughController({ activeTab }: { activeTab: string }) {
     // twice. Cleanup: close whatever the traversal opened. A completed tour
     // ends on Progress (w8); an early skip returns Home.
     onTourEnd: (completed) => {
+      logEvent(completed ? 'walkthrough_completed' : 'walkthrough_skipped', { lastStep: lastStepIdRef.current });
       setWalkthroughDone(true);
       setSearchOpen(false);
       if (QUIZ_SCOPE.has(lastStepIdRef.current)) router.back(); // skip mid-quiz → dismiss it
@@ -212,7 +214,10 @@ export function WalkthroughController({ activeTab }: { activeTab: string }) {
 
   useEffect(() => {
     if (!shouldAutoStart) return;
-    const id = setTimeout(() => startTour(steps, config), AUTO_START_DELAY_MS);
+    const id = setTimeout(() => {
+      logEvent('walkthrough_started', { trigger: 'auto' });
+      startTour(steps, config);
+    }, AUTO_START_DELAY_MS);
     return () => clearTimeout(id);
     // steps/config are rebuilt per render (i18n) but only the gate matters here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -226,6 +231,7 @@ export function WalkthroughController({ activeTab }: { activeTab: string }) {
     if (!replayRequested || isActive) return;
     const id = setTimeout(() => {
       setReplayRequested(false);
+      logEvent('walkthrough_started', { trigger: 'replay' });
       startTour(steps, config);
     }, 350); // let the sheet close + nav-to-Home settle
     return () => clearTimeout(id);

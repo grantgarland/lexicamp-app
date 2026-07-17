@@ -133,13 +133,32 @@ export const supabaseDataSource: DataSource = {
     bail(error);
   },
 
-  async updateProfile(patch: { displayName?: string }): Promise<void> {
+  async updateProfile(patch: { displayName?: string; quizLength?: number }): Promise<void> {
     // D6 / UX-17e: direct PostgREST update under the own-profile-update policy.
     const row: Record<string, unknown> = {};
     if (patch.displayName != null) row.display_name = patch.displayName.trim() === '' ? null : patch.displayName.trim();
+    // UX-17b: ladder-validated client-side too (the column CHECK is the backstop).
+    if (patch.quizLength != null && [10, 20, 40, 80].includes(patch.quizLength)) row.quiz_length = patch.quizLength;
     if (Object.keys(row).length === 0) return;
     const { error } = await supabase.from('profiles').update(row).eq('id', await uid());
     bail(error);
+  },
+
+  async logEvent(event: string, props: Record<string, unknown> = {}): Promise<void> {
+    // 3.4: direct insert under the own-events-insert RLS policy. Allowlisted so
+    // client code can't shadow server-written event names; unknown names are
+    // dropped loudly in dev, silently in prod (analytics must never crash UX).
+    const CLIENT_EVENTS = ['paywall_viewed', 'onboarding_started', 'walkthrough_started', 'walkthrough_completed', 'walkthrough_skipped'];
+    if (!CLIENT_EVENTS.includes(event)) {
+      if (__DEV__) console.warn(`logEvent: "${event}" is not an allowlisted client event`);
+      return;
+    }
+    try {
+      const { error } = await supabase.from('study_events').insert({ user_id: await uid(), event, props });
+      if (error != null && __DEV__) console.warn(`logEvent(${event}) failed: ${error.message}`);
+    } catch {
+      // fire-and-forget: offline/unauthenticated emits are dropped by design
+    }
   },
 
   async getExamples(translationId: string, targetTerm?: string): Promise<UsageExample[]> {
