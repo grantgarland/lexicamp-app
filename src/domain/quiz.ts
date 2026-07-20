@@ -6,6 +6,15 @@ import type { TierId } from '@/theme/tiers';
 
 import type { CardFsrsState, Rating } from './types';
 
+/** The quiz-length ladder (Casey, 2026-07-16): a doubling set. 20 = Standard =
+ *  the recommended default AND the free-tier pin. Lives in the domain so the
+ *  data layer's write validation (SupabaseDataSource.updateProfile) and the
+ *  prefs store share ONE definition; the DB column CHECK mirrors it
+ *  (profiles_quiz_length migration). */
+export const QUIZ_LENGTHS = [10, 20, 40, 80] as const;
+export const QUIZ_LENGTH_FREE = 20;
+export const QUIZ_LENGTH_DEFAULT = 20;
+
 export type QuizMode = 'recognition' | 'recall';
 /** The 3-button self-grade shown in the UI. */
 export type UiRating = 'again' | 'almost' | 'got_it';

@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
+import { QUIZ_LENGTH_DEFAULT, QUIZ_LENGTHS } from '@/domain/quiz';
 import type { SearchDirection } from '@/domain/types';
 import i18n, { type AppLocale } from '@/i18n';
 
@@ -13,11 +14,10 @@ import i18n, { type AppLocale } from '@/i18n';
 // cap at 5; the fading list can hold a long history).
 const RECENTS_CAP = 100;
 
-/** The quiz-length ladder (Casey, 2026-07-16): a doubling set. 20 = Standard =
- *  the recommended default AND the free-tier pin. */
-export const QUIZ_LENGTHS = [10, 20, 40, 80] as const;
-export const QUIZ_LENGTH_FREE = 20;
-export const QUIZ_LENGTH_DEFAULT = 20;
+// The quiz-length ladder lives in domain/quiz (one definition shared with the
+// data layer's write validation); re-exported here so existing store-side
+// import sites keep working unchanged.
+export { QUIZ_LENGTH_DEFAULT, QUIZ_LENGTH_FREE, QUIZ_LENGTHS } from '@/domain/quiz';
 
 /** Snap an arbitrary persisted value onto the ladder (nearest; ties round down). */
 export function snapQuizLength(n: unknown): number {

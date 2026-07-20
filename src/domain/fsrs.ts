@@ -24,7 +24,7 @@ import {
   type Grade,
 } from 'ts-fsrs';
 
-import { getTierByStability, type TierId } from '@/theme/tiers';
+import { getTierByStability, TIERS, type TierId } from '@/theme/tiers';
 
 import { uiRatingToFsrs, type BufferedRating, type QuizCardItem } from './quiz';
 import type { CardFsrsState, FsrsStateValue, Rating } from './types';
@@ -112,7 +112,8 @@ export interface TierTransition {
 export function tierTransition(s: CardFsrsState, rating: Rating, now: Date = new Date()): TierTransition {
   const from = getTierByStability(s.stability).id;
   const to = getTierByStability(applyReview(s, rating, now).next.stability).id;
-  const order = (id: TierId) => ['bc', 'abc', 'hc', 'sr', 'summit'].indexOf(id);
+  // Registry order, not a hand-copied literal — reordering TIERS can't drift this.
+  const order = (id: TierId) => TIERS.findIndex((t) => t.id === id);
   return { from, to, promoted: order(to) > order(from) };
 }
 

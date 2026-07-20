@@ -61,9 +61,11 @@ interface RowOutcome {
   gained: number; // after - before, floored at 0 for display
   nextLabel: string; // localized next-review label ("in 6 days", "Tomorrow"…)
   /** Still in FSRS learning steps: strength (days) and schedule (minutes)
-   *  legitimately diverge — "grew to 2 days" but the next quick check is
-   *  today. The tooltip uses a variant line so it doesn't read as a
-   *  contradiction (Casey bug, 2026-07-17). */
+   *  legitimately diverge — "grew to 2 days" while the next quick check is
+   *  much sooner. The tooltip uses a variant line so it doesn't read as a
+   *  contradiction — and BOTH lines state the next
+   *  review from the computed dueAt (nextLabel), never assumed copy: FSRS
+   *  intervals aren't knowable without the recompute. */
   learning: boolean;
 }
 function rowOutcome(t: TFunction, card: QuizCardItem, rating: UiRating, now: Date): RowOutcome {
@@ -402,7 +404,7 @@ function StatsScreen({ cards, ratings, onStudyAgain, onDone }: { cards: QuizCard
                   // the variant copy explains the quick check instead of
                   // reading as a contradiction next to the +Nd pill.
                   content: o.learning
-                    ? t('quiz.resultGainLearning', { before: fmtDays(o.before), after: fmtDays(o.after) })
+                    ? t('quiz.resultGainLearning', { before: fmtDays(o.before), after: fmtDays(o.after), next: o.nextLabel })
                     : t('quiz.resultGain', { before: fmtDays(o.before), after: fmtDays(o.after), next: o.nextLabel }),
                 };
           return (

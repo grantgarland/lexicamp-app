@@ -6,7 +6,7 @@
 // so it's unit-testable without booting the persistent client.
 
 /** Domain fields that are `Date` on the wire and must be revived after JSON.parse. */
-export const DATE_KEYS = new Set(['dueAt', 'lastReviewAt', 'createdAt', 'currentPeriodEnd', 'reviewedAt']);
+export const DATE_KEYS = new Set(['dueAt', 'lastReviewAt', 'createdAt', 'currentPeriodEnd', 'reviewedAt', 'lastReviewedAt']);
 
 /** JSON.parse reviver: turn known date-field strings back into `Date`. Keyed by field
  *  name (not a blanket ISO sniff) so it never touches React Query's cache envelope, and

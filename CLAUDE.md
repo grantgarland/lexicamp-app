@@ -27,7 +27,9 @@ DataSource interface (src/data/DataSource.ts)          ← the swap seam
    └─ supabaseDataSource (src/data/supabase/)          ← EXPO_PUBLIC_USE_SUPABASE=1
         ├─ reads: PostgREST under RLS (mappers.ts = pure row→domain, unit-tested)
         ├─ lookup/examples: Edge Functions (supabase/functions/, deployed live)
-        └─ writes: RPCs (save_card, complete_onboarding, commit_quiz_session)
+        └─ writes: RPCs (save_card, delete_card, complete_onboarding,
+           commit_quiz_session, set_card_suspended, add/switch/remove_learning_language)
+           + direct PostgREST updates (profiles, notification_prefs, push_tokens, study_events)
    ↓ both sources speak
 domain (src/domain — PURE, no I/O, no React; the contracts from 03):
    types.ts (entities) · derive.ts ("derived, not stored" formulas)
@@ -46,7 +48,8 @@ GENERATED from the design system — never hand-edit tokens.generated.ts).
    `translations_cache` rows — enforced by RLS (cache is service-role-writable
    only) + the `save_card` RPC. `capture.ts` rules are MIRRORED in
    `supabase/functions/translate/index.ts`; change both or neither
-   (capture.test.ts is the shared spec).
+   (capture.test.ts is the shared spec, and captureGateParity.test.ts FAILS CI
+   if the edge-fn regexes/constants/script map drift from the client's).
 2. **FSRS math is client-side** (02): `domain/fsrs.ts` computes, the
    `commit_quiz_session` RPC only validates ownership + persists atomically.
    Fuzz disabled (determinism). Tiers = stability bands (`theme/tiers.ts`

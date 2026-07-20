@@ -1,13 +1,3 @@
--- Bug fix (Casey, 2026-07-16): saving another SENSE of an already-saved word
--- flashed and failed — cards carry UNIQUE (deck_id, translation_id), so the
--- second save_card insert hit a unique violation and the UI rolled back.
---
--- Resolution consistent with that model (one card per translation per deck):
--- saving when the card already exists becomes a SENSE SWAP — the existing
--- card's custom_front/custom_back update to the newly chosen sense and its
--- FSRS history is KEPT (same word, same memory; only the studied rendering
--- changes). The word_saved analytics event logs only on a true insert.
-
 create or replace function public.save_card(
   p_translation_id uuid,
   p_deck_id uuid,
@@ -59,4 +49,4 @@ begin
   end if;
 
   return v_card_id;
-end $$;
+end $$;;

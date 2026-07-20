@@ -1,18 +1,3 @@
--- D12 (Casey, 2026-07-16): premium → free demotion semantics.
---
--- DESIGN: no destructive demotion job. All premium-era data is PRESERVED
--- (languages, reminder time/days, quiz pref, decks, words) so re-upgrading
--- restores everything instantly. Instead, premium fields stop being HONORED
--- while unentitled — enforcement lives at read/execute time:
---   · scheduler: non-entitled users fire at the FREE defaults (19:00, all days),
---     regardless of stored windows/days;
---   · switching languages requires entitlement (the active-at-demotion language
---     becomes the user's single working language — their "default");
---   · add_learning_language's idempotent re-add path no longer doubles as a
---     free switch.
--- (Quiz length already followed this pattern client-side; word-cap enforcement
---  was already server-side in save_card.)
-
 create or replace function public.run_push_scheduler()
 returns integer
 language plpgsql security definer set search_path = ''
@@ -31,8 +16,6 @@ begin
     join public.notification_prefs np on np.user_id = p.id
     left join public.subscriptions sub on sub.user_id = p.id
     cross join lateral (
-      -- D12: entitled users get their stored schedule; free users get the
-      -- free-tier defaults (stored prefs untouched — re-upgrade restores them).
       select case when sub.status in ('trial', 'active', 'grace')
                   then np.windows else '[{"time":"19:00"}]'::jsonb end as eff_windows,
              case when sub.status in ('trial', 'active', 'grace')
@@ -75,8 +58,6 @@ begin
   return v_sent;
 end $$;
 
--- Switching languages is a premium capability (free tier = 1 working language).
--- The no-op case (already-active target) stays allowed for idempotency.
 create or replace function public.switch_learning_language(p_lang text)
 returns void
 language plpgsql security definer set search_path = ''
@@ -97,8 +78,6 @@ begin
   perform public.switch_learning_language_impl(v_uid, p_lang);
 end $$;
 
--- Close the side door: re-adding an enrolled language behaved as a switch
--- without the premium check.
 create or replace function public.add_learning_language(p_lang text)
 returns void
 language plpgsql security definer set search_path = ''
@@ -123,7 +102,6 @@ begin
   ) into v_entitled;
 
   if exists (select 1 from public.profile_languages where user_id = v_uid and lang = p_lang) then
-    -- Already enrolled → behaves as switch, so it carries the switch gate (D12).
     if p_lang <> (select learning_lang from public.profiles where id = v_uid) and not v_entitled then
       raise exception 'premium_required' using errcode = 'P0010';
     end if;
@@ -141,4 +119,4 @@ begin
   insert into public.profile_languages (user_id, lang) values (v_uid, p_lang);
   perform public.ensure_deck_for_language(v_uid, p_lang);
   update public.profiles set learning_lang = p_lang where id = v_uid;
-end $$;
+end $$;;

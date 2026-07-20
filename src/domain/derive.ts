@@ -5,7 +5,7 @@
 // lives HERE so it stays identical no matter where the data comes from.
 import { findLanguage } from '@/constants';
 import i18n from '@/i18n';
-import { TIERS, type TierId } from '@/theme/tiers';
+import { getTierByStability, TIERS, type TierId } from '@/theme/tiers';
 
 import type { Card, CardFsrsState, LanguageCode, Profile, SearchDirection, WordLifecycle } from './types';
 
@@ -134,8 +134,11 @@ export function homeSnapshot(cards: Card[], states: CardFsrsState[], now: Date =
 
   for (const s of states) {
     if (s.reps > 0) {
-      const idx = TIERS.findIndex((t) => s.stability >= t.stMin && s.stability < t.stMax);
-      if (idx >= 0) tierCounts[idx] += 1;
+      // Single source of banding truth (theme/tiers). getTierByStability clamps
+      // anomalous inputs to the first band, so the distribution always sums to
+      // the reviewed-word total (a raw findIndex would silently drop them).
+      const idx = TIERS.indexOf(getTierByStability(s.stability));
+      tierCounts[idx] += 1;
       if (s.stability >= MASTERY_STABILITY) masteredCount += 1;
     }
     if (s.state > 0) {

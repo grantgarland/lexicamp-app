@@ -58,4 +58,4 @@ begin
 end $$;
 
 revoke execute on function public.save_card(uuid, uuid, text, text) from public, anon;
-grant execute on function public.save_card(uuid, uuid, text, text) to authenticated;
+grant execute on function public.save_card(uuid, uuid, text, text) to authenticated;;

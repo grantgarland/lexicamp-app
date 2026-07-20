@@ -32,14 +32,34 @@ Then press `i` for iOS simulator, `a` for Android emulator, or scan the QR code 
 
 ## Project Structure
 
+All source lives under `src/` (see `CLAUDE.md` for the full architecture map):
+
 ```
 lexicamp-app/
-├── app/          # Expo Router screens
-├── components/   # Shared UI components
-├── hooks/        # Custom React hooks
-├── lib/          # API clients, utilities
-├── assets/       # Fonts, images
-└── constants/    # Theme, config
+├── src/
+│   ├── app/            # expo-router routes (thin — screens live in src/screens)
+│   ├── screens/        # Screen components
+│   ├── ui/             # Shared UI kit (composed components, icons, Portal/Sheet)
+│   ├── domain/         # Pure domain logic — types, derivations, FSRS, capture gate
+│   ├── data/           # DataSource seam: mock (default) + supabase/ + offline outbox
+│   ├── query/          # TanStack Query client + hooks (persisted to AsyncStorage)
+│   ├── store/          # Zustand stores (prefs, UI, dev knobs, onboarding buffer)
+│   ├── auth/           # Supabase auth session
+│   ├── i18n/           # i18next + en/es locales (parity is test-enforced)
+│   ├── theme/          # Design tokens (GENERATED — never hand-edit) + tiers
+│   ├── notifications/  # Push token registration
+│   ├── observability/  # Sentry (inert until DSN set)
+│   └── constants/      # Language registry, legal links
+├── supabase/           # Edge Functions (translate, examples) + migrations mirror
+├── .maestro/           # Smoke-test flows (nightly CI)
+├── scripts/            # Token/asset sync + CI emulator helper
+└── assets/             # Fonts, images, brand assets
+```
+
+### Verify (before any handoff)
+
+```bash
+npm run typecheck && npm run lint && npm test
 ```
 
 ---

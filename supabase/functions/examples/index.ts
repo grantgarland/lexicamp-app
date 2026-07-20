@@ -104,6 +104,7 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify([{ Text: row.source_text, Translation: senseKey }]),
       },
     );
+    if (res.status === 429) return json({ error: 'examples service busy' }, 429);
     if (!res.ok) return json({ error: 'examples service unavailable' }, 503);
     const [entry] = await res.json();
     examples = (entry?.examples ?? []).slice(0, 5).map((e: Record<string, string>) => ({

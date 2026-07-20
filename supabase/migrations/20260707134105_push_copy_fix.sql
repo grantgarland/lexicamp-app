@@ -1,20 +1,6 @@
--- Phase C (18 §C1): weekday-selectable reminders — HONESTLY this time. The 2.5
--- session removed the weekday UI because the scheduler ignored days; this adds
--- the server support first: notification_prefs.days (int[] of dow 0=Sun..6=Sat,
--- default all) and run_push_scheduler() skips users whose LOCAL weekday is
--- excluded. Also: push title de-Pika'd per the 18 §A1 copy rule (users aren't
--- responsible for knowing the mascot's name).
---
--- NOTE: this file also mirrors the previously-unmirrored run_push_scheduler
--- definition (launch-review flag: live DB ahead of the repo mirror).
-
-alter table public.notification_prefs
-  add column days int[] not null default '{0,1,2,3,4,5,6}'
-  constraint notification_prefs_days_valid
-    check (days <@ array[0,1,2,3,4,5,6] and array_length(days, 1) >= 1);
-
+-- Casey (session-36 review): notification body → "N words are ready for review".
 create or replace function public.run_push_scheduler()
-returns integer
+returns int
 language plpgsql security definer set search_path = ''
 as $$
 declare
@@ -30,8 +16,6 @@ begin
     from public.profiles p
     join public.notification_prefs np on np.user_id = p.id
     where np.enabled
-      -- Phase C: respect the user's weekday selection in THEIR timezone.
-      and extract(dow from (now() at time zone p.timezone))::int = any (np.days)
       and exists (select 1 from public.push_tokens pt where pt.user_id = p.id)
       and not exists (
         select 1 from public.push_log pl
@@ -48,7 +32,7 @@ begin
       v_body := (
         select jsonb_agg(jsonb_build_object(
           'to', t,
-          'title', 'Your words are ready',
+          'title', 'Pika has your words ready',
           'body', r.due_count || ' word' || case when r.due_count = 1 then ' is' else 's are' end || ' ready for review',
           'data', jsonb_build_object('url', '/quiz')
         )) from unnest(r.tokens) t
@@ -65,4 +49,4 @@ begin
     end if;
   end loop;
   return v_sent;
-end $$;
+end $$;;

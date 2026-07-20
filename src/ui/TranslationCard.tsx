@@ -136,6 +136,8 @@ function TranslationItem({
 }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
+  // Local binding keeps TS narrowing inside the .map closure (drops the `!`).
+  const details = translation.details;
 
   // Layout-animated shell: height animates as the current word changes; the
   // collapsed row and the expanded "current word" block crossfade in/out.
@@ -168,13 +170,13 @@ function TranslationItem({
 
           {/* Details render unconditionally when present (Casey, 2026-07-16: the
               "More details" disclosure was a tap-tax paid on every lookup). */}
-          {translation.details != null && translation.details.length > 0 && (
+          {details != null && details.length > 0 && (
             <View style={styles.detailsWrap}>
               <View style={styles.detailsList}>
-                {translation.details.map((d, i) => (
+                {details.map((d, i) => (
                   <View
                     key={d.label}
-                    style={[styles.detailRow, i < translation.details!.length - 1 && styles.detailRowBorder]}
+                    style={[styles.detailRow, i < details.length - 1 && styles.detailRowBorder]}
                   >
                     <RNText style={styles.detailLabel}>{d.label}</RNText>
                     <RNText style={styles.detailValue}>{d.value}</RNText>

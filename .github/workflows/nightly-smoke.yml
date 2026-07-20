@@ -32,7 +32,7 @@ name: Nightly smoke (Maestro + EAS)
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 8 * * *" # 08:00 UTC ≈ 3–4am ET, before the workday
+    - cron: "0 8 * * 1,3,5" # Mon/Wed/Fri 08:00 UTC (EAS free tier: 15 builds/mo)
 
 concurrency:
   group: nightly-smoke

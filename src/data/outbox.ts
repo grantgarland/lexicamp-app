@@ -40,31 +40,51 @@ async function writeOutbox(entries: OutboxEntry[]): Promise<void> {
   await AsyncStorage.setItem(KEY, JSON.stringify(entries.slice(-MAX_QUEUED)));
 }
 
-export async function enqueueCommit(ratings: BufferedRating[]): Promise<void> {
-  const entries = await readOutbox();
-  entries.push({ ratings, queuedAt: new Date().toISOString() });
-  await writeOutbox(entries);
+// ── Serialization ────────────────────────────────────────────────────────────
+// The outbox is a read-modify-write over a single AsyncStorage key, and it has
+// two independent triggers (AppState foreground replay in outboxInit + the
+// pre-commit flush in commitWithOutbox). Without a lock, overlapping calls read
+// the same queued entries and BOTH replay them — commitQuizSession appends
+// review_logs and advances the schedule, so a double-replay double-advances a
+// card. All queue mutations therefore run through this in-module promise chain.
+let queueTail: Promise<unknown> = Promise.resolve();
+function serialized<T>(op: () => Promise<T>): Promise<T> {
+  const next = queueTail.then(op, op);
+  queueTail = next.catch(() => undefined); // keep the chain alive past failures
+  return next;
+}
+
+export function enqueueCommit(ratings: BufferedRating[]): Promise<void> {
+  return serialized(async () => {
+    const entries = await readOutbox();
+    entries.push({ ratings, queuedAt: new Date().toISOString() });
+    await writeOutbox(entries);
+  });
 }
 
 /** Replay queued commits FIFO. Stops on the first transport failure (still
- *  offline); drops entries the server rejects outright (won't ever succeed). */
-export async function flushOutbox(commit: (payload: { ratings: BufferedRating[] }) => Promise<void>): Promise<number> {
-  const entries = await readOutbox();
-  if (entries.length === 0) return 0;
-  let flushed = 0;
-  const remaining = [...entries];
-  for (const entry of entries) {
-    try {
-      await commit({ ratings: entry.ratings });
-      remaining.shift();
-      flushed += 1;
-    } catch (e) {
-      if (isTransportError(e)) break; // still offline — keep the rest queued
-      remaining.shift(); // server verdict — drop, it will never succeed
+ *  offline); drops entries the server rejects outright (won't ever succeed).
+ *  Serialized: concurrent calls run one-after-another, never over the same
+ *  snapshot of the queue. */
+export function flushOutbox(commit: (payload: { ratings: BufferedRating[] }) => Promise<void>): Promise<number> {
+  return serialized(async () => {
+    const entries = await readOutbox();
+    if (entries.length === 0) return 0;
+    let flushed = 0;
+    const remaining = [...entries];
+    for (const entry of entries) {
+      try {
+        await commit({ ratings: entry.ratings });
+        remaining.shift();
+        flushed += 1;
+      } catch (e) {
+        if (isTransportError(e)) break; // still offline — keep the rest queued
+        remaining.shift(); // server verdict — drop, it will never succeed
+      }
     }
-  }
-  await writeOutbox(remaining);
-  return flushed;
+    await writeOutbox(remaining);
+    return flushed;
+  });
 }
 
 /** Commit with offline resilience: transport failure → queue + resolve (the

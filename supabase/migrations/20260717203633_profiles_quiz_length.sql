@@ -4,4 +4,4 @@
 -- existing own-profile-update RLS policy (same path as display_name).
 alter table public.profiles
   add column if not exists quiz_length int not null default 20
-  check (quiz_length in (10, 20, 40, 80));
+  check (quiz_length in (10, 20, 40, 80));;

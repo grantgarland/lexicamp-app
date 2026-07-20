@@ -78,4 +78,33 @@ describe('flushOutbox', () => {
     expect(flushed).toBe(0);
     expect(await readOutbox()).toHaveLength(0);
   });
+
+  it('serializes concurrent flushes — a queued entry replays exactly once (double-replay would double-advance a card schedule)', async () => {
+    await enqueueCommit([{ cardId: 'once', rating: 'got_it' }]);
+    const seen: string[] = [];
+    const commit = jest.fn().mockImplementation(async (p: { ratings: { cardId: string }[] }) => {
+      // Yield so a racing flush COULD interleave here if flushes weren't serialized.
+      await new Promise((r) => setTimeout(r, 5));
+      seen.push(p.ratings[0].cardId);
+    });
+    // The real race: AppState-foreground replay (outboxInit) firing while the
+    // post-quiz commitWithOutbox is mid-flush.
+    const [a, b] = await Promise.all([flushOutbox(commit), flushOutbox(commit)]);
+    expect(seen).toEqual(['once']);
+    expect(a + b).toBe(1);
+    expect(await readOutbox()).toHaveLength(0);
+  });
+
+  it('serializes enqueue against flush — a commit queued mid-flush is not lost', async () => {
+    await enqueueCommit([{ cardId: 'first', rating: 'got_it' }]);
+    const commit = jest.fn().mockImplementation(async () => {
+      await new Promise((r) => setTimeout(r, 5));
+    });
+    const flushP = flushOutbox(commit);
+    const enqueueP = enqueueCommit([{ cardId: 'second', rating: 'again' }]);
+    await Promise.all([flushP, enqueueP]);
+    const left = await readOutbox();
+    expect(left).toHaveLength(1);
+    expect(left[0].ratings[0].cardId).toBe('second');
+  });
 });

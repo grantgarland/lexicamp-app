@@ -5,4 +5,4 @@ alter table public.notification_prefs
   drop constraint notification_prefs_days_valid;
 alter table public.notification_prefs
   add constraint notification_prefs_days_valid
-    check (days <@ array[0,1,2,3,4,5,6] and cardinality(days) >= 1);
+    check (days <@ array[0,1,2,3,4,5,6] and cardinality(days) >= 1);;

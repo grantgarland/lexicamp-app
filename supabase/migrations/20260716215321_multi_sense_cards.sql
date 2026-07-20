@@ -1,15 +1,3 @@
--- Multi-sense cards (Casey, 2026-07-16 — SUPERSEDES the sense-swap migration).
--- Product ruling: distinct senses of one headword are distinct vocabulary
--- ("to go" → ехать/идти/пойти each carry real, different meaning) and deserve
--- their OWN cards with their own FSRS histories.
---
--- Model change: uniqueness moves from (deck, translation) to
--- (deck, translation, sense), where the sense identity is the card's
--- custom_back ('' = the primary sense). save_card becomes a per-sense
--- idempotent insert: an exact-sense duplicate returns the existing card
--- (no error, no second card); a NEW sense of a saved word creates a sibling
--- card. word_saved logs only on true inserts.
-
 alter table public.cards drop constraint cards_deck_id_translation_id_key;
 
 create unique index cards_deck_translation_sense_key
@@ -55,7 +43,7 @@ begin
     nullif(trim(coalesce(p_custom_back, '')), '')
   )
   on conflict (deck_id, translation_id, coalesce(custom_back, '')) do update
-    set custom_front = excluded.custom_front -- no-op refresh; arbiter needs a DO UPDATE to return the row
+    set custom_front = excluded.custom_front
   returning id, (xmax = 0) into v_card_id, v_inserted;
 
   if v_inserted then
@@ -65,4 +53,4 @@ begin
   end if;
 
   return v_card_id;
-end $$;
+end $$;;

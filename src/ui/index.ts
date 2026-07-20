@@ -58,7 +58,6 @@ export {
   IconMinus,
   IconBell,
   IconMail,
-  IconUser,
   IconStar,
   IconGlobe,
   IconInfinity,

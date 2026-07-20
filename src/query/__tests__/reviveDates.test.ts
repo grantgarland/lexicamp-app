@@ -20,6 +20,19 @@ describe('reviveDates', () => {
     expect(out.entitlement.currentPeriodEnd).toBeInstanceOf(Date);
   });
 
+  it('revives DeckSummary.lastReviewedAt (regression: the decks query persists it, and a rehydrated string would crash addedLabel on the Decks tab)', () => {
+    const payload = {
+      decks: [
+        { id: 'd1', name: 'Travel', wordCount: 12, reviews: 9, createdAt: new Date('2026-07-01T00:00:00.000Z'), lastReviewedAt: new Date('2026-07-16T08:00:00.000Z') },
+        { id: 'd2', name: 'Business', wordCount: 8, reviews: 5, createdAt: new Date('2026-07-02T00:00:00.000Z'), lastReviewedAt: null },
+      ],
+    };
+    const out = roundTrip(payload);
+    expect(out.decks[0].lastReviewedAt).toBeInstanceOf(Date);
+    expect(out.decks[0].lastReviewedAt!.getTime()).toBe(payload.decks[0].lastReviewedAt!.getTime());
+    expect(out.decks[1].lastReviewedAt).toBeNull();
+  });
+
   it('leaves null date fields as null (lastReviewAt / currentPeriodEnd)', () => {
     const out = roundTrip({ states: [{ dueAt: new Date(), lastReviewAt: null }], entitlement: { currentPeriodEnd: null } });
     expect(out.states[0].lastReviewAt).toBeNull();

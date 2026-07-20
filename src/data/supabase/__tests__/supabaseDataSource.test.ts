@@ -1,0 +1,264 @@
+// SupabaseDataSource branching-logic tests. The real client is replaced with a
+// scripted fake (FIFO response mockQueue + call recorder), so these exercise the
+// source's OWN logic — the pieces a live backend can't cheaply regression-test:
+//   · getDecks drops the hidden main deck 
+//   · getDueCards two-pull fill composition + null-state row filtering
+//   · commitQuizSession skips cards deleted mid-session and no-ops on empty
+//   · updateProfile quiz-length ladder validation + display-name normalization
+//   · logEvent allowlist (client can't shadow server-written event names)
+import { QUIZ_LENGTHS } from '@/domain/quiz';
+
+type Resp = { data: unknown; error: unknown };
+interface RecordedCall {
+  table: string;
+  ops: [string, unknown[]][];
+}
+
+const mockQueue: Resp[] = [];
+const mockCalls: RecordedCall[] = [];
+const mockRpcCalls: [string, unknown][] = [];
+const mockInvokeQueue: { data?: unknown; error?: unknown }[] = [];
+const mockInvokeCalls: [string, unknown][] = [];
+
+function mockNextResp(): Resp {
+  const r = mockQueue.shift();
+  if (r == null) throw new Error('fake supabase: no queued response for this query');
+  return r;
+}
+
+function mockMakeChain(rec: RecordedCall) {
+  const record =
+    (name: string) =>
+    (...args: unknown[]) => {
+      rec.ops.push([name, args]);
+      return chain;
+    };
+  const chain: Record<string, unknown> = {};
+  for (const m of ['select', 'eq', 'gt', 'lte', 'in', 'order', 'limit', 'update', 'upsert', 'insert', 'delete']) {
+    chain[m] = record(m);
+  }
+  chain.maybeSingle = () => {
+    rec.ops.push(['maybeSingle', []]);
+    return Promise.resolve(mockNextResp());
+  };
+  chain.single = () => Promise.resolve(mockNextResp());
+  // PostgREST builders are thenables — awaiting the chain resolves the query.
+  chain.then = (onOk: (r: Resp) => unknown, onErr?: (e: unknown) => unknown) =>
+    Promise.resolve()
+      .then(() => mockNextResp())
+      .then(onOk, onErr);
+  return chain;
+}
+
+jest.mock('../client', () => ({
+  supabase: {
+    from: (table: string) => {
+      const rec: RecordedCall = { table, ops: [] };
+      mockCalls.push(rec);
+      return mockMakeChain(rec);
+    },
+    rpc: (name: string, args: unknown) => {
+      mockRpcCalls.push([name, args]);
+      return Promise.resolve(mockNextResp());
+    },
+    functions: {
+      invoke: (name: string, opts: unknown) => {
+        mockInvokeCalls.push([name, opts]);
+        const r = mockInvokeQueue.shift();
+        if (r == null) throw new Error('fake supabase: no queued invoke response');
+        return Promise.resolve({ data: r.data ?? null, error: r.error ?? null });
+      },
+    },
+    auth: {
+      getSession: () => Promise.resolve({ data: { session: { user: { id: 'user-1' } } } }),
+    },
+  },
+}));
+
+// Import AFTER the mock so the source binds the fake client.
+import { supabaseDataSource } from '../SupabaseDataSource';
+
+const ok = (data: unknown): Resp => ({ data, error: null });
+
+beforeEach(() => {
+  mockQueue.length = 0;
+  mockCalls.length = 0;
+  mockRpcCalls.length = 0;
+  mockInvokeQueue.length = 0;
+  mockInvokeCalls.length = 0;
+});
+
+const PROFILE_ROW = {
+  id: 'user-1',
+  display_name: 'Casey',
+  native_lang: 'en',
+  learning_lang: 'es',
+  timezone: 'America/New_York',
+  onboarding_complete: true,
+  quiz_length: 20,
+};
+
+const FSRS_ROW = (cardId: string, dueAt: string) => ({
+  card_id: cardId,
+  user_id: 'user-1',
+  stability: 5,
+  difficulty: 4,
+  due_at: dueAt,
+  last_review_at: null,
+  state: 2,
+  reps: 3,
+  lapses: 0,
+  learning_steps: 0,
+});
+
+const CARD_ROW = (id: string) => ({
+  id,
+  deck_id: 'd1',
+  user_id: 'user-1',
+  translation_id: `tr-${id}`,
+  user_note: null,
+  custom_front: null,
+  custom_back: null,
+  suspended: false,
+  created_at: '2026-07-01T00:00:00Z',
+  translations_cache: {
+    id: `tr-${id}`,
+    display_source: `word-${id}`,
+    translation: `palabra-${id}`,
+    pos_tag: null,
+    prefix_word: null,
+    alt_translations: null,
+    back_translations: null,
+    examples: null,
+  },
+});
+
+describe('getDecks', () => {
+  it('drops the OLDEST deck (the hidden main deck, 18 §E1) and maps the rest', async () => {
+    mockQueue.push(
+      ok([
+        { id: 'main', name: 'My words', created_at: '2026-06-01T00:00:00Z', cards: [{ count: 42 }] },
+        { id: 'travel', name: 'Travel', created_at: '2026-06-10T00:00:00Z', cards: [{ count: 12 }] },
+        { id: 'biz', name: 'Business', created_at: '2026-06-20T00:00:00Z', cards: [] },
+      ]),
+    );
+    const decks = await supabaseDataSource.getDecks('es');
+    expect(decks.map((d) => d.id)).toEqual(['travel', 'biz']);
+    expect(decks[0]!.wordCount).toBe(12);
+    expect(decks[1]!.wordCount).toBe(0); // empty count array → 0, not a crash
+    // Ordered oldest-first so slice(1) is exactly the main-deck rule.
+    const deckCall = mockCalls.find((c) => c.table === 'decks')!;
+    expect(deckCall.ops).toContainEqual(['order', ['created_at', { ascending: true }]]);
+  });
+});
+
+describe('getDueCards', () => {
+  it('tops up with next-due cards when the due pull is under the cap, and filters rows without FSRS state', async () => {
+    mockQueue.push(
+      ok([
+        { ...CARD_ROW('due1'), card_fsrs_state: FSRS_ROW('due1', '2026-07-17T00:00:00Z') },
+        { ...CARD_ROW('ghost'), card_fsrs_state: null }, // join returned card w/o state — must not crash the mapper
+      ]),
+    );
+    mockQueue.push(ok([{ ...CARD_ROW('next1'), card_fsrs_state: FSRS_ROW('next1', '2026-07-20T00:00:00Z') }]));
+    const items = await supabaseDataSource.getDueCards(3, 'es');
+    expect(items.map((i) => i.id)).toEqual(['due1', 'next1']);
+    // The top-up pull asked only for the REMAINING slots (3 due-limit − 1 kept).
+    const [, topUp] = mockCalls.filter((c) => c.table === 'cards');
+    expect(topUp!.ops).toContainEqual(['limit', [2]]);
+  });
+
+  it('skips the top-up pull entirely when the due pull fills the cap', async () => {
+    mockQueue.push(ok([{ ...CARD_ROW('a'), card_fsrs_state: FSRS_ROW('a', '2026-07-17T00:00:00Z') }]));
+    const items = await supabaseDataSource.getDueCards(1, 'es');
+    expect(items).toHaveLength(1);
+    expect(mockCalls.filter((c) => c.table === 'cards')).toHaveLength(1);
+  });
+});
+
+describe('commitQuizSession', () => {
+  it('skips ratings for cards deleted mid-session instead of failing the batch', async () => {
+    mockQueue.push(ok([FSRS_ROW('kept', '2026-07-17T00:00:00Z')])); // state re-read: only "kept" still exists
+    mockQueue.push(ok(null)); // rpc response
+    await supabaseDataSource.commitQuizSession({
+      ratings: [
+        { cardId: 'kept', rating: 'got_it' },
+        { cardId: 'deleted', rating: 'again' },
+      ],
+    });
+    expect(mockRpcCalls).toHaveLength(1);
+    const [name, args] = mockRpcCalls[0]!;
+    expect(name).toBe('commit_quiz_session');
+    const reviews = (args as { p_reviews: { card_id: string }[] }).p_reviews;
+    expect(reviews.map((r) => r.card_id)).toEqual(['kept']);
+  });
+
+  it('no-ops on an empty ratings batch (no reads, no RPC)', async () => {
+    await supabaseDataSource.commitQuizSession({ ratings: [] });
+    expect(mockCalls).toHaveLength(0);
+    expect(mockRpcCalls).toHaveLength(0);
+  });
+
+  it('no-ops the RPC when every rated card was deleted', async () => {
+    mockQueue.push(ok([])); // none of the rated cards still exist
+    await supabaseDataSource.commitQuizSession({ ratings: [{ cardId: 'gone', rating: 'got_it' }] });
+    expect(mockRpcCalls).toHaveLength(0);
+  });
+});
+
+describe('updateProfile', () => {
+  it('writes only ladder values for quizLength (shares QUIZ_LENGTHS with the prefs store)', async () => {
+    mockQueue.push(ok(null));
+    await supabaseDataSource.updateProfile({ quizLength: QUIZ_LENGTHS[2] }); // 40
+    const upd = mockCalls.find((c) => c.table === 'profiles')!;
+    expect(upd.ops).toContainEqual(['update', [{ quiz_length: 40 }]]);
+  });
+
+  it('drops an off-ladder quizLength and (with nothing else to write) skips the update entirely', async () => {
+    await supabaseDataSource.updateProfile({ quizLength: 25 });
+    expect(mockCalls).toHaveLength(0);
+  });
+
+  it('normalizes an all-whitespace display name to null', async () => {
+    mockQueue.push(ok(null));
+    await supabaseDataSource.updateProfile({ displayName: '   ' });
+    const upd = mockCalls.find((c) => c.table === 'profiles')!;
+    expect(upd.ops).toContainEqual(['update', [{ display_name: null }]]);
+  });
+});
+
+describe('logEvent', () => {
+  it('drops event names outside the client allowlist without touching the network', async () => {
+    await supabaseDataSource.logEvent('quiz_completed'); // server-written name — client may not shadow it
+    expect(mockCalls).toHaveLength(0);
+  });
+
+  it('inserts allowlisted events under the signed-in user', async () => {
+    mockQueue.push(ok(null));
+    await supabaseDataSource.logEvent('paywall_viewed', { source: 'settings' });
+    const ins = mockCalls.find((c) => c.table === 'study_events')!;
+    expect(ins.ops).toContainEqual(['insert', [{ user_id: 'user-1', event: 'paywall_viewed', props: { source: 'settings' } }]]);
+  });
+});
+
+describe('lookup error mapping', () => {
+  it("maps a 429 from the translate fn to 'lookup_busy' (UI shows try-again-shortly, query layer must not retry)", async () => {
+    mockQueue.push(ok(PROFILE_ROW)); // getProfile single()
+    mockInvokeQueue.push({ error: { message: 'Edge Function returned a non-2xx status code', context: { status: 429 } } });
+    await expect(supabaseDataSource.lookup('hola', 'target_to_native')).rejects.toThrow('lookup_busy');
+  });
+
+  it("maps any other invoke failure to 'lookup_unavailable'", async () => {
+    mockQueue.push(ok(PROFILE_ROW));
+    mockInvokeQueue.push({ error: { message: 'Edge Function returned a non-2xx status code', context: { status: 503 } } });
+    await expect(supabaseDataSource.lookup('hola', 'target_to_native')).rejects.toThrow('lookup_unavailable');
+  });
+
+  it('passes the resolved language pair to the translate fn on success', async () => {
+    mockQueue.push(ok(PROFILE_ROW));
+    mockInvokeQueue.push({ data: { status: 'not_found' } });
+    const out = await supabaseDataSource.lookup('hola', 'target_to_native'); // learning→native = es→en
+    expect(out).toEqual({ status: 'not_found' });
+    expect(mockInvokeCalls[0]).toEqual(['translate', { body: { text: 'hola', from: 'es', to: 'en' } }]);
+  });
+});

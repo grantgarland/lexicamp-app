@@ -11,4 +11,4 @@
 update public.translations_cache
 set examples = jsonb_build_object(lower(coalesce(translation, '')), examples)
 where examples is not null
-  and jsonb_typeof(examples) = 'array';
+  and jsonb_typeof(examples) = 'array';;

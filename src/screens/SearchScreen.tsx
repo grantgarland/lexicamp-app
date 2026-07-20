@@ -7,7 +7,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet as RNStyleSheet, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
@@ -125,8 +124,13 @@ export function SearchView({ onClose }: { onClose: () => void }) {
   // Tier-0 capture gate, client-side (16 §2): instant feedback, and junk input
   // never even reaches the data source. The source re-gates authoritatively.
   const verdict = q.length >= 2 && langs ? evaluateCaptureInput(q, langs.sourceCode) : null;
-  const debouncedQ = useDebouncedValue(q, 250);
-  const { outcome, isLoading } = useLookup(
+  // 600ms: 250ms fired lookups on mid-word
+  // typing pauses — every prefix ("hel", "hell") was an uncached lookup costing
+  // up to TWO Azure calls (dictionary + MT fallback) and a junk cache row. 600ms
+  // fires on a real stop-typing pause, cutting Azure spend several-fold with no
+  // change to the interaction (results still appear automatically).
+  const debouncedQ = useDebouncedValue(q, 600);
+  const { outcome, isLoading, error: lookupError } = useLookup(
     debouncedQ,
     direction,
     debouncedQ === q && verdict?.ok === true, // wait out the debounce + the gate
@@ -135,9 +139,12 @@ export function SearchView({ onClose }: { onClose: () => void }) {
   // Lazy examples (16 §3): the primary sense is expanded by default in the
   // result card (per the S-series prototype), so fetch on first found-view when
   // the cache row doesn't carry examples yet. Cached once, free thereafter.
-  const { examples: fetchedExamples } = useExamples(
-    outcome?.status === 'found' && outcome.result.examples == null ? outcome.result.translationId : null,
-  );
+  // DWELL 700ms: only spend the Azure examples call once the
+  // SAME result has stayed on screen — a prefix that flashes by while the user
+  // keeps typing ("hell" en route to "hello") no longer triggers one.
+  const examplesCandidate = outcome?.status === 'found' && outcome.result.examples == null ? outcome.result.translationId : null;
+  const dwelledCandidate = useDebouncedValue(examplesCandidate, 700);
+  const { examples: fetchedExamples } = useExamples(dwelledCandidate != null && dwelledCandidate === examplesCandidate ? dwelledCandidate : null);
   const result =
     outcome?.status === 'found'
       ? toCardResult(
@@ -153,16 +160,18 @@ export function SearchView({ onClose }: { onClose: () => void }) {
       ? t(qualityReasonI18nKey(outcome.result.qualityReason ?? 'echo'))
       : undefined;
   const rejectReason = verdict != null && !verdict.ok ? verdict.reason : outcome?.status === 'rejected' ? outcome.reason : null;
-  const phase: 'recents' | 'typing' | 'results' | 'noresults' | 'rejected' =
+  const phase: 'recents' | 'typing' | 'results' | 'noresults' | 'rejected' | 'error' =
     q === ''
       ? 'recents'
       : rejectReason != null
         ? 'rejected'
-        : q.length < 2 || isLoading || (verdict?.ok === true && outcome == null)
-          ? 'typing'
-          : result != null
-            ? 'results'
-            : 'noresults';
+        : lookupError != null
+          ? 'error'
+          : q.length < 2 || isLoading || (verdict?.ok === true && outcome == null)
+            ? 'typing'
+            : result != null
+              ? 'results'
+              : 'noresults';
 
   // New headword → reset the expanded sense to the primary (render-adjust
   // pattern, same as Sheet's mount logic — not an effect).
@@ -287,18 +296,18 @@ export function SearchView({ onClose }: { onClose: () => void }) {
       {/* Recents live OUTSIDE the content scroll: the fade mask must stay fixed
           relative to the search input while the list scrolls beneath it. */}
       {phase === 'recents' ? (
-        <Animated.View key="recents" entering={FadeIn.duration(200)} exiting={FadeOut.duration(140)} style={styles.fill}>
+        <View key="recents" style={styles.fill}>
           <RecentList recents={recents} onTap={setQuery} onDismiss={removeRecent} />
-        </Animated.View>
+        </View>
       ) : (
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {phase === 'typing' && (
-          <Animated.View key="typing" entering={FadeIn.duration(200)} exiting={FadeOut.duration(140)}>
+          <View key="typing">
             <SkeletonCard typed={q} />
-          </Animated.View>
+          </View>
         )}
         {phase === 'results' && result != null && (
-          <Animated.View key="results" entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)} style={styles.resultWrap}>
+          <View key="results" style={styles.resultWrap}>
             <TranslationCard
               result={result}
               sourceLang={langs?.sourceShort}
@@ -312,21 +321,32 @@ export function SearchView({ onClose }: { onClose: () => void }) {
               onSave={save}
               onDelete={setPendingUnsave}
             />
-          </Animated.View>
+          </View>
         )}
         {phase === 'noresults' && (
-          <Animated.View key="noresults" entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)}>
+          <View key="noresults">
             <EmptyState
               title={t('search.noResultsTitle')}
               body={t('search.noResultsBody')}
               networkNote={t('search.noResultsNetwork')}
             />
-          </Animated.View>
+          </View>
         )}
         {phase === 'rejected' && rejectReason != null && (
-          <Animated.View key="rejected" entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)}>
+          <View key="rejected">
             <EmptyState title={t('capture.rejectedTitle')} body={t(captureReasonI18nKey(rejectReason), { lang: langs?.sourceName ?? '' })} />
-          </Animated.View>
+          </View>
+        )}
+        {/* Service failure ≠ "no results" (429-hardening): rate-limited/throttled
+            reads as "busy, try again shortly"; anything else as unavailable. The
+            user retries by pausing typing again — no auto-retry into a throttle. */}
+        {phase === 'error' && (
+          <View key="error">
+            <EmptyState
+              title={t(lookupError === 'busy' ? 'search.busyTitle' : 'search.unavailableTitle')}
+              body={t(lookupError === 'busy' ? 'search.busyBody' : 'search.unavailableBody')}
+            />
+          </View>
         )}
       </ScrollView>
       )}
@@ -449,8 +469,8 @@ function RecentList({ recents, onTap, onDismiss }: { recents: string[]; onTap: (
       <RawText style={styles.recentLabel}>{t('search.recent')}</RawText>
       <View style={styles.recentListWrap}>
         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.recentListContent}>
-          {recents.map((word, i) => (
-            <Animated.View key={word} entering={FadeIn.duration(180).delay(Math.min(i, 10) * 30)} exiting={FadeOut.duration(120)}>
+          {recents.map((word) => (
+            <View key={word}>
               <Pressable onPress={() => onTap(word)} accessibilityRole="button" style={({ pressed }) => [styles.recentRow, pressed && { opacity: 0.6 }]}>
                 <IconClock size={13} color={theme.color.textFaint} />
                 <RawText style={styles.recentWord} numberOfLines={1}>{word}</RawText>
@@ -458,7 +478,7 @@ function RecentList({ recents, onTap, onDismiss }: { recents: string[]; onTap: (
                   <IconX size={11} color={theme.color.textMuted} />
                 </Pressable>
               </Pressable>
-            </Animated.View>
+            </View>
           ))}
         </ScrollView>
         {/* Fixed fade mask: canvas-colored gradient, alpha 0 → 1 between 50% and

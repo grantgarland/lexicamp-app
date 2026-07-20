@@ -231,6 +231,10 @@ function senseHint(card: CardRow, tr: TranslationJoin): string | undefined {
 export function mapQuizItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow, targetLang: string): QuizCardItem {
   const tier = getTierByStability(fsrs.stability);
   const mode: QuizMode = tier.id === 'bc' || tier.id === 'abc' ? 'recognition' : 'recall';
+  const hint = senseHint(card, tr);
+  // Cached example only — display-side; the quiz never adds network calls.
+  // Per-sense (2026-07-17): THIS card's sense, never a sibling's.
+  const ex = senseExample(card, tr);
   return {
     id: card.id,
     tierId: tier.id,
@@ -238,19 +242,14 @@ export function mapQuizItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow, t
     fsrs: mapFsrsState(fsrs),
     content: {
       frontWord: card.custom_front ?? tr.display_source,
-      ...(senseHint(card, tr) != null ? { frontSub: senseHint(card, tr) } : {}),
+      ...(hint != null ? { frontSub: hint } : {}),
       frontPrompt:
         mode === 'recognition'
           ? i18n.t('quiz.promptRecognition')
           : i18n.t('quiz.promptRecall', { lang: languageName(targetLang) }),
       backWord: card.custom_back ?? tr.translation ?? '',
       ...(tr.pos_tag ? { backPos: i18n.t(`pos.${tr.pos_tag}`, { defaultValue: tr.pos_tag.toLowerCase() }) } : {}),
-      // Cached example only — display-side; the quiz never adds network calls.
-      // Per-sense (2026-07-17): THIS card's sense, never a sibling's.
-      ...(() => {
-        const ex = senseExample(card, tr);
-        return ex ? { backExample: `${ex.targetPrefix}${ex.targetTerm}${ex.targetSuffix}` } : {};
-      })(),
+      ...(ex != null ? { backExample: `${ex.targetPrefix}${ex.targetTerm}${ex.targetSuffix}` } : {}),
     },
   };
 }

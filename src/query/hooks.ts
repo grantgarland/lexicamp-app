@@ -241,10 +241,15 @@ export function useDecks() {
 export interface LookupData {
   outcome: LookupOutcome | null;
   isLoading: boolean;
+  /** 429-hardening (2026-07-19): 'busy' = rate-limited/throttled (ours or
+   *  Azure's, worth retrying shortly); 'unavailable' = service failure. */
+  error: 'busy' | 'unavailable' | null;
 }
 /** Search-capture lookup (2.1). Caller debounces + pre-gates (Tier-0) before
  *  enabling; the source re-gates authoritatively. Results are cached per
- *  (direction, query) — the server cache makes repeats free anyway. */
+ *  (direction, query) — the server cache makes repeats free anyway.
+ *  retry: false ON PURPOSE — a failed lookup must never auto-retry into a
+ *  rate limit or an Azure throttle (the user can retype to retry). */
 export function useLookup(query: string, direction: SearchDirection, enabled: boolean): LookupData {
   const userState = useDevStore((s) => s.userState); // mock reads scenario words
   const activeLang = useActiveLang(); // pair changes → cached lookups must not leak across languages
@@ -253,8 +258,10 @@ export function useLookup(query: string, direction: SearchDirection, enabled: bo
     queryFn: () => ds.lookup(query, direction),
     enabled,
     staleTime: 5 * 60 * 1000,
+    retry: false,
   });
-  return { outcome: enabled ? (q.data ?? null) : null, isLoading: enabled && q.isPending };
+  const error = enabled && q.isError ? ((q.error as Error).message === 'lookup_busy' ? ('busy' as const) : ('unavailable' as const)) : null;
+  return { outcome: enabled ? (q.data ?? null) : null, isLoading: enabled && q.isPending && !q.isError, error };
 }
 
 /** Lazy example sentences (16 §3) — fetched once per (translation, sense),
@@ -267,6 +274,7 @@ export function useExamples(translationId: string | null, targetTerm?: string) {
     queryFn: () => ds.getExamples(translationId as string, targetTerm),
     enabled: translationId != null,
     staleTime: Infinity,
+    retry: false, // examples are decorative — never retry into a rate limit
   });
   return { examples: q.data ?? null, isLoading: translationId != null && q.isPending };
 }

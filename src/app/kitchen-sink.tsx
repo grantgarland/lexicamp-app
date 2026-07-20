@@ -95,6 +95,13 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export default function KitchenSink() {
+  // Dev-only gallery: expo-router makes every app/*.tsx a reachable route in
+  // release builds, so gate it like DevBadge — renders nothing in production.
+  if (!__DEV__) return null;
+  return <KitchenSinkGallery />;
+}
+
+function KitchenSinkGallery() {
   const [notif, setNotif] = useState(true);
   const [offline, setOffline] = useState(false);
   const [lang, setLang] = useState('');

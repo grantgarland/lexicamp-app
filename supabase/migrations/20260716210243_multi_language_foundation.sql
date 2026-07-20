@@ -1,15 +1,3 @@
--- Phase D (18 §2a, D1+D2): multi-language foundation.
---
--- Model: decks already scope all card data by (source_lang, target_lang);
--- profiles.learning_lang remains the ACTIVE language pointer. This adds the
--- user's enrolled set (profile_languages, ≤5, premium-gated past the first) and
--- the three write paths. Switching NEVER deletes data — decks/cards for other
--- languages simply stop being read (the item-4.1 user promise); removal only
--- un-enrolls (re-adding restores access to the untouched deck).
---
--- Writes go through SECURITY DEFINER RPCs only — the table has a select-own
--- policy and no insert/update/delete policies.
-
 create table public.profile_languages (
   user_id uuid not null references public.profiles(id) on delete cascade,
   lang text not null references public.languages(code),
@@ -21,14 +9,10 @@ alter table public.profile_languages enable row level security;
 create policy profile_languages_select_own on public.profile_languages
   for select to authenticated using (auth.uid() = user_id);
 
--- Backfill: every existing user is enrolled in their current active language.
 insert into public.profile_languages (user_id, lang)
 select id, learning_lang from public.profiles
 on conflict do nothing;
 
--- ── Shared deck-ensure (D2): idempotent first-deck-per-language ─────────────
--- Not part of the client API: EXECUTE revoked from everyone; only the RPCs
--- below (SECURITY DEFINER) call it.
 create function public.ensure_deck_for_language(p_uid uuid, p_lang text)
 returns void
 language plpgsql security definer set search_path = ''
@@ -47,7 +31,18 @@ begin
   end if;
 end $$;
 
--- ── add_learning_language: premium-gated, capped at 5, switches to it ───────
+create function public.switch_learning_language_impl(p_uid uuid, p_lang text)
+returns void
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if not exists (select 1 from public.profile_languages where user_id = p_uid and lang = p_lang) then
+    raise exception 'not_enrolled' using errcode = 'P0002';
+  end if;
+  perform public.ensure_deck_for_language(p_uid, p_lang);
+  update public.profiles set learning_lang = p_lang where id = p_uid;
+end $$;
+
 create function public.add_learning_language(p_lang text)
 returns void
 language plpgsql security definer set search_path = ''
@@ -65,11 +60,9 @@ begin
     raise exception 'native and learning language must differ' using errcode = '22023';
   end if;
   if exists (select 1 from public.profile_languages where user_id = v_uid and lang = p_lang) then
-    -- Already enrolled → behave like switch (idempotent add).
     perform public.switch_learning_language_impl(v_uid, p_lang);
     return;
   end if;
-  -- Premium gate: adding a SECOND language requires an entitled subscription.
   if (select count(*) from public.profile_languages where user_id = v_uid) >= 1
      and not exists (
        select 1 from public.subscriptions
@@ -86,19 +79,6 @@ begin
   update public.profiles set learning_lang = p_lang where id = v_uid;
 end $$;
 
--- ── switch: enrolled-only; ensures the deck exists (D2) ─────────────────────
-create function public.switch_learning_language_impl(p_uid uuid, p_lang text)
-returns void
-language plpgsql security definer set search_path = ''
-as $$
-begin
-  if not exists (select 1 from public.profile_languages where user_id = p_uid and lang = p_lang) then
-    raise exception 'not_enrolled' using errcode = 'P0002';
-  end if;
-  perform public.ensure_deck_for_language(p_uid, p_lang);
-  update public.profiles set learning_lang = p_lang where id = p_uid;
-end $$;
-
 create function public.switch_learning_language(p_lang text)
 returns void
 language plpgsql security definer set search_path = ''
@@ -112,7 +92,6 @@ begin
   perform public.switch_learning_language_impl(v_uid, p_lang);
 end $$;
 
--- ── remove: un-enroll only — data is never deleted ──────────────────────────
 create function public.remove_learning_language(p_lang text)
 returns void
 language plpgsql security definer set search_path = ''
@@ -127,12 +106,11 @@ begin
     raise exception 'not_enrolled' using errcode = 'P0002';
   end if;
   if p_lang = (select learning_lang from public.profiles where id = v_uid) then
-    raise exception 'language_active' using errcode = 'P0012'; -- switch first
+    raise exception 'language_active' using errcode = 'P0012';
   end if;
   delete from public.profile_languages where user_id = v_uid and lang = p_lang;
 end $$;
 
--- ── complete_onboarding: enroll the first language (same signature) ─────────
 create or replace function public.complete_onboarding(
   p_native_lang text, p_learning_lang text, p_timezone text,
   p_display_name text default null, p_notifications_enabled boolean default false
@@ -148,7 +126,6 @@ begin
     raise exception 'not authenticated' using errcode = '42501';
   end if;
 
-  -- Idempotency: profile exists → onboarding already completed somewhere.
   if exists (select 1 from public.profiles where id = v_uid) then
     return;
   end if;
@@ -157,28 +134,23 @@ begin
     raise exception 'native and learning language must differ' using errcode = '22023';
   end if;
 
-  -- 1. Profile (langs FK-validated against languages).
   insert into public.profiles (id, display_name, native_lang, learning_lang, timezone, onboarding_complete)
   values (v_uid, nullif(trim(coalesce(p_display_name, '')), ''), p_native_lang, p_learning_lang,
           coalesce(nullif(trim(p_timezone), ''), 'UTC'), true);
 
-  -- 2. First deck, seeded from the pair; named after the learning language.
   select name into v_deck_name from public.languages where code = p_learning_lang;
   insert into public.decks (user_id, name, source_lang, target_lang)
   values (v_uid, coalesce(v_deck_name, 'My words'), p_native_lang, p_learning_lang);
 
-  -- 2b. Phase D: enroll the first learning language.
   insert into public.profile_languages (user_id, lang)
   values (v_uid, p_learning_lang)
   on conflict do nothing;
 
-  -- 3. Notification prefs with the 03 onboarding defaults.
   insert into public.notification_prefs (user_id, enabled)
   values (v_uid, p_notifications_enabled)
   on conflict (user_id) do nothing;
 end $$;
 
--- ── Grants: client API = the three named RPCs only ──────────────────────────
 revoke execute on function public.ensure_deck_for_language(uuid, text) from public, anon, authenticated;
 revoke execute on function public.switch_learning_language_impl(uuid, text) from public, anon, authenticated;
 revoke execute on function public.add_learning_language(text) from public, anon;
@@ -186,4 +158,4 @@ revoke execute on function public.switch_learning_language(text) from public, an
 revoke execute on function public.remove_learning_language(text) from public, anon;
 grant execute on function public.add_learning_language(text) to authenticated;
 grant execute on function public.switch_learning_language(text) to authenticated;
-grant execute on function public.remove_learning_language(text) to authenticated;
+grant execute on function public.remove_learning_language(text) to authenticated;;

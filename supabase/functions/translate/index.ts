@@ -32,6 +32,10 @@ const MAX_WORDS = 5;
 const MAX_GRAPHEMES = 12;
 const MAX_RESULT_WORDS = 8; // phrase_mt heuristic (16 §2)
 const RATE_LIMIT_PER_HOUR = 60; // uncached lookups per user
+// 429 hardening. Two additional layers, both on UNCACHED lookups only:
+const RATE_LIMIT_PER_MINUTE = 8; // per-user burst cap — typing bursts, not humans reading results
+const GLOBAL_LIMIT_PER_HOUR = 600; // ALL users combined — protects the shared Azure F0 resource
+// (each uncached lookup costs up to 2 Azure calls: dictionary + MT fallback)
 
 // Script consistency (mirror of the registry's script map in src/constants/languages.ts).
 // Only non-Latin scripts are listed; everything else defaults to Latin. If input has
@@ -100,24 +104,28 @@ interface AzureSense {
   backTranslations: { normalizedText: string; displayText: string; numExamples: number; frequencyCount: number }[];
 }
 
-async function dictionaryLookup(text: string, from: string, to: string): Promise<{ displaySource: string; senses: AzureSense[] } | 'error'> {
+// 'busy' = Azure throttled US (429) — surfaced to the client as OUR 429 so it
+// can show a "try again shortly" state and never auto-retry into the throttle.
+async function dictionaryLookup(text: string, from: string, to: string): Promise<{ displaySource: string; senses: AzureSense[] } | 'error' | 'busy'> {
   const res = await fetch(`${AZURE_BASE}/dictionary/lookup?api-version=3.0&from=${from}&to=${to}`, {
     method: 'POST',
     headers: azureHeaders(),
     body: JSON.stringify([{ Text: text }]),
   });
+  if (res.status === 429) return 'busy';
   if (!res.ok) return 'error';
   const [entry] = await res.json();
   const senses = ((entry?.translations ?? []) as AzureSense[]).sort((a, b) => b.confidence - a.confidence).slice(0, 5);
   return { displaySource: entry?.displaySource ?? text, senses };
 }
 
-async function mtTranslate(text: string, from: string, to: string): Promise<string | 'error'> {
+async function mtTranslate(text: string, from: string, to: string): Promise<string | 'error' | 'busy'> {
   const res = await fetch(`${AZURE_BASE}/translate?api-version=3.0&from=${from}&to=${to}`, {
     method: 'POST',
     headers: azureHeaders(),
     body: JSON.stringify([{ Text: text }]),
   });
+  if (res.status === 429) return 'busy';
   if (!res.ok) return 'error';
   const [entry] = await res.json();
   return entry?.translations?.[0]?.text ?? 'error';
@@ -225,15 +233,30 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
   if (cached) return json(rowToOutcome(cached));
 
-  // Rate limit — uncached lookups only (16 §2 cost protection).
+  // Rate limits — uncached lookups only (16 §2 cost protection). Three layers:
+  // per-user/hour (abuse), per-user/minute (typing
+  // bursts — 60/hr alone allowed all 60 inside one minute), and a GLOBAL
+  // hourly budget so the whole user base can't push the shared Azure F0
+  // resource into throttling (one throttled resource takes search down for
+  // EVERYONE).
   const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-  const { count } = await supabase
-    .from('study_events')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .eq('event', 'lookup_uncached')
-    .gte('occurred_at', hourAgo);
-  if ((count ?? 0) >= RATE_LIMIT_PER_HOUR) return json({ error: 'rate limit exceeded' }, 429);
+  const minuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
+  const countEvents = async (opts: { user?: string; since: string }) => {
+    let q = supabase
+      .from('study_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('event', 'lookup_uncached')
+      .gte('occurred_at', opts.since);
+    if (opts.user) q = q.eq('user_id', opts.user);
+    const { count } = await q;
+    return count ?? 0;
+  };
+  if ((await countEvents({ user: userId, since: minuteAgo })) >= RATE_LIMIT_PER_MINUTE)
+    return json({ error: 'rate limit exceeded' }, 429);
+  if ((await countEvents({ user: userId, since: hourAgo })) >= RATE_LIMIT_PER_HOUR)
+    return json({ error: 'rate limit exceeded' }, 429);
+  if ((await countEvents({ since: hourAgo })) >= GLOBAL_LIMIT_PER_HOUR)
+    return json({ error: 'translation service busy' }, 429);
 
   // Dictionary-first (X↔en pairs only; non-en pairs are deferred per 16 §1).
   // deno-lint-ignore no-explicit-any
@@ -247,6 +270,7 @@ Deno.serve(async (req: Request) => {
   let resolved = false;
   if (hasEnglish) {
     const dict = await dictionaryLookup(verdict.normalized, from, to);
+    if (dict === 'busy') return json({ error: 'translation service busy' }, 429);
     if (dict === 'error') return json({ error: 'translation service unavailable' }, 503);
     if (dict.senses.length > 0) {
       const [primary, ...alts] = dict.senses;
@@ -270,6 +294,7 @@ Deno.serve(async (req: Request) => {
   if (!resolved) {
     // Constrained MT fallback (16 §2): compositional phrases the dictionary lacks.
     const mt = await mtTranslate(verdict.display, from, to);
+    if (mt === 'busy') return json({ error: 'translation service busy' }, 429);
     if (mt === 'error') return json({ error: 'translation service unavailable' }, 503);
     // Identity-echo, generalized to ANY length (was: only >3-token sources). An MT
     // result identical to the input is an untranslated pass-through — persist it so

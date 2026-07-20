@@ -1,8 +1,3 @@
--- Phase E (18 §E3): user-facing archival on the existing cards.suspended flag.
--- Archiving is USER INTENT, not a perf mechanism (§2b): the due queue already
--- excludes suspended cards, queries are index-backed (card_fsrs_due_idx), and
--- nothing is ever auto-removed from FSRS. The RPC exists (vs a direct update
--- under the own-cards policy) to log the analytics event.
 create function public.set_card_suspended(p_card_id uuid, p_suspended boolean)
 returns void
 language plpgsql security definer set search_path = ''
@@ -26,4 +21,4 @@ begin
 end $$;
 
 revoke execute on function public.set_card_suspended(uuid, boolean) from public, anon;
-grant execute on function public.set_card_suspended(uuid, boolean) to authenticated;
+grant execute on function public.set_card_suspended(uuid, boolean) to authenticated;;

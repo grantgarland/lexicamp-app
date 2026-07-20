@@ -81,4 +81,4 @@ begin
   end if;
 
   return v_card_id;
-end $$;
+end $$;;

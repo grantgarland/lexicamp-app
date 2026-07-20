@@ -3,13 +3,8 @@
 // lookup/examples via the Edge Functions; saves via the save_card RPC (capture
 // gate Tier 2, 16 §2). Pure row→domain mapping lives in mappers.ts.
 //
-// Session-scoped TODOs (tracked in 08):
-// - streak / progress stats: no schema home yet (03 note) — zeros until the
-//   study_events derivations land.
-// - commitQuizSession: appends review_logs + quiz_completed event; FSRS state
-//   recompute is 2.2 (ts-fsrs).
 import { applyReview } from '@/domain/fsrs';
-import { uiRatingToFsrs, type BufferedRating, type QuizCardItem } from '@/domain/quiz';
+import { QUIZ_LENGTHS, uiRatingToFsrs, type BufferedRating, type QuizCardItem } from '@/domain/quiz';
 import type { LookupOutcome, UsageExample } from '@/domain/translation';
 import type { Card, CardFsrsState, Deck, Entitlement, NotificationPrefs, Profile, SearchDirection } from '@/domain/types';
 import { directionLangs } from '@/domain/derive';
@@ -81,7 +76,14 @@ export const supabaseDataSource: DataSource = {
     const { data, error } = await supabase.functions.invoke('translate', {
       body: { text: query, from: sourceCode, to: targetCode },
     });
-    if (error) throw new Error(error.message);
+    if (error) {
+      // 429-hardening (2026-07-19): distinguish "throttled" (our rate limits OR
+      // Azure 429 relayed by the fn) from other failures so the UI can say
+      // "busy — try again shortly" instead of a misleading "no results", and so
+      // the query layer knows never to auto-retry into a throttle.
+      const status = (error as { context?: { status?: number } }).context?.status;
+      throw new Error(status === 429 ? 'lookup_busy' : 'lookup_unavailable');
+    }
     return data as LookupOutcome;
   },
 
@@ -138,7 +140,7 @@ export const supabaseDataSource: DataSource = {
     const row: Record<string, unknown> = {};
     if (patch.displayName != null) row.display_name = patch.displayName.trim() === '' ? null : patch.displayName.trim();
     // UX-17b: ladder-validated client-side too (the column CHECK is the backstop).
-    if (patch.quizLength != null && [10, 20, 40, 80].includes(patch.quizLength)) row.quiz_length = patch.quizLength;
+    if (patch.quizLength != null && (QUIZ_LENGTHS as readonly number[]).includes(patch.quizLength)) row.quiz_length = patch.quizLength;
     if (Object.keys(row).length === 0) return;
     const { error } = await supabase.from('profiles').update(row).eq('id', await uid());
     bail(error);
