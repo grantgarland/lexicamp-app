@@ -397,7 +397,7 @@ export function QuizLengthSheet({ visible, isPaid, onClose, onUpgrade }: { visib
   return (
     <Sheet visible={visible} onClose={onClose} title={t('settings.quizTitle')}>
       <RawText style={styles.quizIntro}>{t('settings.quizInfo')}</RawText>
-      {!isPaid && <PremiumGate title={t('settings.quizCustomizeTitle')} body={t('settings.quizCustomizeBody')} onUpgrade={onUpgrade} />}
+      {!isPaid && <PremiumGate title={t('settings.quizCustomizeTitle')} body={t('settings.quizCustomizeBody', { count: QUIZ_LENGTH_FREE })} onUpgrade={onUpgrade} />}
       <View style={{ opacity: isPaid ? 1 : 0.45, marginTop: 4 }} pointerEvents={isPaid ? 'auto' : 'none'}>
         {QUIZ_OPTIONS.map((o) => {
           const sel = selected === o.n;

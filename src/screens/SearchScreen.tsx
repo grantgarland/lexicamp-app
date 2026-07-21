@@ -48,7 +48,6 @@ function toCardResult(r: LookupResult, t: (k: string, o?: Record<string, unknown
         ? {
             example: {
               source: `${example.sourcePrefix}${example.sourceTerm}${example.sourceSuffix}`,
-              target: `${example.targetPrefix}${example.targetTerm}${example.targetSuffix}`,
             },
           }
         : {}),
@@ -300,7 +299,7 @@ export function SearchView({ onClose }: { onClose: () => void }) {
           <RecentList recents={recents} onTap={setQuery} onDismiss={removeRecent} />
         </View>
       ) : (
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         {phase === 'typing' && (
           <View key="typing">
             <SkeletonCard typed={q} />
@@ -468,7 +467,7 @@ function RecentList({ recents, onTap, onDismiss }: { recents: string[]; onTap: (
     <View style={styles.recentPane}>
       <RawText style={styles.recentLabel}>{t('search.recent')}</RawText>
       <View style={styles.recentListWrap}>
-        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.recentListContent}>
+        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.recentListContent} automaticallyAdjustKeyboardInsets>
           {recents.map((word) => (
             <View key={word}>
               <Pressable onPress={() => onTap(word)} accessibilityRole="button" style={({ pressed }) => [styles.recentRow, pressed && { opacity: 0.6 }]}>

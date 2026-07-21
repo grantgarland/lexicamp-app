@@ -476,7 +476,7 @@
     "quizTitle": "Quiz Length",
     "quizInfo": "Each card takes ~2–20 seconds to review. Past ~20 minutes focus fades — 20 cards is the sweet spot for most. Remember: a short, sustainable session always beats a skipped one.",
     "quizCustomizeTitle": "Customize quiz length with Premium",
-    "quizCustomizeBody": "Free plan uses the default (40 cards).",
+    "quizCustomizeBody": "Free plan uses the default ({{count}} cards).",
     "quizRecommended": "Recommended",
     "quizCards": "{{count}} cards",
     "quizRange": "{{min}}–{{max}} min",

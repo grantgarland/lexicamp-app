@@ -476,7 +476,7 @@
     "quizTitle": "Duración del quiz",
     "quizInfo": "Cada tarjeta toma ~2–20 segundos. Pasados ~20 minutos la concentración cae — 20 tarjetas es el punto ideal para la mayoría. Recuerda: una sesión corta y sostenible siempre gana a una saltada.",
     "quizCustomizeTitle": "Personaliza la duración con Premium",
-    "quizCustomizeBody": "El plan gratuito usa el valor por defecto (40 tarjetas).",
+    "quizCustomizeBody": "El plan gratuito usa el valor por defecto ({{count}} tarjetas).",
     "quizRecommended": "Recomendado",
     "quizCards": "{{count}} tarjetas",
     "quizRange": "{{min}}–{{max}} min",

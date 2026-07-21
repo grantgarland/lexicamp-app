@@ -13,7 +13,7 @@ import { RawText as RNText } from './Text';
 
 export interface TranslationExample {
   source: string;
-  target: string;
+  target?: string;
 }
 export interface TranslationDetail {
   label: string;
@@ -164,7 +164,7 @@ function TranslationItem({
           {translation.example != null && (
             <View style={styles.exampleBox}>
               <RNText style={styles.exampleSource}>&ldquo;{translation.example.source}&rdquo;</RNText>
-              <RNText style={styles.exampleTarget}>{translation.example.target}</RNText>
+              {translation.example.target != null && <RNText style={styles.exampleTarget}>{translation.example.target}</RNText>}
             </View>
           )}
 

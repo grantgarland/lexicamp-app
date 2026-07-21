@@ -21,7 +21,8 @@
           "en",
           "es"
         ],
-        "CFBundleDevelopmentRegion": "en"
+        "CFBundleDevelopmentRegion": "en",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
