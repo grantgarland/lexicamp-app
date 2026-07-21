@@ -612,7 +612,25 @@
     "noAccount": "New to Lexicamp?",
     "legal": "By continuing you agree to our Terms & Privacy Policy.",
     "working": "One moment…",
-    "genericError": "Something went wrong. Please try again."
+    "genericError": "Something went wrong. Please try again.",
+    "forgotTitle": "Reset your password",
+    "forgotSub": "Enter your account email and we'll send you a link to set a new one.",
+    "forgotSend": "Send reset link",
+    "forgotSent": "If an account exists for {{email}}, a reset link is on its way. Open it on this device to set a new password.",
+    "backToSignIn": "Back to sign in",
+    "resetTitle": "Set a new password",
+    "resetSub": "Choose a new password for your account.",
+    "newPassword": "New password",
+    "newPasswordPlaceholder": "Enter a new password",
+    "confirmPassword": "Confirm password",
+    "confirmPasswordPlaceholder": "Re-enter the new password",
+    "passwordMismatch": "Passwords don't match.",
+    "resetSave": "Save new password",
+    "resetSuccess": "Password updated — you're signed in.",
+    "resetExpiredTitle": "Link expired or invalid",
+    "resetExpiredBody": "Reset links only work once and expire quickly. Request a new one from the sign-in screen.",
+    "resetRequestNew": "Request a new link",
+    "recoveryLinkError": "That reset link is invalid or has expired — request a new one."
   },
   "capture": {
     "reason": {

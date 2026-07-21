@@ -22,6 +22,7 @@ import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 
+import { useRecoveryLink } from '@/auth/useRecoveryLink';
 import { DevBadge } from '@/dev/DevBadge';
 import { queryClient } from '@/query/queryClient';
 import { PortalHost, Toast } from '@/ui';
@@ -32,6 +33,8 @@ import { WalkthroughProvider } from '@/tour/walkthrough';
 // weight (RN custom fonts don't select weight reliably via `fontWeight`).
 // GestureHandlerRootView + BottomSheetModalProvider are required by the Sheet kit.
 export default function RootLayout() {
+  // DF-3: turn password-recovery deep links into a session + /reset-password.
+  useRecoveryLink();
   const [fontsLoaded] = useFonts({
     Spectral: Spectral_400Regular,
     'Spectral-Medium': Spectral_500Medium,
@@ -68,6 +71,8 @@ export default function RootLayout() {
               {/* First-run + auth flows (no header, no back-swipe out). */}
               <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
               <Stack.Screen name="auth" options={{ gestureEnabled: false }} />
+              {/* Recovery deep-link target (DF-3) — no back-swipe out mid-reset. */}
+              <Stack.Screen name="reset-password" options={{ gestureEnabled: false }} />
             </Stack>
             </WalkthroughProvider>
             {/* In-app overlays (sheets/dialogs) + toasts render above everything, on top

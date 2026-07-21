@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
-import { signInWithEmail, signUpWithEmail } from '@/auth/session';
+import { requestPasswordReset, signInWithEmail, signUpWithEmail } from '@/auth/session';
 import { dataSource, USE_SUPABASE } from '@/data';
 import { defaultDisplayName } from '@/domain/derive';
 import { useTranslation } from '@/i18n';
@@ -17,7 +17,9 @@ import { registerForPush } from '@/notifications/push';
 import { useOnboardingStore } from '@/store/onboardingStore';
 import { Button, IconStar, Input, RawText, Screen } from '@/ui';
 
-type Mode = 'signup' | 'signin';
+// 'forgot' (DF-3): request a password-reset email. The emailed link deep-links
+// back into /reset-password (see auth/useRecoveryLink) — this mode only sends.
+type Mode = 'signup' | 'signin' | 'forgot';
 
 export function AuthScreen() {
   const { theme } = useUnistyles();
@@ -28,9 +30,36 @@ export function AuthScreen() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Forgot flow: the address the reset link was sent to (null = not sent yet).
+  const [resetSentTo, setResetSentTo] = useState<string | null>(null);
 
   const isSignup = mode === 'signup';
+  const isForgot = mode === 'forgot';
   const enter = () => router.replace('/');
+
+  const switchMode = (m: Mode) => {
+    setMode(m);
+    setError(null);
+    setResetSentTo(null);
+  };
+
+  // DF-3: the old handler just routed into the app ("forgot password logged me
+  // in" — prod dogfood 2026-07-20). Now it actually sends the recovery email.
+  const sendReset = async () => {
+    const addr = email.trim();
+    if (addr === '') return;
+    if (!USE_SUPABASE) return setResetSentTo(addr); // mock: pretend-send
+    setBusy(true);
+    setError(null);
+    try {
+      await requestPasswordReset(addr);
+      setResetSentTo(addr);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('auth.genericError'));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const submit = async () => {
     if (!USE_SUPABASE) return enter(); // mock mode: no network
@@ -68,26 +97,44 @@ export function AuthScreen() {
     <Screen edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <RawText style={styles.wordmark}>Lexicamp</RawText>
-        <RawText style={styles.title}>{t(isSignup ? 'auth.createTitle' : 'auth.welcomeBack')}</RawText>
-        <RawText style={styles.sub}>{t(isSignup ? 'auth.createSub' : 'auth.welcomeBackSub')}</RawText>
+        <RawText style={styles.title}>
+          {t(isForgot ? 'auth.forgotTitle' : isSignup ? 'auth.createTitle' : 'auth.welcomeBack')}
+        </RawText>
+        <RawText style={styles.sub}>
+          {isForgot
+            ? resetSentTo != null
+              ? t('auth.forgotSent', { email: resetSentTo })
+              : t('auth.forgotSub')
+            : t(isSignup ? 'auth.createSub' : 'auth.welcomeBackSub')}
+        </RawText>
 
-        <View style={styles.social}>
-          <Button title={t('auth.continueApple')} variant="secondary" onPress={enter} />
-          <Button title={t('auth.continueGoogle')} variant="secondary" onPress={enter} />
-        </View>
+        {!isForgot && (
+          <>
+            <View style={styles.social}>
+              <Button title={t('auth.continueApple')} variant="secondary" onPress={enter} />
+              <Button title={t('auth.continueGoogle')} variant="secondary" onPress={enter} />
+            </View>
 
-        <View style={styles.divider}>
-          <View style={styles.line} />
-          <RawText style={styles.or}>{t('auth.or')}</RawText>
-          <View style={styles.line} />
-        </View>
+            <View style={styles.divider}>
+              <View style={styles.line} />
+              <RawText style={styles.or}>{t('auth.or')}</RawText>
+              <View style={styles.line} />
+            </View>
+          </>
+        )}
 
-        <Input label={t('auth.email')} placeholder={t('auth.emailPlaceholder')} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
-        <View style={styles.gap} />
-        <Input label={t('auth.password')} placeholder={t(isSignup ? 'auth.passwordCreate' : 'auth.passwordEnter')} value={password} onChangeText={setPassword} secureTextEntry />
+        {!(isForgot && resetSentTo != null) && (
+          <Input label={t('auth.email')} placeholder={t('auth.emailPlaceholder')} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+        )}
+        {!isForgot && (
+          <>
+            <View style={styles.gap} />
+            <Input label={t('auth.password')} placeholder={t(isSignup ? 'auth.passwordCreate' : 'auth.passwordEnter')} value={password} onChangeText={setPassword} secureTextEntry />
+          </>
+        )}
 
-        {!isSignup && (
-          <Pressable onPress={enter} hitSlop={8} style={({ pressed }) => [styles.forgot, pressed && { opacity: 0.6 }]} accessibilityRole="button">
+        {mode === 'signin' && (
+          <Pressable onPress={() => switchMode('forgot')} hitSlop={8} style={({ pressed }) => [styles.forgot, pressed && { opacity: 0.6 }]} accessibilityRole="button">
             <RawText style={styles.forgotText}>{t('auth.forgot')}</RawText>
           </Pressable>
         )}
@@ -95,18 +142,36 @@ export function AuthScreen() {
         {error != null && <RawText style={styles.error}>{error}</RawText>}
 
         <View style={styles.cta}>
-          <Button
-            title={busy ? t('auth.working') : t(isSignup ? 'auth.createAccount' : 'auth.signIn')}
-            variant="primary"
-            onPress={busy ? undefined : submit}
-          />
+          {isForgot ? (
+            resetSentTo != null ? (
+              <Button title={t('auth.backToSignIn')} variant="primary" onPress={() => switchMode('signin')} />
+            ) : (
+              <Button title={busy ? t('auth.working') : t('auth.forgotSend')} variant="primary" onPress={busy ? undefined : sendReset} />
+            )
+          ) : (
+            <Button
+              title={busy ? t('auth.working') : t(isSignup ? 'auth.createAccount' : 'auth.signIn')}
+              variant="primary"
+              onPress={busy ? undefined : submit}
+            />
+          )}
         </View>
 
         <View style={styles.switchRow}>
-          <RawText style={styles.switchLabel}>{t(isSignup ? 'auth.haveAccount' : 'auth.noAccount')} </RawText>
-          <Pressable onPress={() => setMode(isSignup ? 'signin' : 'signup')} hitSlop={6} accessibilityRole="button">
-            <RawText style={styles.switchLink}>{t(isSignup ? 'auth.signIn' : 'auth.createAccount')}</RawText>
-          </Pressable>
+          {isForgot ? (
+            resetSentTo == null && (
+              <Pressable onPress={() => switchMode('signin')} hitSlop={6} accessibilityRole="button">
+                <RawText style={styles.switchLink}>{t('auth.backToSignIn')}</RawText>
+              </Pressable>
+            )
+          ) : (
+            <>
+              <RawText style={styles.switchLabel}>{t(isSignup ? 'auth.haveAccount' : 'auth.noAccount')} </RawText>
+              <Pressable onPress={() => switchMode(isSignup ? 'signin' : 'signup')} hitSlop={6} accessibilityRole="button">
+                <RawText style={styles.switchLink}>{t(isSignup ? 'auth.signIn' : 'auth.createAccount')}</RawText>
+              </Pressable>
+            </>
+          )}
         </View>
 
         <View style={styles.legalRow}>

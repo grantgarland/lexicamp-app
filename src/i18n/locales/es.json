@@ -612,7 +612,25 @@
     "noAccount": "¿Nuevo en Lexicamp?",
     "legal": "Al continuar aceptas nuestros Términos y Política de privacidad.",
     "working": "Un momento…",
-    "genericError": "Algo salió mal. Inténtalo de nuevo."
+    "genericError": "Algo salió mal. Inténtalo de nuevo.",
+    "forgotTitle": "Restablece tu contraseña",
+    "forgotSub": "Escribe el correo de tu cuenta y te enviaremos un enlace para crear una nueva.",
+    "forgotSend": "Enviar enlace",
+    "forgotSent": "Si existe una cuenta para {{email}}, el enlace va en camino. Ábrelo en este dispositivo para crear una nueva contraseña.",
+    "backToSignIn": "Volver a iniciar sesión",
+    "resetTitle": "Crea una nueva contraseña",
+    "resetSub": "Elige una nueva contraseña para tu cuenta.",
+    "newPassword": "Nueva contraseña",
+    "newPasswordPlaceholder": "Escribe una nueva contraseña",
+    "confirmPassword": "Confirmar contraseña",
+    "confirmPasswordPlaceholder": "Repite la nueva contraseña",
+    "passwordMismatch": "Las contraseñas no coinciden.",
+    "resetSave": "Guardar contraseña",
+    "resetSuccess": "Contraseña actualizada: sesión iniciada.",
+    "resetExpiredTitle": "Enlace caducado o no válido",
+    "resetExpiredBody": "Los enlaces solo funcionan una vez y caducan pronto. Pide uno nuevo desde la pantalla de inicio de sesión.",
+    "resetRequestNew": "Pedir un enlace nuevo",
+    "recoveryLinkError": "Ese enlace no es válido o ha caducado; pide uno nuevo."
   },
   "capture": {
     "reason": {
