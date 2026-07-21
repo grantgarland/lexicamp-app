@@ -59,6 +59,14 @@ export function IconChevronRight({ size = 14, color = STROKE }: IconProps) {
   );
 }
 
+export function IconChevronLeft({ size = 14, color = STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M15 6l-6 6 6 6" />
+    </Svg>
+  );
+}
+
 export function IconTrash({ size = 18, color = STROKE }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">

@@ -34,6 +34,7 @@ export {
   IconSearchPlus,
   IconWifi,
   IconChevronRight,
+  IconChevronLeft,
   IconChevronDown,
   IconChevronUp,
   IconArrowRight,

@@ -80,6 +80,23 @@ export function describeDataSourceContract(name: string, source: DataSource): vo
       await expect(source.switchLearningLanguage('xx-not-enrolled')).rejects.toThrow();
     });
 
+    it('remove ARCHIVES (2026-07-21): the language leaves the enrolled list; re-adding restores it', async () => {
+      const langs = await source.getLearningLanguages();
+      const active = (await source.getProfile()).targetLang;
+      const other = langs.find((l) => l !== active);
+      if (other == null) return; // single-language source — nothing removable
+      await source.removeLearningLanguage(other);
+      expect(await source.getLearningLanguages()).not.toContain(other);
+      // An archived language is no longer switchable or re-removable.
+      await expect(source.switchLearningLanguage(other)).rejects.toThrow();
+      await expect(source.removeLearningLanguage(other)).rejects.toThrow();
+      // Re-add = restore (free path server-side) + switch to it.
+      await source.addLearningLanguage(other);
+      expect(await source.getLearningLanguages()).toContain(other);
+      expect((await source.getProfile()).targetLang).toBe(other);
+      await source.switchLearningLanguage(active); // leave state as found
+    });
+
     it('getDueCards composes the session per 18 §2c: due-first ordering, cap respected, whole deck when smaller', async () => {
       // Cap respected + dueAt ascending (due-now leads, next-due fills the tail).
       const capped = await source.getDueCards(3);

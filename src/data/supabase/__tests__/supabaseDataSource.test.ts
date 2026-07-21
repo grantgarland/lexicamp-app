@@ -34,7 +34,7 @@ function mockMakeChain(rec: RecordedCall) {
       return chain;
     };
   const chain: Record<string, unknown> = {};
-  for (const m of ['select', 'eq', 'gt', 'lte', 'in', 'order', 'limit', 'update', 'upsert', 'insert', 'delete']) {
+  for (const m of ['select', 'eq', 'gt', 'lte', 'in', 'is', 'order', 'limit', 'update', 'upsert', 'insert', 'delete']) {
     chain[m] = record(m);
   }
   chain.maybeSingle = () => {
@@ -203,6 +203,26 @@ describe('commitQuizSession', () => {
     mockQueue.push(ok([])); // none of the rated cards still exist
     await supabaseDataSource.commitQuizSession({ ratings: [{ cardId: 'gone', rating: 'got_it' }] });
     expect(mockRpcCalls).toHaveLength(0);
+  });
+});
+
+describe('learning languages (archival, 2026-07-21)', () => {
+  it('getLearningLanguages excludes archived enrollments and keeps added_at order', async () => {
+    mockQueue.push(ok([{ lang: 'es' }, { lang: 'fr' }]));
+    const langs = await supabaseDataSource.getLearningLanguages();
+    expect(langs).toEqual(['es', 'fr']);
+    const call = mockCalls.find((c) => c.table === 'profile_languages')!;
+    // The archive filter is what keeps "deleted" languages out of every list
+    // surface — losing it would resurrect them app-wide.
+    expect(call.ops).toContainEqual(['is', ['archived_at', null]]);
+    expect(call.ops).toContainEqual(['order', ['added_at', { ascending: true }]]);
+  });
+
+  it('removeLearningLanguage calls the archive RPC (never a PostgREST delete)', async () => {
+    mockQueue.push(ok(null));
+    await supabaseDataSource.removeLearningLanguage('fr');
+    expect(mockRpcCalls).toEqual([['remove_learning_language', { p_lang: 'fr' }]]);
+    expect(mockCalls).toHaveLength(0); // no direct table writes — RLS has no delete policy
   });
 });
 

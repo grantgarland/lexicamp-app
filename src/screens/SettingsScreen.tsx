@@ -232,7 +232,9 @@ export function SettingsScreen() {
           router.navigate('/');
         }}
       />
-      <LanguageSwitcherSheet visible={sheet === 'languages'} onClose={() => setSheet(null)} />
+      {/* `manage` (2026-07-21): Settings is the ONLY entry point with the
+          swipe-to-delete (archive) tray — header-pill switchers stay clean. */}
+      <LanguageSwitcherSheet visible={sheet === 'languages'} manage onClose={() => setSheet(null)} />
 
       <ConfirmDialog
         visible={sheet === 'signout'}

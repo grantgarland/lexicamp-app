@@ -129,12 +129,15 @@ export interface DataSource {
   // ── Phase D: multi-language (18 §2a) ──────────────────────────────────────
   /** Enrolled learning languages, oldest first. Free = 1; premium ≤ 5. */
   getLearningLanguages(): Promise<string[]>;
-  /** Enroll + switch to a language (server gates: premium past the first, cap 5,
-   *  idempotent re-add = switch; seeds the language's deck). */
+  /** Enroll + switch to a language (server gates: premium past the first, cap 5
+   *  ACTIVE languages, idempotent re-add = switch; seeds the language's deck).
+   *  Re-adding an ARCHIVED language restores it FREE of the premium gate
+   *  (2026-07-21 ruling — a remove must never become a premium trap). */
   addLearningLanguage(lang: string): Promise<void>;
-  /** Switch the active language (enrolled-only; seeds the deck if missing). */
+  /** Switch the active language (active-enrolled only; seeds the deck if missing). */
   switchLearningLanguage(lang: string): Promise<void>;
-  /** Un-enroll a non-active language. Data is NEVER deleted — re-adding restores it. */
+  /** ARCHIVE a non-active language (2026-07-21): the enrollment is flagged, not
+   *  deleted — cards/decks/history all stay; addLearningLanguage restores. */
   removeLearningLanguage(lang: string): Promise<void>;
   /** Update editable profile fields (D6 / UX-17e). */
   updateProfile(patch: { displayName?: string; quizLength?: number }): Promise<void>;

@@ -6,20 +6,25 @@
 // tap, optimistic app-wide repaint), the per-language data reassurance line
 // (item 4.1), and "+ Add language" (premium, ≤5; free sees the upgrade gate).
 // The Settings → Learning Languages row opens the same sheet (D6) — one flow,
-// every entry point. Removal is deliberately NOT in this v1 sheet (RPC exists;
-// low-frequency op, revisit if requested).
+// every entry point. Removal (2026-07-21, Casey): SETTINGS-ONLY via the `manage`
+// prop — non-active rows gain a left-swipe Delete tray (WordRow pattern) that
+// confirms via ConfirmDialog, then ARCHIVES server-side (remove_learning_language
+// sets archived_at; words/progress survive and re-adding restores them free).
+// The header-pill entry points stay swipe-free: switching surfaces shouldn't
+// carry destructive affordances.
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
+import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { findLanguage, TRANSLATABLE_LANGUAGES } from '@/constants';
 import { languageName } from '@/domain/derive';
 import type { LanguageCode } from '@/domain/types';
 import { useTranslation } from '@/i18n';
-import { useActiveLang, useAddLanguage, useEntitlement, useLearningLanguages, useProfile, useSwitchLanguage } from '@/query/hooks';
+import { useActiveLang, useAddLanguage, useEntitlement, useLearningLanguages, useProfile, useRemoveLanguage, useSwitchLanguage } from '@/query/hooks';
 import { useUiStore } from '@/store/uiStore';
-import { IconCheck, IconChevronDown, IconGlobe, IconPlus, LanguagePickerSheet, ListItem, RawText, Sheet } from '@/ui';
+import { ConfirmDialog, IconCheck, IconChevronDown, IconChevronLeft, IconGlobe, IconPlus, IconTrash, LanguagePickerSheet, ListItem, RawText, Sheet } from '@/ui';
 
 const LANGUAGE_CAP = 5;
 
@@ -47,8 +52,11 @@ export function LanguageIndicator({ compact = false }: { compact?: boolean }) {
   );
 }
 
-/** The switcher sheet — also opened directly from Settings → Learning Languages. */
-export function LanguageSwitcherSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+/** The switcher sheet — also opened directly from Settings → Learning Languages.
+ *  `manage` (Settings entry only): non-active rows swipe open a Delete tray →
+ *  destructive confirm → archive. Other entry points omit it and stay pure
+ *  switch/add surfaces. */
+export function LanguageSwitcherSheet({ visible, onClose, manage = false }: { visible: boolean; onClose: () => void; manage?: boolean }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const router = useRouter();
@@ -59,7 +67,11 @@ export function LanguageSwitcherSheet({ visible, onClose }: { visible: boolean; 
   const { languages } = useLearningLanguages();
   const switchLang = useSwitchLanguage();
   const addLang = useAddLanguage();
+  const removeLang = useRemoveLanguage();
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Language pending delete-confirmation (manage mode). Holding the code (not a
+  // boolean) keys the dialog copy to the swiped row.
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
 
   // Add-language choices: translatable, minus native, minus already-enrolled.
   const addable = useMemo(() => {
@@ -78,6 +90,14 @@ export function LanguageSwitcherSheet({ visible, onClose }: { visible: boolean; 
       onSuccess: () => showToast({ variant: 'success', message: t('langSwitcher.switched', { lang: languageName(lang as LanguageCode) }) }),
     });
     onClose(); // optimistic repaint is already underway — close immediately
+  };
+
+  const doRemove = (lang: string) => {
+    setConfirmRemove(null);
+    removeLang.mutate(lang, {
+      onSuccess: () => showToast({ variant: 'success', message: t('langSwitcher.removed', { lang: languageName(lang as LanguageCode) }) }),
+      onError: () => showToast({ variant: 'warning', message: t('langSwitcher.removeFailed') }),
+    });
   };
 
   const doAdd = (lang: string) => {
@@ -99,25 +119,20 @@ export function LanguageSwitcherSheet({ visible, onClose }: { visible: boolean; 
         <RawText style={styles.reassure}>{t('langSwitcher.reassure')}</RawText>
 
         <View style={styles.list}>
-          {languages.map((lang, i) => {
-            const info = findLanguage(lang);
-            const active = lang === activeLang;
-            return (
-              <ListItem
-                key={lang}
-                leading={
-                  <View style={[styles.codeBadge, active && { backgroundColor: theme.color.brand }]}>
-                    <RawText style={[styles.codeBadgeText, active && { color: '#fff' }]}>{lang.toUpperCase()}</RawText>
-                  </View>
-                }
-                title={info?.nativeName ?? languageName(lang as LanguageCode)}
-                subtitle={info?.name ?? undefined}
-                trailing={active ? <IconCheck size={16} color={theme.color.brand} /> : undefined}
-                onPress={() => doSwitch(lang)}
-                last={i === languages.length - 1}
-              />
-            );
-          })}
+          {languages.map((lang, i) => (
+            <EnrolledLanguageRow
+              key={lang}
+              lang={lang}
+              active={lang === activeLang}
+              last={i === languages.length - 1}
+              // Manage mode (Settings): swipeable delete on NON-ACTIVE rows only —
+              // the server refuses to archive the active language (language_active),
+              // so the active (and thus any last-remaining) row simply doesn't swipe.
+              swipeable={manage && lang !== activeLang}
+              onPress={() => doSwitch(lang)}
+              onDelete={() => setConfirmRemove(lang)}
+            />
+          ))}
         </View>
 
         {isPaid ? (
@@ -155,7 +170,103 @@ export function LanguageSwitcherSheet({ visible, onClose }: { visible: boolean; 
         onSelect={doAdd}
         onClose={() => setPickerOpen(false)}
       />
+
+      {/* Shared destructive-confirm flow (same as delete word / delete deck /
+          sign out). Copy is honest about the archive semantics: nothing is
+          deleted, re-adding restores everything. */}
+      <ConfirmDialog
+        visible={confirmRemove != null}
+        title={t('langSwitcher.removeTitle', { lang: confirmRemove != null ? languageName(confirmRemove as LanguageCode) : '' })}
+        body={t('langSwitcher.removeBody', { lang: confirmRemove != null ? languageName(confirmRemove as LanguageCode) : '' })}
+        confirmLabel={t('langSwitcher.removeConfirm')}
+        cancelLabel={t('common.cancel')}
+        destructive
+        onConfirm={() => { if (confirmRemove != null) doRemove(confirmRemove); }}
+        onClose={() => setConfirmRemove(null)}
+      />
     </>
+  );
+}
+
+/** One enrolled-language row. In manage mode non-active rows wrap in the shared
+ *  left-swipe tray (ReanimatedSwipeable, WordRow pattern) with a single Delete
+ *  action; otherwise a plain ListItem. Own component so each swipeable row keeps
+ *  its own ref (closed before the confirm opens). */
+function EnrolledLanguageRow({
+  lang,
+  active,
+  last,
+  swipeable,
+  onPress,
+  onDelete,
+}: {
+  lang: string;
+  active: boolean;
+  last: boolean;
+  swipeable: boolean;
+  onPress: () => void;
+  onDelete: () => void;
+}) {
+  const { theme } = useUnistyles();
+  const { t } = useTranslation();
+  const ref = useRef<SwipeableMethods>(null);
+  const info = findLanguage(lang);
+
+  const face = (
+    <ListItem
+      leading={
+        <View style={[styles.codeBadge, active && { backgroundColor: theme.color.brand }]}>
+          <RawText style={[styles.codeBadgeText, active && { color: '#fff' }]}>{lang.toUpperCase()}</RawText>
+        </View>
+      }
+      title={info?.nativeName ?? languageName(lang as LanguageCode)}
+      subtitle={info?.name ?? undefined}
+      // Swipeable rows carry a LEFT chevron affordance (Casey, 2026-07-21):
+      // the row content slides left to reveal the delete tray, so the hint
+      // points the way. Active row keeps its checkmark; plain mode unchanged.
+      trailing={
+        active ? (
+          <IconCheck size={16} color={theme.color.brand} />
+        ) : swipeable ? (
+          <IconChevronLeft size={14} color={theme.color.textFaint} />
+        ) : undefined
+      }
+      onPress={onPress}
+      last={last}
+    />
+  );
+
+  if (!swipeable) return face;
+
+  return (
+    <ReanimatedSwipeable
+      ref={ref}
+      friction={2}
+      rightThreshold={40}
+      overshootRight={false}
+      containerStyle={styles.swipeRow}
+      renderRightActions={() => (
+        <View style={styles.tray}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('langSwitcher.removeA11y', { lang: languageName(lang as LanguageCode) })}
+            // Maestro tap target — trays only mount while swiped open, so at
+            // most one row's action exists at a time and the id stays unique.
+            testID="lang-row-delete"
+            style={[styles.trayAction, { backgroundColor: theme.color.danger }]}
+            onPress={() => {
+              ref.current?.close();
+              onDelete();
+            }}
+          >
+            <IconTrash size={18} color="#fff" />
+            <RawText style={styles.trayLabel}>{t('langSwitcher.removeAction')}</RawText>
+          </Pressable>
+        </View>
+      )}
+    >
+      {face}
+    </ReanimatedSwipeable>
   );
 }
 
@@ -192,5 +303,11 @@ const styles = StyleSheet.create((theme) => {
     gateBody: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted },
     gateBtn: { backgroundColor: color.accent, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
     gateBtnText: { fontFamily: fonts.sans.bold, fontSize: 12, color: color.textOnAccent },
+
+    // manage-mode swipe tray (mirrors WordRow's action anatomy)
+    swipeRow: { backgroundColor: color.surfaceCard },
+    tray: { flexDirection: 'row' },
+    trayAction: { width: 76, alignItems: 'center', justifyContent: 'center', gap: 4 },
+    trayLabel: { color: '#fff', fontSize: 9, letterSpacing: 0.3, fontFamily: fonts.sans.semibold },
   };
 });
