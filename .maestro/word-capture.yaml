@@ -59,6 +59,12 @@ tags:
 - extendedWaitUntil:
     visible: 'volar'
     timeout: 10000
+# Dismiss the autofocus keyboard before touching the lower card: the primary
+# sense (volar) expands tall, pushing the SECOND sense row (mosca) and the Save
+# button into the bottom third — behind the IME. volar (near the top) reads as
+# visible with the keyboard up; mosca and result-save do not. Re-taps on
+# search-input further down re-open the keyboard on their own.
+- hideKeyboard
 - assertVisible: 'mosca'
 
 # ── CREATE: save flips to optimistic saved state ─────────────────────────────

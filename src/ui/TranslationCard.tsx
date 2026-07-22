@@ -3,7 +3,7 @@
 // headword · phonetic) over an accordion of translations; the expanded ("current")
 // item shows an example, optional details, and a save / saved / delete action.
 import { Pressable, View } from 'react-native';
-import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
+import Animated, { LinearTransition } from 'react-native-reanimated';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
@@ -13,7 +13,7 @@ import { RawText as RNText } from './Text';
 
 export interface TranslationExample {
   source: string;
-  target?: string;
+  target: string;
 }
 export interface TranslationDetail {
   label: string;
@@ -136,15 +136,13 @@ function TranslationItem({
 }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
-  // Local binding keeps TS narrowing inside the .map closure (drops the `!`).
-  const details = translation.details;
 
   // Layout-animated shell: height animates as the current word changes; the
   // collapsed row and the expanded "current word" block crossfade in/out.
   return (
     <Animated.View layout={LinearTransition.duration(240)}>
       {!isExpanded ? (
-        <Animated.View key="collapsed" entering={FadeIn.duration(180)} exiting={FadeOut.duration(120)}>
+        <View key="collapsed">
           <Pressable onPress={onExpand} style={styles.collapsed} accessibilityRole="button">
             <View style={styles.collapsedLeft}>
               <RNText style={styles.collapsedWord}>{translation.word}</RNText>
@@ -152,9 +150,9 @@ function TranslationItem({
             </View>
             <IconChevronDown size={14} color={theme.color.textFaint} />
           </Pressable>
-        </Animated.View>
+        </View>
       ) : (
-        <Animated.View key="expanded" entering={FadeIn.duration(220)} exiting={FadeOut.duration(120)} style={styles.expanded}>
+        <View key="expanded" style={styles.expanded}>
           <View style={styles.expandedHead}>
             <RNText style={styles.eyebrow}>{t('translationCard.currentWord')}</RNText>
             <RNText style={styles.expandedWord}>{translation.word}</RNText>
@@ -164,19 +162,19 @@ function TranslationItem({
           {translation.example != null && (
             <View style={styles.exampleBox}>
               <RNText style={styles.exampleSource}>&ldquo;{translation.example.source}&rdquo;</RNText>
-              {translation.example.target != null && <RNText style={styles.exampleTarget}>{translation.example.target}</RNText>}
+              <RNText style={styles.exampleTarget}>{translation.example.target}</RNText>
             </View>
           )}
 
           {/* Details render unconditionally when present (Casey, 2026-07-16: the
               "More details" disclosure was a tap-tax paid on every lookup). */}
-          {details != null && details.length > 0 && (
+          {translation.details != null && translation.details.length > 0 && (
             <View style={styles.detailsWrap}>
               <View style={styles.detailsList}>
-                {details.map((d, i) => (
+                {translation.details.map((d, i) => (
                   <View
                     key={d.label}
-                    style={[styles.detailRow, i < details.length - 1 && styles.detailRowBorder]}
+                    style={[styles.detailRow, i < translation.details!.length - 1 && styles.detailRowBorder]}
                   >
                     <RNText style={styles.detailLabel}>{d.label}</RNText>
                     <RNText style={styles.detailValue}>{d.value}</RNText>
@@ -215,10 +213,10 @@ function TranslationItem({
               </Pressable>
             )}
             {saveable && buttonState === 'saved' && (
-              <Animated.View key="saved" entering={FadeIn.duration(200)} style={[styles.action, styles.actionSaved]} testID="result-saved">
+              <View key="saved" style={[styles.action, styles.actionSaved]} testID="result-saved">
                 <IconCheck size={17} color="#fff" />
                 <RNText style={styles.actionTextLight}>{t('translationCard.saved')}</RNText>
-              </Animated.View>
+              </View>
             )}
             {saveable && buttonState === 'delete' && (
               <Pressable onPress={onDelete} style={[styles.action, styles.actionDelete]} accessibilityRole="button" testID="result-delete">
@@ -227,7 +225,7 @@ function TranslationItem({
               </Pressable>
             )}
           </View>
-        </Animated.View>
+        </View>
       )}
     </Animated.View>
   );
