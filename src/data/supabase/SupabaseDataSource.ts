@@ -9,7 +9,7 @@ import type { LookupOutcome, UsageExample } from '@/domain/translation';
 import type { Card, CardFsrsState, Deck, Entitlement, NotificationPrefs, Profile, SearchDirection } from '@/domain/types';
 import { directionLangs } from '@/domain/derive';
 
-import type { AccountIdentity, DataSource, DeckCards, DeckSummary, Engagement, ProgressStats, WordListItem } from '../DataSource';
+import type { AccountIdentity, DataSource, DeckCards, DeckSummary, Engagement, LeaderboardEntry, ProgressStats, WordListItem } from '../DataSource';
 import { supabase } from './client';
 import {
   mapCard,
@@ -172,6 +172,18 @@ export const supabaseDataSource: DataSource = {
     const { data, error } = await supabase.rpc('set_username', { p_username: name });
     bailUsername(error);
     return data as string;
+  },
+
+  async getLeaderboard(scope: 'global' | 'language', lang?: string, limit = 50): Promise<LeaderboardEntry[]> {
+    const { data, error } = await supabase.rpc('get_leaderboard', { p_scope: scope, p_lang: lang ?? null, p_limit: limit });
+    bail(error);
+    return ((data ?? []) as { rank: number; username: string; lang_code: string; mastered: number; is_self: boolean }[]).map((r) => ({
+      rank: r.rank,
+      username: r.username,
+      langCode: r.lang_code,
+      mastered: r.mastered,
+      isSelf: r.is_self,
+    }));
   },
 
   async logEvent(event: string, props: Record<string, unknown> = {}): Promise<void> {

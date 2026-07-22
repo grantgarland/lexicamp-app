@@ -421,7 +421,12 @@
     "sessionsTipRate": "You're averaging {{rate}} sessions a day. Spacing research (Cepeda et al., 2006) shows many short sessions beat fewer long ones.",
     "accuracyTip": "Around 90% is the sweet spot: the scheduler aims for challenge without failure. Much higher means your reviews could stretch further apart.",
     "currentStreakTip": "The schedule assumes daily practice: a streak means each review lands at its optimal moment.",
-    "bestStreakTip": "Your record. Streaks aren't the goal; they're what showing up looks like."
+    "bestStreakTip": "Your record. Streaks aren't the goal; they're what showing up looks like.",
+    "tabLeaders": "Leaderboard",
+    "leaders": {
+      "global": "Global",
+      "emptyTitle": "The mountain is quiet. Get on the board by mastering more words."
+    }
   },
   "settings": {
     "title": "Settings",

@@ -10,18 +10,29 @@ that applies a migration through the Supabase connector ends by refreshing the
 mirror (`npx supabase migration fetch`) and committing it. Verify sync with
 `npx supabase migration list`.
 
-**Mirror status (2026-07-22, post-`default_reminder_time_9am`):** all 32 live
-migrations are mirrored. The 07-22 additions (`daily_free_save_allowance`,
+**Mirror status (2026-07-22, post-`leaderboard_dev_preview`):** all 35
+live migrations are mirrored. The 07-22 additions (`daily_free_save_allowance`,
 `username_identity` + `username_trigger_fn_lockdown`,
 `username_change_policy` — the R5 cycle/save redesign: `username_words`
 table, list-decomposition validation in `set_username` v2, free lifetime-1 +
-20/day caps, probe RPCs revoked — and `default_reminder_time_9am` — the
+20/day caps, probe RPCs revoked — `default_reminder_time_9am` — the
 study-reminder default moved 7pm → 9am: `notification_prefs.windows` column
 default + `run_push_scheduler()`'s free-tier effective-windows fallback,
-kept in lockstep; existing users' stored windows untouched) were hand-written
-from the exact applied SQL — verify with `npx supabase migration list`. The
-vocabulary is parity-pinned to `src/domain/username.ts` by `username.test.ts`
-(20 §3.4).
+kept in lockstep; existing users' stored windows untouched — `leaderboard_server`
++ `leaderboard_rank_ambiguity_fix` — 20-C: `get_leaderboard(scope, lang, limit)`
+SECURITY DEFINER RPC, (user, learning-language) entries ranked by mastered-word
+count, is_dev excluded, own-row pinned outside top-N; the fix migration renames
+internal CTE columns to resolve a PL/pgSQL OUT-parameter name collision the
+original definition hit on first call — and `leaderboard_dev_preview` (20-D
+follow-up): the is_dev exclusion is now CALLER-AWARE — a dev account previewing
+its own board also sees the other seeded dev-scenario accounts (real mastered
+counts from dogfood testing, no fake data needed), while every real caller's
+view is byte-for-byte unchanged) were hand-written from the exact applied SQL —
+verify with `npx supabase migration list`. The vocabulary is parity-pinned to
+`src/domain/username.ts` by `username.test.ts` (20 §3.4); the leaderboard's
+mastery threshold AND the caller-aware dev clause are parity-pinned to
+`src/domain/derive.ts`'s `MASTERY_STABILITY` by `leaderboardParity.test.ts`
+(20 §4.4).
 
 *(Prior: fetched 2026-07-21 post-`growing_free_word_cap` — Casey's fetch
 closed both the 07-18 six-file gap and the 07-21 pair.)*
@@ -64,4 +75,9 @@ without a `profiles` row (FK) — real users always have one after onboarding.
 `profiles.is_dev = true` (**exclude from all analytics**: `where not is_dev`).
 Password in `.env.local` (`EXPO_PUBLIC_DEV_SCENARIO_PASSWORD`) — never in EAS
 env. Self-service RPCs: `reset_dev_scenario()` (canonical reshape),
-`set_dev_plan('free'|'active')`.
+`set_dev_plan('free'|'active')`. **Leaderboard exception (2026-07-22,
+`leaderboard_dev_preview`):** signed in as one of these 6 accounts, the
+Leaders tab shows the OTHER 5 too — `get_leaderboard`'s is_dev filter is
+caller-aware, so a dev caller previews a populated board using these
+accounts' real dogfood data, while every non-dev user's view is unaffected
+(dev accounts stay fully invisible to them).

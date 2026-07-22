@@ -421,7 +421,12 @@
     "sessionsTipRate": "Promedias {{rate}} sesiones al día. La investigación sobre espaciado (Cepeda et al., 2006) muestra que muchas sesiones cortas superan a pocas largas.",
     "accuracyTip": "Cerca del 90% es el punto ideal: el programador busca reto sin fracaso. Mucho más alto significa que tus repasos podrían espaciarse más.",
     "currentStreakTip": "El calendario asume práctica diaria: una racha significa que cada repaso llega en su momento óptimo.",
-    "bestStreakTip": "Tu récord. Las rachas no son la meta: son el resultado de presentarse cada día."
+    "bestStreakTip": "Tu récord. Las rachas no son la meta: son el resultado de presentarse cada día.",
+    "tabLeaders": "Clasificación",
+    "leaders": {
+      "global": "Global",
+      "emptyTitle": "La montaña está en silencio. Entra en la clasificación dominando más palabras."
+    }
   },
   "settings": {
     "title": "Ajustes",

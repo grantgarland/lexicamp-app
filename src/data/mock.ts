@@ -2,14 +2,14 @@
 // scenario, so every home/progress number is DERIVED by `derive.ts` (not hardcoded).
 // Swappable for SupabaseDataSource later behind the same interface.
 import { evaluateCaptureInput } from '@/domain/capture';
-import { directionLangs } from '@/domain/derive';
+import { directionLangs, homeSnapshot } from '@/domain/derive';
 import { decomposeUsername } from '@/domain/username';
 import type { BufferedRating, QuizCardItem } from '@/domain/quiz';
 import { assessResultQuality, type DictionarySense, type LookupOutcome, type LookupResult } from '@/domain/translation';
 import type { Card, CardFsrsState, Deck, Entitlement, NotificationPrefs, Profile, SearchDirection } from '@/domain/types';
 import { type DevPlan, type DevUserState, useDevStore } from '@/store/devStore';
 
-import type { DataSource, DeckCards, DeckSummary, Engagement, ProgressStats, WordListItem } from './DataSource';
+import type { DataSource, DeckCards, DeckSummary, Engagement, LeaderboardEntry, ProgressStats, WordListItem } from './DataSource';
 
 const USER_ID = 'dev-user';
 const DECK_ID = 'dev-deck';
@@ -332,6 +332,24 @@ const scenario = () => useDevStore.getState();
 // In-memory notification prefs (03 onboarding defaults).
 const mockPrefs: NotificationPrefs = { enabled: true, frequency: 'daily', windows: [{ time: '09:00' }], minDueToNotify: 1, days: [0, 1, 2, 3, 4, 5, 6] };
 
+// 20 §4: rival fixtures for a demo leaderboard — already ≥1 mastered, spanning
+// a few languages so the Global view's flag column has something to show.
+// Simplified vs. the server's tie-breaking RANK (mastered desc, username asc):
+// the mock's fixture counts are all distinct, so a plain sort never needs it.
+const LEADERBOARD_RIVALS: { username: string; langCode: string; mastered: number }[] = [
+  { username: 'summit-wren', langCode: 'ja', mastered: 812 },
+  { username: 'alpine-elk', langCode: 'es', mastered: 640 },
+  { username: 'cedar-owl', langCode: 'fr', mastered: 505 },
+  { username: 'quick-pika', langCode: 'es', mastered: 388 },
+  { username: 'frost-hare', langCode: 'de', mastered: 240 },
+  { username: 'steady-ibex', langCode: 'ru', mastered: 176 },
+  { username: 'coral-lynx', langCode: 'zh-Hans', mastered: 129 },
+  { username: 'amber-fox', langCode: 'es', mastered: 74 },
+  { username: 'misty-crane', langCode: 'ko', mastered: 41 },
+  { username: 'golden-stag', langCode: 'fr', mastered: 12 },
+  { username: 'brave-otter', langCode: 'es', mastered: 3 },
+];
+
 export const mockDataSource: DataSource = {
   async completeOnboarding(_input) {
     // Mock profile ships onboardingComplete=true; nothing to persist.
@@ -468,6 +486,25 @@ export const mockDataSource: DataSource = {
     mockUsername = canonical;
     mockUsernameChanges += 1;
     return mockUsername;
+  },
+  // ── 20 §4: leaderboard (mock — mirrors get_leaderboard's shape) ──────────
+  async getLeaderboard(scope, lang, limit = 50): Promise<LeaderboardEntry[]> {
+    // Self entries mirror the server's (user, learning-language) grouping —
+    // only 'es' carries mock fixture data ('fr' is the fresh Phase D demo
+    // language, 0 mastered → excluded, same as the server would exclude it).
+    const deck = buildDeckCards(scenario().userState);
+    const snap = homeSnapshot(deck.cards, deck.states);
+    const selfRows =
+      snap.masteredCount > 0
+        ? mockLearningLangs.filter((l) => l === 'es').map((l) => ({ username: mockUsername, langCode: l, mastered: snap.masteredCount }))
+        : [];
+    const pool = [...LEADERBOARD_RIVALS, ...selfRows];
+    const scoped = scope === 'global' ? pool : pool.filter((e) => e.langCode === lang);
+    const ranked: LeaderboardEntry[] = scoped
+      .slice()
+      .sort((a, b) => b.mastered - a.mastered || a.username.localeCompare(b.username))
+      .map((e, i) => ({ rank: i + 1, username: e.username, langCode: e.langCode, mastered: e.mastered, isSelf: e.username === mockUsername }));
+    return ranked.filter((e) => e.rank <= limit || e.isSelf);
   },
   async logEvent() {
     // 3.4: analytics are live-mode only; mock swallows emits.

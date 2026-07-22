@@ -216,6 +216,20 @@ export function describeDataSourceContract(name: string, source: DataSource): vo
       expect((await source.getProfile()).username).toBe(before);
     });
 
+    it('getLeaderboard (20 §4): ranks ascend, no zero-mastered rows, own rows are internally consistent', async () => {
+      const global = await source.getLeaderboard('global');
+      for (const e of global) expect(e.mastered).toBeGreaterThan(0);
+      for (let i = 1; i < global.length; i += 1) expect(global[i].rank).toBeGreaterThanOrEqual(global[i - 1].rank);
+      // isSelf rows all carry the caller's OWN username — never someone else's.
+      const selfRows = global.filter((e) => e.isSelf);
+      const selfUsernames = new Set(selfRows.map((e) => e.username));
+      expect(selfUsernames.size).toBeLessThanOrEqual(1);
+
+      const lang = (await source.getProfile()).targetLang;
+      const scoped = await source.getLeaderboard('language', lang);
+      for (const e of scoped) expect(e.langCode).toBe(lang);
+    });
+
     it('getAccountIdentity returns an email + a known provider', async () => {
       const id = await source.getAccountIdentity();
       expect(['apple', 'google', 'email']).toContain(id.provider);

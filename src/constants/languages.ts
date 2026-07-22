@@ -16,6 +16,10 @@
 //   translatable  Supported as a translation target by Azure Translator (capture/search).
 //   localized     App interface is fully translated into this language (locale bundle
 //                 exists in src/i18n/locales). Today: English + Spanish.
+//   flag          Emoji flag for the leaderboard's language column (20 §4.3) — a
+//                 country conventionally associated with the language, NOT a claim
+//                 of national ownership. Languages with no single country mapping
+//                 (stateless, fictional) get 🌐.
 import type { LanguageCode } from '@/domain/types';
 
 export type TextDirection = 'ltr' | 'rtl';
@@ -43,6 +47,7 @@ export interface Language {
   script: ScriptTag;
   translatable: boolean;
   localized: boolean;
+  flag: string;
 }
 
 // Tuple form keeps the table dense + auditable against the Azure Translator list.
@@ -54,63 +59,64 @@ type Row = [
   script: ScriptTag,
   translatable: boolean,
   localized: boolean,
+  flag: string,
 ];
 
 const ROWS: Row[] = [
-  ['en', 'English', 'English', 'ltr', 'Latn', true, true],
-  ['es', 'Spanish', 'Español', 'ltr', 'Latn', true, true],
-  ['af', 'Afrikaans', 'Afrikaans', 'ltr', 'Latn', true, false],
-  ['ar', 'Arabic', 'العربية', 'rtl', 'Arab', true, false],
-  ['bg', 'Bulgarian', 'Български', 'ltr', 'Cyrl', true, false],
-  ['bn', 'Bangla', 'বাংলা', 'ltr', 'Beng', true, false],
-  ['bs', 'Bosnian', 'Bosanski', 'ltr', 'Latn', true, false],
-  ['ca', 'Catalan', 'Català', 'ltr', 'Latn', true, false],
-  ['cs', 'Czech', 'Čeština', 'ltr', 'Latn', true, false],
-  ['cy', 'Welsh', 'Cymraeg', 'ltr', 'Latn', true, false],
-  ['da', 'Danish', 'Dansk', 'ltr', 'Latn', true, false],
-  ['de', 'German', 'Deutsch', 'ltr', 'Latn', true, false],
-  ['el', 'Greek', 'Ελληνικά', 'ltr', 'Grek', true, false],
-  ['et', 'Estonian', 'Eesti', 'ltr', 'Latn', true, false],
-  ['fa', 'Persian', 'فارسی', 'rtl', 'Arab', true, false],
-  ['fi', 'Finnish', 'Suomi', 'ltr', 'Latn', true, false],
-  ['fr', 'French', 'Français', 'ltr', 'Latn', true, false],
-  ['he', 'Hebrew', 'עברית', 'rtl', 'Hebr', true, false],
-  ['hi', 'Hindi', 'हिन्दी', 'ltr', 'Deva', true, false],
-  ['hr', 'Croatian', 'Hrvatski', 'ltr', 'Latn', true, false],
-  ['hu', 'Hungarian', 'Magyar', 'ltr', 'Latn', true, false],
-  ['id', 'Indonesian', 'Indonesia', 'ltr', 'Latn', true, false],
-  ['is', 'Icelandic', 'Íslenska', 'ltr', 'Latn', true, false],
-  ['it', 'Italian', 'Italiano', 'ltr', 'Latn', true, false],
-  ['ja', 'Japanese', '日本語', 'ltr', 'Jpan', true, false],
-  ['ko', 'Korean', '한국어', 'ltr', 'Kore', true, false],
-  ['lt', 'Lithuanian', 'Lietuvių', 'ltr', 'Latn', true, false],
-  ['lv', 'Latvian', 'Latviešu', 'ltr', 'Latn', true, false],
-  ['ms', 'Malay', 'Melayu', 'ltr', 'Latn', true, false],
-  ['mt', 'Maltese', 'Malti', 'ltr', 'Latn', true, false],
-  ['mww', 'Hmong Daw', 'Hmong Daw', 'ltr', 'Latn', true, false],
-  ['nb', 'Norwegian', 'Norsk Bokmål', 'ltr', 'Latn', true, false],
-  ['nl', 'Dutch', 'Nederlands', 'ltr', 'Latn', true, false],
-  ['pl', 'Polish', 'Polski', 'ltr', 'Latn', true, false],
-  ['pt', 'Portuguese (Brazil)', 'Português (Brasil)', 'ltr', 'Latn', true, false],
-  ['ro', 'Romanian', 'Română', 'ltr', 'Latn', true, false],
-  ['ru', 'Russian', 'Русский', 'ltr', 'Cyrl', true, false],
-  ['sk', 'Slovak', 'Slovenčina', 'ltr', 'Latn', true, false],
-  ['sl', 'Slovenian', 'Slovenščina', 'ltr', 'Latn', true, false],
-  ['sr-Latn', 'Serbian', 'Srpski', 'ltr', 'Latn', true, false],
-  ['sv', 'Swedish', 'Svenska', 'ltr', 'Latn', true, false],
-  ['sw', 'Swahili', 'Kiswahili', 'ltr', 'Latn', true, false],
-  ['ta', 'Tamil', 'தமிழ்', 'ltr', 'Taml', true, false],
-  ['th', 'Thai', 'ไทย', 'ltr', 'Thai', true, false],
-  ['tlh-Latn', 'Klingon', 'Klingon', 'ltr', 'Latn', true, false],
-  ['tr', 'Turkish', 'Türkçe', 'ltr', 'Latn', true, false],
-  ['uk', 'Ukrainian', 'Українська', 'ltr', 'Cyrl', true, false],
-  ['ur', 'Urdu', 'اردو', 'rtl', 'Arab', true, false],
-  ['vi', 'Vietnamese', 'Tiếng Việt', 'ltr', 'Latn', true, false],
-  ['zh-Hans', 'Chinese', '中文 (简体)', 'ltr', 'Hans', true, false],
+  ['en', 'English', 'English', 'ltr', 'Latn', true, true, '🇺🇸'],
+  ['es', 'Spanish', 'Español', 'ltr', 'Latn', true, true, '🇪🇸'],
+  ['af', 'Afrikaans', 'Afrikaans', 'ltr', 'Latn', true, false, '🇿🇦'],
+  ['ar', 'Arabic', 'العربية', 'rtl', 'Arab', true, false, '🇸🇦'],
+  ['bg', 'Bulgarian', 'Български', 'ltr', 'Cyrl', true, false, '🇧🇬'],
+  ['bn', 'Bangla', 'বাংলা', 'ltr', 'Beng', true, false, '🇧🇩'],
+  ['bs', 'Bosnian', 'Bosanski', 'ltr', 'Latn', true, false, '🇧🇦'],
+  ['ca', 'Catalan', 'Català', 'ltr', 'Latn', true, false, '🇦🇩'],
+  ['cs', 'Czech', 'Čeština', 'ltr', 'Latn', true, false, '🇨🇿'],
+  ['cy', 'Welsh', 'Cymraeg', 'ltr', 'Latn', true, false, '🇬🇧'],
+  ['da', 'Danish', 'Dansk', 'ltr', 'Latn', true, false, '🇩🇰'],
+  ['de', 'German', 'Deutsch', 'ltr', 'Latn', true, false, '🇩🇪'],
+  ['el', 'Greek', 'Ελληνικά', 'ltr', 'Grek', true, false, '🇬🇷'],
+  ['et', 'Estonian', 'Eesti', 'ltr', 'Latn', true, false, '🇪🇪'],
+  ['fa', 'Persian', 'فارسی', 'rtl', 'Arab', true, false, '🇮🇷'],
+  ['fi', 'Finnish', 'Suomi', 'ltr', 'Latn', true, false, '🇫🇮'],
+  ['fr', 'French', 'Français', 'ltr', 'Latn', true, false, '🇫🇷'],
+  ['he', 'Hebrew', 'עברית', 'rtl', 'Hebr', true, false, '🇮🇱'],
+  ['hi', 'Hindi', 'हिन्दी', 'ltr', 'Deva', true, false, '🇮🇳'],
+  ['hr', 'Croatian', 'Hrvatski', 'ltr', 'Latn', true, false, '🇭🇷'],
+  ['hu', 'Hungarian', 'Magyar', 'ltr', 'Latn', true, false, '🇭🇺'],
+  ['id', 'Indonesian', 'Indonesia', 'ltr', 'Latn', true, false, '🇮🇩'],
+  ['is', 'Icelandic', 'Íslenska', 'ltr', 'Latn', true, false, '🇮🇸'],
+  ['it', 'Italian', 'Italiano', 'ltr', 'Latn', true, false, '🇮🇹'],
+  ['ja', 'Japanese', '日本語', 'ltr', 'Jpan', true, false, '🇯🇵'],
+  ['ko', 'Korean', '한국어', 'ltr', 'Kore', true, false, '🇰🇷'],
+  ['lt', 'Lithuanian', 'Lietuvių', 'ltr', 'Latn', true, false, '🇱🇹'],
+  ['lv', 'Latvian', 'Latviešu', 'ltr', 'Latn', true, false, '🇱🇻'],
+  ['ms', 'Malay', 'Melayu', 'ltr', 'Latn', true, false, '🇲🇾'],
+  ['mt', 'Maltese', 'Malti', 'ltr', 'Latn', true, false, '🇲🇹'],
+  ['mww', 'Hmong Daw', 'Hmong Daw', 'ltr', 'Latn', true, false, '🌐'],
+  ['nb', 'Norwegian', 'Norsk Bokmål', 'ltr', 'Latn', true, false, '🇳🇴'],
+  ['nl', 'Dutch', 'Nederlands', 'ltr', 'Latn', true, false, '🇳🇱'],
+  ['pl', 'Polish', 'Polski', 'ltr', 'Latn', true, false, '🇵🇱'],
+  ['pt', 'Portuguese (Brazil)', 'Português (Brasil)', 'ltr', 'Latn', true, false, '🇧🇷'],
+  ['ro', 'Romanian', 'Română', 'ltr', 'Latn', true, false, '🇷🇴'],
+  ['ru', 'Russian', 'Русский', 'ltr', 'Cyrl', true, false, '🇷🇺'],
+  ['sk', 'Slovak', 'Slovenčina', 'ltr', 'Latn', true, false, '🇸🇰'],
+  ['sl', 'Slovenian', 'Slovenščina', 'ltr', 'Latn', true, false, '🇸🇮'],
+  ['sr-Latn', 'Serbian', 'Srpski', 'ltr', 'Latn', true, false, '🇷🇸'],
+  ['sv', 'Swedish', 'Svenska', 'ltr', 'Latn', true, false, '🇸🇪'],
+  ['sw', 'Swahili', 'Kiswahili', 'ltr', 'Latn', true, false, '🇹🇿'],
+  ['ta', 'Tamil', 'தமிழ்', 'ltr', 'Taml', true, false, '🇮🇳'],
+  ['th', 'Thai', 'ไทย', 'ltr', 'Thai', true, false, '🇹🇭'],
+  ['tlh-Latn', 'Klingon', 'Klingon', 'ltr', 'Latn', true, false, '🌐'],
+  ['tr', 'Turkish', 'Türkçe', 'ltr', 'Latn', true, false, '🇹🇷'],
+  ['uk', 'Ukrainian', 'Українська', 'ltr', 'Cyrl', true, false, '🇺🇦'],
+  ['ur', 'Urdu', 'اردو', 'rtl', 'Arab', true, false, '🇵🇰'],
+  ['vi', 'Vietnamese', 'Tiếng Việt', 'ltr', 'Latn', true, false, '🇻🇳'],
+  ['zh-Hans', 'Chinese', '中文 (简体)', 'ltr', 'Hans', true, false, '🇨🇳'],
 ];
 
 /** Every known language, registry order. */
-export const LANGUAGES: Language[] = ROWS.map(([code, name, nativeName, dir, script, translatable, localized]) => ({
+export const LANGUAGES: Language[] = ROWS.map(([code, name, nativeName, dir, script, translatable, localized, flag]) => ({
   code,
   name,
   nativeName,
@@ -118,6 +124,7 @@ export const LANGUAGES: Language[] = ROWS.map(([code, name, nativeName, dir, scr
   script,
   translatable,
   localized,
+  flag,
 }));
 
 // Case-insensitive lookup: API tags are case-sensitive but callers often pass

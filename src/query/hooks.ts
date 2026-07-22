@@ -107,6 +107,21 @@ export function useAccountIdentity() {
   return useQuery({ queryKey: ['accountIdentity', uid], queryFn: () => ds.getAccountIdentity(), staleTime: Infinity }).data;
 }
 
+// ── 20 §4: leaderboard (Progress → Leaders tab) ─────────────────────────────
+/** `get_leaderboard` read — top-50 + the caller's own row(s). `staleTime` ~5
+ *  min per 4.4 (a leaderboard doesn't need realtime). `lang` only matters for
+ *  the 'language' scope — pass the caller's ACTIVE learning language. */
+export function useLeaderboard(scope: 'global' | 'language', lang?: string) {
+  const userState = useDevStore((s) => s.userState);
+  const uid = useUserKey();
+  const q = useQuery({
+    queryKey: ['leaderboard', scope, lang, userState, uid],
+    queryFn: () => ds.getLeaderboard(scope, lang),
+    staleTime: 5 * 60 * 1000,
+  });
+  return { entries: q.data ?? [], isLoading: q.isLoading };
+}
+
 /** Claim a CYCLED username (20 §3 v2 — candidates are local drafts; this is
  *  the only write). Optimistic cache update incl. the change counter,
  *  rollback on error. Error messages carry the machine token

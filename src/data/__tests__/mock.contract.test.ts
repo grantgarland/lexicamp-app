@@ -2,6 +2,7 @@
 // so the fixtures screens are built against always satisfy the same invariants
 // the future SupabaseDataSource must. Scenario-specific expectations live here;
 // implementation-agnostic invariants live in dataSourceContract.ts.
+import { homeSnapshot } from '@/domain/derive';
 import { isPaid } from '@/domain/types';
 import { generateUsernameCandidate } from '@/domain/username';
 import { useDevStore, type DevUserState } from '@/store/devStore';
@@ -56,6 +57,24 @@ describe('mock scenarios', () => {
     // …and the idempotent re-save of the CURRENT name still succeeds.
     const current = (await mockDataSource.getProfile()).username;
     await expect(mockDataSource.setUsername(current)).resolves.toBe(current);
+  });
+
+  it('getLeaderboard (20 §4): empty scenario has no self row; summit scenario appears with the real mastered count', async () => {
+    useDevStore.setState({ userState: 'empty' });
+    const empty = await mockDataSource.getLeaderboard('global');
+    expect(empty.some((e) => e.isSelf)).toBe(false);
+
+    useDevStore.setState({ userState: 'summit' });
+    const { cards, states } = await mockDataSource.getDeckCards();
+    const snap = homeSnapshot(cards, states);
+    const summit = await mockDataSource.getLeaderboard('global');
+    const self = summit.find((e) => e.isSelf);
+    expect(self).toBeDefined();
+    expect(self?.mastered).toBe(snap.masteredCount);
+    // language-scoped view for a language the mock has no fixture data for
+    // ('fr') never surfaces a self row — 0 mastered is excluded server-side too.
+    const frView = await mockDataSource.getLeaderboard('language', 'fr');
+    expect(frView.some((e) => e.isSelf)).toBe(false);
   });
 
   it('plan knob flips the entitlement (free ↔ paid)', async () => {

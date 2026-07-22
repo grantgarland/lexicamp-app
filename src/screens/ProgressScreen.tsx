@@ -10,15 +10,18 @@ import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
-import type { WordListItem } from '@/data/DataSource';
+import { findLanguage } from '@/constants/languages';
+import type { LeaderboardEntry, WordListItem } from '@/data/DataSource';
 import { MOUNTAIN_TIERS, mountainTier } from '@/domain/derive';
+import { formatUsername } from '@/domain/username';
 import { useTranslation } from '@/i18n';
-import { useProgressData, useWords } from '@/query/hooks';
+import { useActiveLang, useLeaderboard, useProgressData, useWords } from '@/query/hooks';
 import { getTierByStability, TIERS } from '@/theme/tiers';
-import { EmptyState, IconBook, IconChart, IconCheck, IconFire, IconInfo, IconLock, IconMountain, IconStar, RawText, Screen, SegmentedTabs, Sheet, Tooltip, WordDetailSheet, WordRow } from '@/ui';
+import { EmptyState, IconBook, IconChart, IconCheck, IconFire, IconInfo, IconLock, IconMountain, IconStar, RawText, Screen, SegmentedTabs, Sheet, SkeletonRows, Tooltip, WordDetailSheet, WordRow } from '@/ui';
 
-type SubTab = 'route' | 'inventory';
+type SubTab = 'route' | 'inventory' | 'leaders';
 type InfoKey = 'cefr' | 'fsrs';
+type LeaderScope = 'global' | 'language';
 
 // ── Mountain-tier thresholds — SOURCE OF TRUTH is domain/derive.ts MOUNTAIN_TIERS
 // (mastered-word thresholds → CEFR) + tiers.ts TIERS (registry names/colors). The
@@ -48,12 +51,14 @@ export function ProgressScreen() {
           tabs={[
             { id: 'route', label: t('progress.tabRoute') },
             { id: 'inventory', label: t('progress.tabInventory') },
+            { id: 'leaders', label: t('progress.tabLeaders') },
           ]}
         />
       </View>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {tab === 'route' && <RouteTab data={data} t={t} onInfo={setInfo} />}
         {tab === 'inventory' && <InventoryTab data={data} t={t} onInfo={setInfo} onOpenTier={setTierDrawer} />}
+        {tab === 'leaders' && <LeadersTab t={t} />}
       </ScrollView>
 
       <InfoSheet infoKey={info} t={t} onClose={() => setInfo(null)} />
@@ -344,6 +349,138 @@ function InventoryTab({ data, t, onInfo, onOpenTier }: TabProps) {
   );
 }
 
+// ── Leaders (20 §4) — Global / own-language toggle, ranked rows, ghost empty ──
+function LeadersTab({ t }: { t: TFunction }) {
+  const [scope, setScope] = useState<LeaderScope>('global');
+  const activeLang = useActiveLang();
+  const { entries, isLoading } = useLeaderboard(scope, activeLang);
+  const lang = activeLang != null ? findLanguage(activeLang) : undefined;
+
+  // R4: a multi-language user can have MULTIPLE self-rows in 'global' scope
+  // (one per enrolled language with ≥1 mastered word) — keep them all so the
+  // empty-state overlay never silently drops any of the caller's own rows.
+  const selfEntries = entries.filter((e) => e.isSelf);
+  const othersCount = entries.filter((e) => !e.isSelf).length;
+  // 4.3: a board with no OTHER entries reads as cold-start regardless of
+  // whether the caller's own row exists — same ghost treatment either way.
+  const showEmpty = !isLoading && othersCount === 0;
+
+  return (
+    <View style={styles.pad}>
+      <View style={styles.leaderToggle}>
+        <Pressable
+          onPress={() => setScope('global')}
+          style={[styles.leaderChip, scope === 'global' && styles.leaderChipActive]}
+          accessibilityRole="button"
+          accessibilityState={{ selected: scope === 'global' }}
+          accessibilityLabel={t('progress.leaders.global')}
+        >
+          <RawText style={[styles.leaderChipText, scope === 'global' && styles.leaderChipTextActive]}>🌍 {t('progress.leaders.global')}</RawText>
+        </Pressable>
+        {lang != null && (
+          <Pressable
+            onPress={() => setScope('language')}
+            style={[styles.leaderChip, scope === 'language' && styles.leaderChipActive]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: scope === 'language' }}
+            accessibilityLabel={lang.name}
+          >
+            <RawText style={[styles.leaderChipText, scope === 'language' && styles.leaderChipTextActive]} numberOfLines={1}>
+              {lang.flag} {lang.name}
+            </RawText>
+          </Pressable>
+        )}
+      </View>
+
+      {isLoading ? (
+        <SkeletonRows count={10} />
+      ) : showEmpty ? (
+        <LeadersEmpty t={t} selfEntries={selfEntries} />
+      ) : (
+        <View style={styles.leaderRows}>
+          {entries.map((e, i) => (
+            <LeaderRow key={`${e.username}-${e.langCode}-${e.rank}`} entry={e} prevRank={i > 0 ? entries[i - 1].rank : undefined} t={t} />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// Cold-start empty state (4.3): a full screen of static (non-loading) "ghost"
+// row silhouettes with the empty-state card centrally overlaid on top, plus
+// the caller's own real row (once they have ≥1 mastered word) inside the
+// overlay — same treatment for an empty global OR language view. These are
+// deliberately NOT the animated Skeleton kit: a pulsing loader implies data is
+// still arriving, which is false here — the board is confirmed empty.
+function LeadersEmpty({ t, selfEntries }: { t: TFunction; selfEntries: LeaderboardEntry[] }) {
+  return (
+    <View style={styles.leaderEmptyWrap}>
+      <View pointerEvents="none">
+        {Array.from({ length: 8 }, (_, i) => (
+          <GhostRow key={i} />
+        ))}
+      </View>
+      <View style={styles.leaderEmptyOverlay}>
+        <View style={styles.leaderEmptyCard}>
+          <RawText style={styles.leaderEmptyText}>{t('progress.leaders.emptyTitle')}</RawText>
+        </View>
+        {selfEntries.length > 0 && (
+          <View style={styles.leaderEmptySelfRow}>
+            {selfEntries.map((e) => (
+              <LeaderRow key={`${e.username}-${e.langCode}-${e.rank}`} entry={e} t={t} />
+            ))}
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+// Static rank/flag/name/count silhouette — the empty-state row shape (4.3),
+// undithered gray blocks rather than the pulsing Skeleton kit (see above).
+function GhostRow() {
+  return (
+    <View style={styles.ghostRow}>
+      <View style={styles.ghostRank} />
+      <View style={styles.ghostFlag} />
+      <View style={styles.ghostName} />
+      <View style={styles.ghostCount} />
+    </View>
+  );
+}
+
+function LeaderRow({ entry, prevRank, t }: { entry: LeaderboardEntry; prevRank?: number; t: TFunction }) {
+  const { theme } = useUnistyles();
+  const medalColor = entry.rank === 1 ? theme.palette.amber[400] : entry.rank === 2 ? theme.palette.slate[400] : entry.rank === 3 ? theme.palette.amber[700] : null;
+  const lang = findLanguage(entry.langCode);
+  // Own-row pinning (4.3): a gap between the fetched top-N and the caller's
+  // real rank renders as a divider, so the pinned row never looks adjacent.
+  const showGap = prevRank != null && entry.rank > prevRank + 1;
+  return (
+    <>
+      {showGap && (
+        <View style={styles.leaderGap}>
+          <RawText style={styles.leaderGapText}>⋯</RawText>
+        </View>
+      )}
+      <View style={[styles.leaderRow, entry.isSelf && styles.leaderRowSelf]}>
+        <View style={[styles.leaderRank, medalColor != null && { backgroundColor: medalColor }]}>
+          <RawText style={[styles.leaderRankText, medalColor != null && styles.leaderRankTextMedal]}>{entry.rank}</RawText>
+        </View>
+        <RawText style={styles.leaderFlag}>{lang?.flag ?? '🌐'}</RawText>
+        <RawText style={styles.leaderName} numberOfLines={1}>
+          {formatUsername(entry.username)}
+        </RawText>
+        <View style={styles.leaderCountWrap}>
+          <RawText style={styles.leaderCount}>{entry.mastered.toLocaleString()}</RawText>
+          <RawText style={styles.leaderCountLabel}>{t('progress.wordsSuffix')}</RawText>
+        </View>
+      </View>
+    </>
+  );
+}
+
 // ── Info sheets (CEFR ladder / FSRS stability) ────────────────────────────────
 function InfoSheet({ infoKey, t, onClose }: { infoKey: InfoKey | null; t: TFunction; onClose: () => void }) {
   const { theme } = useUnistyles();
@@ -498,5 +635,37 @@ const styles = StyleSheet.create((theme) => {
     // Tier word drawer (rows are the shared WordRow — see TierWordsSheet)
     drawerSub: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted, marginBottom: 12 },
     drawerScroll: { maxHeight: 360 },
+
+    // Leaders (20 §4)
+    leaderToggle: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+    leaderChip: { flexShrink: 1, paddingVertical: 8, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: palette.slate[100], borderWidth: theme.borderWidth.thin, borderColor: 'transparent' },
+    leaderChipActive: { backgroundColor: palette.blue[100], borderColor: palette.blue[300] },
+    leaderChipText: { fontFamily: fonts.sans.semibold, fontSize: 13, color: color.textMuted },
+    leaderChipTextActive: { color: color.brandStrong },
+    leaderRows: { gap: 8 },
+    leaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: color.surfaceCard, borderWidth: theme.borderWidth.thin, borderColor: color.border, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 12 },
+    leaderRowSelf: { backgroundColor: palette.blue[50], borderColor: palette.blue[200] },
+    leaderRank: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.slate[100] },
+    leaderRankText: { fontFamily: fonts.mono.bold, fontSize: 12, color: color.textMuted },
+    leaderRankTextMedal: { color: '#fff' },
+    leaderFlag: { fontSize: 17 },
+    leaderName: { flex: 1, fontFamily: fonts.sans.semibold, fontSize: 14, color: color.textStrong },
+    leaderCountWrap: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
+    leaderCount: { fontFamily: fonts.mono.bold, fontSize: 15, color: color.textStrong },
+    leaderCountLabel: { fontFamily: fonts.sans.regular, fontSize: 11, color: color.textMuted },
+    leaderGap: { alignItems: 'center', paddingVertical: 2 },
+    leaderGapText: { fontFamily: fonts.sans.bold, fontSize: 14, color: palette.slate[300], letterSpacing: 2 },
+
+    // Leaderboard empty state — static ghost rows behind a centered overlay card
+    leaderEmptyWrap: { position: 'relative' },
+    leaderEmptyOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
+    leaderEmptyCard: { backgroundColor: color.surfaceCard, borderWidth: theme.borderWidth.base, borderColor: color.border, borderRadius: radius.lg, paddingVertical: 20, paddingHorizontal: 22, alignItems: 'center', boxShadow: '0 8px 24px rgba(24,32,38,0.12)', maxWidth: 280 },
+    leaderEmptyText: { fontFamily: fonts.serif.semibold, fontSize: 14, lineHeight: 20, color: color.textStrong, textAlign: 'center' },
+    leaderEmptySelfRow: { width: '100%', marginTop: 12 },
+    ghostRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: color.surfaceCard, borderWidth: theme.borderWidth.thin, borderColor: color.border, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 8 },
+    ghostRank: { width: 28, height: 28, borderRadius: 14, backgroundColor: palette.slate[100] },
+    ghostFlag: { width: 20, height: 15, borderRadius: 3, backgroundColor: palette.slate[100] },
+    ghostName: { flex: 1, height: 12, borderRadius: 4, backgroundColor: palette.slate[100] },
+    ghostCount: { width: 40, height: 12, borderRadius: 4, backgroundColor: palette.slate[100] },
   };
 });

@@ -81,6 +81,19 @@ export interface AccountIdentity {
  *  decompose into official-list words (impossible via the cycle UI). */
 export type UsernameSaveError = 'username_taken' | 'username_invalid' | 'username_change_limit' | 'rate_limited';
 
+/** 20 §4: one row of `get_leaderboard` — a (user, learning-language) pair
+ *  ranked by mastered-word count. Pseudonymous only: username + language +
+ *  count, never email/displayName/ids. `isSelf` flags the caller's own
+ *  row(s) — the server includes these even outside the fetched top-N
+ *  (own-row pinning, 4.3), so a UI can render a "you" row at the bottom. */
+export interface LeaderboardEntry {
+  rank: number;
+  username: string;
+  langCode: string;
+  mastered: number;
+  isSelf: boolean;
+}
+
 /** Buffered onboarding choices → complete_onboarding RPC (03 onboarding flow). */
 export interface OnboardingInput {
   nativeLang: string;
@@ -166,6 +179,13 @@ export interface DataSource {
    *  the 20/day cap, and settles taken-races under the unique index. Resolves
    *  the saved canonical name; rejects with Error(UsernameSaveError). */
   setUsername(name: string): Promise<string>;
+  // ── 20 §4: leaderboard ────────────────────────────────────────────────────
+  /** `get_leaderboard` RPC. `scope` 'global' ranks every enrolled-language
+   *  entry together; 'language' scopes to `lang` (the caller's ACTIVE learning
+   *  language — required then). Returns the top `limit` (default 50) ordered
+   *  by rank ascending, PLUS the caller's own row(s) even outside that window
+   *  (own-row pinning). Zero-mastered entries are never included (4.3). */
+  getLeaderboard(scope: 'global' | 'language', lang?: string, limit?: number): Promise<LeaderboardEntry[]>;
   /** 3.4 app-side analytics emits (paywall_viewed, onboarding/walkthrough
    *  funnel). Fire-and-forget; implementations must never throw into UI paths.
    *  Event names are allowlisted in the implementation — server-written events
