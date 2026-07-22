@@ -434,6 +434,7 @@ export const mockDataSource: DataSource = {
     mockActiveLang = lang;
   },
   async removeLearningLanguage(lang) {
+    if (!mockLearningLangs.includes(lang)) throw new Error('not_enrolled');
     if (lang === mockActiveLang) throw new Error('language_active');
     mockLearningLangs = mockLearningLangs.filter((l) => l !== lang);
   },
