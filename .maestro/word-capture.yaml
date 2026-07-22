@@ -109,7 +109,7 @@ tags:
 - tapOn:
     id: 'search-input'
 - inputText: '12345'
-- assertVisible: "Hmm — that's not quite a card"
+- assertVisible: "Hmm, that's not quite a card"
 
 # ── DELETE UX: Word List swipe tray → confirm → toast + count drops ─────────
 - tapOn:
