@@ -10,22 +10,13 @@ that applies a migration through the Supabase connector ends by refreshing the
 mirror (`npx supabase migration fetch`) and committing it. Verify sync with
 `npx supabase migration list`.
 
-**Mirror status (audited 2026-07-18):** 19 of the 25 live migrations are
-mirrored, with version numbers matched to the live history. **Six live
-migrations are NOT yet mirrored** (applied 2026-07-06/07 but never fetched):
+**Mirror status (fetched 2026-07-21, post-`growing_free_word_cap`):** all 27
+live migrations are mirrored — Casey's fetch closed both the 07-18 six-file
+gap and the 07-21 pair (`language_archival`, `growing_free_word_cap`).
 
-| Live version | Name | What it does (per 08/session-36) |
-|---|---|---|
-| `20260706234028` | `study_stats_rpc` | `get_study_stats` (streak + study-stat derivations) |
-| `20260706234126` | `free_tier_word_cap` | original 50-word cap in `save_card` (later dropped by the 07-16 rewrites; re-shipped as `restore_free_word_cap`) |
-| `20260706234351` | `push_tokens_and_scheduler` | `push_tokens` + `push_log` tables, `run_push_scheduler()` |
-| `20260706234602` | `move_pg_net_to_extensions_schema` | advisor fix |
-| `20260707134105` | `push_copy_fix` | scheduler push copy |
-| `20260707152322` | `dev_scenarios` | dev accounts + `reset_dev_scenario`/`set_dev_plan` RPCs |
-
-To close the gap: `npx supabase migration fetch` (authenticated), then commit.
-Until then, later mirrored files reference objects (e.g. `push_tokens`) whose
-CREATE lives only in the live DB.
+*(Resolved 2026-07-22: the stray `20260721191732_language_archival.sql` — an
+authored-but-superseded duplicate of `20260721205502`, SQL-identical — was
+moved to `_to_delete/`; `npx supabase migration list` is clean.)*
 
 ⚠️ Lesson (2026-07-17, cap regression): any `create or replace` of an RPC must
 start from the LIVE definition (`pg_get_functiondef`), never the last local

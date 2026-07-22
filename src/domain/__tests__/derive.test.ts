@@ -6,6 +6,9 @@ import { getTier, TIERS } from '@/theme/tiers';
 import {
   defaultDisplayName,
   directionLangs,
+  FREE_DAILY_SAVES,
+  FREE_WORD_BASE,
+  freeTierUsage,
   homeSnapshot,
   languageName,
   MASTERY_STABILITY,
@@ -189,5 +192,49 @@ describe('defaultDisplayName (18 §A7)', () => {
   });
   test('prefers a provider-supplied name', () => {
     expect(defaultDisplayName('x@y.com', '  Casey G  ')).toBe('Casey G');
+  });
+});
+
+describe('freeTierUsage (DF-9 v2 / spec 19 rev — mirrors the save_card cap rule)', () => {
+  test('starter phase until the 50th word, at any pace', () => {
+    expect(freeTierUsage(0, 0)).toEqual({ phase: 'starter', saved: 0, limit: FREE_WORD_BASE });
+    // A 49-in-one-day binge is still starter — daily saves don't matter yet.
+    expect(freeTierUsage(49, 49)).toEqual({ phase: 'starter', saved: 49, limit: FREE_WORD_BASE });
+  });
+
+  test('daily phase from 50 total: counter is today-only and clamps at the limit', () => {
+    expect(freeTierUsage(50, 0)).toEqual({ phase: 'daily', saved: 50, usedToday: 0, limit: FREE_DAILY_SAVES });
+    expect(freeTierUsage(72, 3)).toEqual({ phase: 'daily', saved: 72, usedToday: 3, limit: FREE_DAILY_SAVES });
+    // Crossing-day boundary (19 rev): starter saves can share the day — clamp for display.
+    expect(freeTierUsage(53, 53)).toMatchObject({ phase: 'daily', usedToday: FREE_DAILY_SAVES });
+  });
+
+  test('non-banking is structural: an idle day leaves usedToday at 0, never adds capacity', () => {
+    const idle = freeTierUsage(80, 0);
+    expect(idle).toEqual({ phase: 'daily', saved: 80, usedToday: 0, limit: FREE_DAILY_SAVES });
+  });
+
+  test('negative addedToday (defensive) clamps to 0', () => {
+    expect(freeTierUsage(60, -2)).toMatchObject({ phase: 'daily', usedToday: 0 });
+  });
+
+  test('ratified knobs (Casey 2026-07-22 v2): 50 starter + 5/day, daily reset', () => {
+    expect(FREE_WORD_BASE).toBe(50);
+    expect(FREE_DAILY_SAVES).toBe(5);
+  });
+});
+
+describe('homeSnapshot — archived (suspended) cards (07-17c ruling)', () => {
+  it('keeps archived words in earned counts but out of the due queue', () => {
+    const states = [
+      state({ cardId: 'live', dueAt: new Date(NOW.getTime() - HOUR), stability: MASTERY_STABILITY }),
+      state({ cardId: 'arch', dueAt: new Date(NOW.getTime() - HOUR), stability: MASTERY_STABILITY }),
+    ];
+    const cards = [card({ id: 'live' }), card({ id: 'arch', suspended: true })];
+    const snap = homeSnapshot(cards, states, NOW);
+    expect(snap.wordsSaved).toBe(2); // earned: archived counts (matches Words header + server cap)
+    expect(snap.masteredCount).toBe(2); // earned: archived counts
+    expect(snap.tierCounts.reduce((a, b) => a + b, 0)).toBe(2);
+    expect(snap.needRecallTotal).toBe(1); // queue: archived excluded
   });
 });

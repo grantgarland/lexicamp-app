@@ -115,13 +115,7 @@ export const supabaseDataSource: DataSource = {
   },
 
   async getLearningLanguages(): Promise<string[]> {
-    // Language archival (2026-07-21): archived enrollments keep their row (and
-    // added_at) but leave every list/switcher surface — only ACTIVE ones render.
-    const { data, error } = await supabase
-      .from('profile_languages')
-      .select('lang, added_at')
-      .is('archived_at', null)
-      .order('added_at', { ascending: true });
+    const { data, error } = await supabase.from('profile_languages').select('lang, added_at').order('added_at', { ascending: true });
     bail(error);
     return ((data ?? []) as { lang: string }[]).map((r) => r.lang);
   },
@@ -137,8 +131,6 @@ export const supabaseDataSource: DataSource = {
   },
 
   async removeLearningLanguage(lang: string): Promise<void> {
-    // Archival, not deletion (2026-07-21): the RPC sets archived_at — cards,
-    // decks and history stay put; add_learning_language restores free of charge.
     const { error } = await supabase.rpc('remove_learning_language', { p_lang: lang });
     bail(error);
   },
@@ -210,10 +202,14 @@ export const supabaseDataSource: DataSource = {
 
   async getDeckCards(lang?: string): Promise<DeckCards> {
     const target = lang ?? (await this.getProfile()).targetLang;
+    // Archived (suspended) cards ARE included (07-17c ruling: archiving never
+    // removes a word from earned counts — it was excluded here, which made
+    // Home/Progress/Settings totals disagree with the Words header and the
+    // server cap by the archived count). homeSnapshot excludes suspended from
+    // the due-queue numbers only.
     const { data, error } = await supabase
       .from('cards')
       .select(CARD_JOIN)
-      .eq('suspended', false)
       .eq('decks.target_lang', target);
     bail(error);
     const rows = (data ?? []) as unknown as JoinedCardRow[];

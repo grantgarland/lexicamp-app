@@ -19,6 +19,7 @@ export interface ProfileRow {
   timezone: string;
   onboarding_complete: boolean;
   quiz_length: number;
+  created_at: string;
 }
 
 export interface SubscriptionRow {
@@ -131,6 +132,7 @@ export const mapProfile = (r: ProfileRow): Profile => ({
   timezone: r.timezone,
   onboardingComplete: r.onboarding_complete,
   quizLength: r.quiz_length,
+  createdAt: new Date(r.created_at),
 });
 
 /** Absent subscriptions row = free tier (the row is created by the RevenueCat webhook). */

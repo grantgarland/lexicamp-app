@@ -17,6 +17,8 @@ export interface Profile {
   onboardingComplete: boolean;
   /** UX-17b: server mirror of the quiz-length pref (10/20/40/80; default 20). */
   quizLength: number;
+  /** Signup time (account age; the DF-9 v2 free tier no longer derives from it). */
+  createdAt: Date;
 }
 
 /** subscriptions (mirror of RevenueCat) */

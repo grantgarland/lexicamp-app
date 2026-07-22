@@ -10,6 +10,7 @@ import { type ReactNode, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { FREE_DAILY_SAVES, FREE_WORD_BASE, freeTierUsage } from '@/domain/derive';
 import { useTranslation } from '@/i18n';
 import { useEntitlement, useHomeData, useLearningLanguages, useNotificationPrefs, useProfile } from '@/query/hooks';
 import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
@@ -35,7 +36,6 @@ import {
   Screen,
 } from '@/ui';
 
-const FREE_WORD_LIMIT = 50;
 const FREE_FEATURES = ['featureUnlimited', 'featureDecks', 'featureLanguages'] as const;
 type SheetId = 'about' | 'signout' | 'editProfile' | 'notifications' | 'quizLength' | 'support' | 'howItWorks' | 'languages' | null;
 
@@ -56,7 +56,16 @@ export function SettingsScreen() {
 
   const initial = (profile?.displayName ?? 'L').charAt(0).toUpperCase();
   const profileSub = t('settings.profileNative', { lang: t(`languages.${profile?.nativeLang ?? 'en'}`) });
-  const usagePct = Math.min(100, Math.round((wordsSaved / FREE_WORD_LIMIT) * 100));
+  // DF-9 v2 (spec 19 rev): two-phase meter — the 50-word starter allotment,
+  // then the 5-a-day counter (resets daily, never banks). addedToday comes from
+  // homeSnapshot (device-local day; server enforces with the profile timezone).
+  // Note: snapshot is active-language-scoped, but free users have exactly one
+  // language (multi-language is premium), so per-language == total here.
+  const usage = freeTierUsage(wordsSaved, snapshot?.addedToday ?? 0);
+  const usagePct =
+    usage.phase === 'starter'
+      ? Math.min(100, Math.round((usage.saved / usage.limit) * 100))
+      : Math.min(100, Math.round((usage.usedToday / usage.limit) * 100));
   // Honest row state (17 §S1): the subtitle reflects the user's actual reminder
   // prefs; free users are NOT shown a premium badge here — the toggle is free,
   // only the custom time is gated (inside the sheet).
@@ -156,7 +165,17 @@ export function SettingsScreen() {
             <>
               <View style={styles.planCard}>
                 <RawText style={styles.freePlanName}>{t('settings.freePlan')}</RawText>
-                <RawText style={styles.usageText}>{t('settings.wordsSavedOf', { count: wordsSaved, limit: FREE_WORD_LIMIT })}</RawText>
+                {usage.phase === 'starter' ? (
+                  <>
+                    <RawText style={styles.usageText}>{t('settings.wordsSavedOf', { count: usage.saved, limit: usage.limit })}</RawText>
+                    <RawText style={styles.usageGrows}>{t('settings.starterHint', { base: FREE_WORD_BASE, daily: FREE_DAILY_SAVES })}</RawText>
+                  </>
+                ) : (
+                  <>
+                    <RawText style={styles.usageText}>{t('settings.dailySavesUsed', { used: usage.usedToday, limit: usage.limit })}</RawText>
+                    <RawText style={styles.usageGrows}>{t('settings.dailyHint', { count: usage.saved })}</RawText>
+                  </>
+                )}
                 <View style={styles.usageTrack}>
                   <View style={[styles.usageFill, { width: `${usagePct}%`, backgroundColor: usagePct > 90 ? theme.color.danger : theme.color.brand }]} />
                 </View>
@@ -232,9 +251,7 @@ export function SettingsScreen() {
           router.navigate('/');
         }}
       />
-      {/* `manage` (2026-07-21): Settings is the ONLY entry point with the
-          swipe-to-delete (archive) tray — header-pill switchers stay clean. */}
-      <LanguageSwitcherSheet visible={sheet === 'languages'} manage onClose={() => setSheet(null)} />
+      <LanguageSwitcherSheet visible={sheet === 'languages'} onClose={() => setSheet(null)} />
 
       <ConfirmDialog
         visible={sheet === 'signout'}
@@ -297,7 +314,8 @@ const styles = StyleSheet.create((theme) => {
     freePlanName: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.textStrong, marginBottom: 4 },
     planSub: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted },
 
-    usageText: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted, marginBottom: 8 },
+    usageText: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted, marginBottom: 2 },
+    usageGrows: { fontFamily: fonts.sans.regular, fontSize: 11, color: color.textFaint, marginBottom: 8 },
     usageTrack: { height: 4, backgroundColor: color.surfaceSunken, borderRadius: 2, overflow: 'hidden' },
     usageFill: { height: '100%', borderRadius: 2 },
 

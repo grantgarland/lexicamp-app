@@ -79,6 +79,7 @@ describe('mapProfile / mapEntitlement', () => {
       timezone: 'America/New_York',
       onboarding_complete: true,
       quiz_length: 20,
+      created_at: '2026-07-01T00:00:00Z',
     });
     expect(p).toEqual({
       id: 'u1',
@@ -88,6 +89,7 @@ describe('mapProfile / mapEntitlement', () => {
       timezone: 'America/New_York',
       onboardingComplete: true,
       quizLength: 20,
+      createdAt: new Date('2026-07-01T00:00:00Z'),
     });
   });
 

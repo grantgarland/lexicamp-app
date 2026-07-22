@@ -229,9 +229,11 @@ export function SearchView({ onClose }: { onClose: () => void }) {
             n.delete(id);
             return n;
           });
-          // Server-enforced free-tier cap (3.2) → this IS the value moment; route
-          // to the paywall rather than showing a dead error.
-          if (e instanceof Error && e.message.includes('free_word_cap')) router.push('/paywall');
+          // Server-enforced free-tier cap (3.2, growing allowance per 19) → this
+          // IS the value moment; route to the paywall rather than showing a dead
+          // error. `word_pace` selects the pace-framed copy + segments analytics.
+          if (e instanceof Error && e.message.includes('free_word_cap'))
+            router.push({ pathname: '/paywall', params: { trigger: 'word_pace' } });
         },
       },
     );

@@ -519,7 +519,10 @@
     "profileNative": "Idioma nativo: {{lang}}",
     "profileSaved": "Perfil actualizado",
     "notifOsBlocked": "Las notificaciones están bloqueadas en los ajustes de tu dispositivo, así que los recordatorios no pueden llegar.",
-    "notifOpenSettings": "Abrir ajustes del sistema →"
+    "notifOpenSettings": "Abrir ajustes del sistema →",
+    "starterHint": "Tus primeras {{base}} palabras van por nuestra cuenta; después, guarda hasta {{daily}} palabras nuevas al día.",
+    "dailySavesUsed": "{{used}} de {{limit}} guardados usados hoy",
+    "dailyHint": "{{count}} palabras guardadas en total; tu límite diario se restablece cada día."
   },
   "deckRow": {
     "studyA11y": "Estudiar mazo",
@@ -551,7 +554,9 @@
     "legal": "Cancela cuando quieras en la tienda. Aplican Términos y Privacidad.",
     "successTitle": "¡Bienvenido! Tu cumbre te espera",
     "successBody": "Tu prueba gratis de 7 días ha comenzado — sin cargos hasta entonces. A escalar.",
-    "continue": "Continuar"
+    "continue": "Continuar",
+    "paceHeading": "Aprendes más rápido que el ritmo gratuito",
+    "paceSub": "Ya usaste los {{daily}} guardados gratis de hoy. Mañana se desbloquean {{daily}} más, o pásate a Premium y no esperes nunca."
   },
   "onboarding": {
     "getStarted": "Empezar",
@@ -664,14 +669,7 @@
     "switched": "Ahora aprendes {{lang}}",
     "added": "{{lang}} añadido — ya lo estás aprendiendo",
     "addFailed": "No se pudo añadir el idioma — inténtalo de nuevo.",
-    "indicatorA11y": "Idioma activo: {{lang}}. Abre el selector de idiomas.",
-    "removeAction": "Eliminar",
-    "removeA11y": "Eliminar {{lang}}",
-    "removeTitle": "¿Eliminar {{lang}}?",
-    "removeBody": "Tus palabras y progreso de {{lang}} se archivarán — no se elimina nada. Añade el idioma de nuevo cuando quieras y todo volverá.",
-    "removeConfirm": "Eliminar idioma",
-    "removed": "{{lang}} eliminado — tus palabras quedan archivadas",
-    "removeFailed": "No se pudo eliminar el idioma — inténtalo de nuevo."
+    "indicatorA11y": "Idioma activo: {{lang}}. Abre el selector de idiomas."
   },
   "walkthrough": {
     "w1Title": "Tu base de operaciones",

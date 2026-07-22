@@ -3,11 +3,12 @@
 // Unlock CTA. Annual/monthly plan selector, feature list, trial CTA, restore, and a
 // post-purchase success state. Entitlement writes land with RevenueCat later; the CTA
 // currently just shows the success confirmation.
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { FREE_DAILY_SAVES } from '@/domain/derive';
 import { useTranslation } from '@/i18n';
 import { useLogEvent } from '@/query/hooks';
 import { Button, IconChart, IconCheck, IconFolderPlus, IconGlobe, IconInfinity, IconStar, IconX, RawText, Screen } from '@/ui';
@@ -20,10 +21,16 @@ export function PaywallScreen() {
   const router = useRouter();
   const [plan, setPlan] = useState<Plan>('annual');
   const [purchased, setPurchased] = useState(false);
-  // 3.4: conversion-funnel top — one emit per paywall presentation.
+  // DF-9 v2 (19 rev §5): `trigger=word_pace` = arrived by spending today's
+  // daily saves (or the starter allotment) → pace-framed heading instead of
+  // the generic upsell.
+  const { trigger } = useLocalSearchParams<{ trigger?: string }>();
+  const isPace = trigger === 'word_pace';
+  // 3.4: conversion-funnel top — one emit per paywall presentation. The trigger
+  // prop segments DF-9's pace paywall against the old flat-cap funnel.
   const logEvent = useLogEvent();
   useEffect(() => {
-    logEvent('paywall_viewed');
+    logEvent('paywall_viewed', trigger != null ? { trigger } : undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -65,8 +72,10 @@ export function PaywallScreen() {
         <View style={styles.crest}>
           <IconStar size={30} color={theme.color.textOnAccent} />
         </View>
-        <RawText style={styles.heading}>{t('paywall.heading')}</RawText>
-        <RawText style={styles.sub}>{t('paywall.sub')}</RawText>
+        <RawText style={styles.heading}>{t(isPace ? 'paywall.paceHeading' : 'paywall.heading')}</RawText>
+        <RawText style={styles.sub}>
+          {isPace ? t('paywall.paceSub', { daily: FREE_DAILY_SAVES }) : t('paywall.sub')}
+        </RawText>
 
         <View style={styles.featureList}>
           {features.map(({ Icon, label }) => (

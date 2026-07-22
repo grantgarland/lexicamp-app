@@ -12,6 +12,28 @@ import type { Card, CardFsrsState, LanguageCode, Profile, SearchDirection, WordL
 /** Summit-stability threshold (days) = "mastered" (03). */
 export const MASTERY_STABILITY = 30;
 
+// ── DF-9 v2 free tier (spec 19 rev, Casey correction 2026-07-22) ─────────────
+// MIRROR of the save_card cap rule in migration `daily_free_save_allowance`:
+// a 50-card STARTER allotment at any pace, then at most 5 saves per day —
+// the daily 5 resets each day and never banks (capacity grows only with use).
+// The SERVER is authoritative (P0004 free_word_cap, profile-timezone day);
+// this client copy exists only for display (Settings meter, paywall copy) and
+// uses the device-local day via homeSnapshot.addedToday. Change both or neither.
+export const FREE_WORD_BASE = 50;
+export const FREE_DAILY_SAVES = 5;
+
+export type FreeTierUsage =
+  | { phase: 'starter'; saved: number; limit: number }
+  | { phase: 'daily'; saved: number; usedToday: number; limit: number };
+
+/** Which free-tier meter to show: the starter allotment (until 50 total) or
+ *  the daily counter (after). `usedToday` clamps at the daily limit — on the
+ *  day the user crosses 50, starter saves share the day (19 rev boundary note). */
+export function freeTierUsage(saved: number, addedToday: number): FreeTierUsage {
+  if (saved < FREE_WORD_BASE) return { phase: 'starter', saved, limit: FREE_WORD_BASE };
+  return { phase: 'daily', saved, usedToday: Math.min(Math.max(0, addedToday), FREE_DAILY_SAVES), limit: FREE_DAILY_SAVES };
+}
+
 const startOfDay = (now: Date): Date => {
   const d = new Date(now);
   d.setHours(0, 0, 0, 0);
@@ -126,6 +148,12 @@ export function homeSnapshot(cards: Card[], states: CardFsrsState[], now: Date =
   const sod = startOfDay(now);
   const in24 = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
+  // 07-17c ruling: archived words stay in EARNED counts (wordsSaved, tiers,
+  // mastered, addedToday) but leave the review queue — so only the due
+  // numbers below skip suspended cards.
+  const suspendedIds = new Set<string>();
+  for (const c of cards) if (c.suspended) suspendedIds.add(c.id);
+
   const tierCounts = [0, 0, 0, 0, 0];
   let masteredCount = 0;
   let needRecallTotal = 0;
@@ -141,7 +169,7 @@ export function homeSnapshot(cards: Card[], states: CardFsrsState[], now: Date =
       tierCounts[idx] += 1;
       if (s.stability >= MASTERY_STABILITY) masteredCount += 1;
     }
-    if (s.state > 0) {
+    if (s.state > 0 && !suspendedIds.has(s.cardId)) {
       if (s.dueAt.getTime() <= now.getTime()) {
         needRecallTotal += 1;
         if (s.dueAt.getTime() >= sod.getTime()) needRecallToday += 1;

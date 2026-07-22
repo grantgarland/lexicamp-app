@@ -18,10 +18,6 @@ const DECK_ID = 'dev-deck';
 // (empty) language, which makes the switch repaint unmistakable in dev.
 let mockLearningLangs: string[] = ['es', 'fr'];
 let mockActiveLang = 'es';
-// Language archival (2026-07-21): archived enrollments keep their slot in
-// mockLearningLangs (so a restore reappears in original added-order, matching
-// the server's preserved added_at) but are filtered from every read.
-const mockArchivedLangs = new Set<string>();
 let mockDisplayName = 'Casey';
 // E3: archived word ids (mock words rebuild per call; this overlays the flag).
 let mockArchived = new Set<string>();
@@ -34,6 +30,9 @@ const PROFILE: Profile = {
   timezone: 'America/New_York',
   onboardingComplete: true,
   quizLength: 20,
+  // 60 days back → allowance 350 in mock: roomy, and stable enough that dev
+  // screens never bump the mock cap in normal use.
+  createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
 };
 
 const DECK: Deck = { id: DECK_ID, userId: USER_ID, name: 'Spanish', sourceLang: 'en', targetLang: 'es' };
@@ -424,24 +423,19 @@ export const mockDataSource: DataSource = {
 
   // ── Phase D: multi-language (mock) ──────────────────────────────────────
   async getLearningLanguages() {
-    return mockLearningLangs.filter((l) => !mockArchivedLangs.has(l));
+    return [...mockLearningLangs];
   },
   async addLearningLanguage(lang) {
-    // Mirrors add_learning_language: an archived enrollment RESTORES (free);
-    // otherwise enroll. Both switch to the language.
-    mockArchivedLangs.delete(lang);
     if (!mockLearningLangs.includes(lang)) mockLearningLangs = [...mockLearningLangs, lang];
     mockActiveLang = lang;
   },
   async switchLearningLanguage(lang) {
-    if (!mockLearningLangs.includes(lang) || mockArchivedLangs.has(lang)) throw new Error('not_enrolled');
+    if (!mockLearningLangs.includes(lang)) throw new Error('not_enrolled');
     mockActiveLang = lang;
   },
   async removeLearningLanguage(lang) {
-    // Archival, not deletion (2026-07-21): flag it; data/order survive for restore.
     if (lang === mockActiveLang) throw new Error('language_active');
-    if (!mockLearningLangs.includes(lang) || mockArchivedLangs.has(lang)) throw new Error('not_enrolled');
-    mockArchivedLangs.add(lang);
+    mockLearningLangs = mockLearningLangs.filter((l) => l !== lang);
   },
   async updateProfile(patch) {
     if (patch.displayName != null) mockDisplayName = patch.displayName.trim() || 'Casey';

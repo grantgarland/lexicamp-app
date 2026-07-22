@@ -139,4 +139,4 @@ begin
   insert into public.profile_languages (user_id, lang) values (v_uid, p_lang);
   perform public.ensure_deck_for_language(v_uid, p_lang);
   update public.profiles set learning_lang = p_lang where id = v_uid;
-end $$;
+end $$;;

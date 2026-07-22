@@ -519,7 +519,10 @@
     "profileNative": "Native language: {{lang}}",
     "profileSaved": "Profile updated",
     "notifOsBlocked": "Notifications are blocked in your device settings, so reminders can’t be delivered.",
-    "notifOpenSettings": "Open system settings →"
+    "notifOpenSettings": "Open system settings →",
+    "starterHint": "Your first {{base}} words are on us — after that, save up to {{daily}} new words a day.",
+    "dailySavesUsed": "{{used}} of {{limit}} saves used today",
+    "dailyHint": "{{count}} words saved in total — your daily allowance resets every day."
   },
   "deckRow": {
     "studyA11y": "Study deck",
@@ -551,7 +554,9 @@
     "legal": "Cancel anytime in the store. Terms & Privacy apply.",
     "successTitle": "Welcome! Your summit awaits",
     "successBody": "Your 7-day free trial has started — no charges until then. Time to climb.",
-    "continue": "Continue"
+    "continue": "Continue",
+    "paceHeading": "You're learning faster than the free pace",
+    "paceSub": "You've used today's {{daily}} free saves. {{daily}} more unlock tomorrow — or go Premium and never wait."
   },
   "onboarding": {
     "getStarted": "Get started",
@@ -664,14 +669,7 @@
     "switched": "Now learning {{lang}}",
     "added": "{{lang}} added — you’re learning it now",
     "addFailed": "Couldn’t add the language — try again.",
-    "indicatorA11y": "Active language: {{lang}}. Opens the language switcher.",
-    "removeAction": "Delete",
-    "removeA11y": "Delete {{lang}}",
-    "removeTitle": "Remove {{lang}}?",
-    "removeBody": "Your {{lang}} words and progress will be archived — nothing is deleted. Add the language again anytime and everything comes right back.",
-    "removeConfirm": "Remove language",
-    "removed": "{{lang}} removed — your words are archived",
-    "removeFailed": "Couldn’t remove the language — try again."
+    "indicatorA11y": "Active language: {{lang}}. Opens the language switcher."
   },
   "walkthrough": {
     "w1Title": "Your home base",
