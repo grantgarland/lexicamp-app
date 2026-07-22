@@ -537,7 +537,7 @@
     "heading": "Reach mastery faster",
     "sub": "Upgrade to unlock everything Lexicamp offers.",
     "featureUnlimited": "Unlimited saved words",
-    "featureDecks": "Custom study decks",
+    "featureDecks": "Custom cards and study decks",
     "featureLanguages": "Learn up to 5 languages at once",
     "featureOffline": "The optimal route to vocabulary mastery",
     "annual": "Annual",
@@ -546,7 +546,7 @@
     "bestValue": "Best value",
     "monthly": "Monthly",
     "monthlyPrice": "$7.99/mo",
-    "monthlySub": "$95.88/yr · billed monthly",
+    "monthlySub": "$7.99/mo · billed monthly",
     "trialNote": "7-day free trial",
     "ctaTrial": "Start 7-day free trial",
     "ctaSubscribe": "Subscribe",
@@ -555,8 +555,8 @@
     "successTitle": "Welcome! Your summit awaits",
     "successBody": "Your 7-day free trial has started — no charges until then. Time to climb.",
     "continue": "Continue",
-    "paceHeading": "You're learning faster than the free pace",
-    "paceSub": "You've used today's {{daily}} free saves. {{daily}} more unlock tomorrow — or go Premium and never wait."
+    "paceHeading": "You've reached your daily limit",
+    "paceSub": "You've exhausted today's {{daily}} free save limit. {{daily}} more saves unlock tomorrow, or upgrade to secure uninterrupted learning."
   },
   "onboarding": {
     "getStarted": "Get started",
