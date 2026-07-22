@@ -67,6 +67,20 @@ export interface ProgressStats {
   daysActive: number;
 }
 
+/** 20 §3.1: the read-only Account block in Edit Profile. `provider` is the
+ *  auth path the account was created with — immutable, honest-UI displayed. */
+export interface AccountIdentity {
+  email: string | null;
+  provider: 'apple' | 'google' | 'email';
+}
+
+/** 20 §3.3 v2 (R5): tokens `setUsername` rejects with (Error.message).
+ *  `username_taken` = the drafted name was claimed between cycle and save;
+ *  `username_change_limit` = free tier's single change already spent;
+ *  `rate_limited` = 20 saves/day cap; `username_invalid` = name does not
+ *  decompose into official-list words (impossible via the cycle UI). */
+export type UsernameSaveError = 'username_taken' | 'username_invalid' | 'username_change_limit' | 'rate_limited';
+
 /** Buffered onboarding choices → complete_onboarding RPC (03 onboarding flow). */
 export interface OnboardingInput {
   nativeLang: string;
@@ -139,8 +153,19 @@ export interface DataSource {
   /** ARCHIVE a non-active language (2026-07-21): the enrollment is flagged, not
    *  deleted — cards/decks/history all stay; addLearningLanguage restores. */
   removeLearningLanguage(lang: string): Promise<void>;
-  /** Update editable profile fields (D6 / UX-17e). */
+  /** Update editable profile fields (D6 / UX-17e). (displayName retired from
+   *  UI per 20 §8 R1 — still accepted for the onboarding path.) */
   updateProfile(patch: { displayName?: string; quizLength?: number }): Promise<void>;
+  // ── 20 §3 v2: username identity (cycle locally / save once) ──────────────
+  /** Who am I signed in as (email + auth provider) — read-only Account block. */
+  getAccountIdentity(): Promise<AccountIdentity>;
+  /** Claim a CYCLED name (set_username v2 RPC — the ONLY username write).
+   *  Candidates come from `domain/username.generateUsernameCandidate` (local,
+   *  draft-only); the server re-validates that the name decomposes into
+   *  official-list words, enforces the free tier's single lifetime change and
+   *  the 20/day cap, and settles taken-races under the unique index. Resolves
+   *  the saved canonical name; rejects with Error(UsernameSaveError). */
+  setUsername(name: string): Promise<string>;
   /** 3.4 app-side analytics emits (paywall_viewed, onboarding/walkthrough
    *  funnel). Fire-and-forget; implementations must never throw into UI paths.
    *  Event names are allowlisted in the implementation — server-written events

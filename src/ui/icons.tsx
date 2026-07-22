@@ -327,3 +327,26 @@ export function IconInfinity({ size = 16, color = STROKE }: IconProps) {
     </Svg>
   );
 }
+
+// Generic person glyph — Settings "User Info" row (replaces the initial-letter
+// avatar now that the username isn't shown on the Settings home list).
+export function IconUser({ size = 16, color = STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="12" cy="8" r="4" />
+      <Path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7" />
+    </Svg>
+  );
+}
+
+// Recycle/re-roll glyph — 20 §3 v2 username cycler icon button.
+export function IconRefresh({ size = 18, color = STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M23 4v6h-6" />
+      <Path d="M1 20v-6h6" />
+      <Path d="M3.51 9a9 9 0 0114.13-3.36L23 10" />
+      <Path d="M20.49 15a9 9 0 01-14.13 3.36L1 14" />
+    </Svg>
+  );
+}

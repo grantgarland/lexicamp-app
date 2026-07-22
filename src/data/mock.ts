@@ -3,6 +3,7 @@
 // Swappable for SupabaseDataSource later behind the same interface.
 import { evaluateCaptureInput } from '@/domain/capture';
 import { directionLangs } from '@/domain/derive';
+import { decomposeUsername } from '@/domain/username';
 import type { BufferedRating, QuizCardItem } from '@/domain/quiz';
 import { assessResultQuality, type DictionarySense, type LookupOutcome, type LookupResult } from '@/domain/translation';
 import type { Card, CardFsrsState, Deck, Entitlement, NotificationPrefs, Profile, SearchDirection } from '@/domain/types';
@@ -19,11 +20,19 @@ const DECK_ID = 'dev-deck';
 let mockLearningLangs: string[] = ['es', 'fr'];
 let mockActiveLang = 'es';
 let mockDisplayName = 'Casey';
+// 20 §3 v2: username identity. The taken fixtures make the save-race
+// ("snapped up just now") path demo-able offline — cycle until one of these
+// appears (or hardcode a draft in dev) and Save to see the taken toast.
+let mockUsername = 'fluent-marmot';
+let mockUsernameChanges = 0;
+const MOCK_TAKEN = new Set(['alpine-elk', 'steady-ibex', 'quick-pika']);
 // E3: archived word ids (mock words rebuild per call; this overlays the flag).
 let mockArchived = new Set<string>();
 
 const PROFILE: Profile = {
   id: USER_ID,
+  username: 'fluent-marmot',
+  usernameChanges: 0,
   displayName: 'Casey',
   nativeLang: 'en',
   targetLang: 'es',
@@ -321,7 +330,7 @@ export const SMOKE_FIXTURES = { WORD_BANK, DISTRIBUTION, MOCK_MISS, MOCK_ECHO, F
 const scenario = () => useDevStore.getState();
 
 // In-memory notification prefs (03 onboarding defaults).
-const mockPrefs: NotificationPrefs = { enabled: true, frequency: 'daily', windows: [{ time: '19:00' }], minDueToNotify: 1, days: [0, 1, 2, 3, 4, 5, 6] };
+const mockPrefs: NotificationPrefs = { enabled: true, frequency: 'daily', windows: [{ time: '09:00' }], minDueToNotify: 1, days: [0, 1, 2, 3, 4, 5, 6] };
 
 export const mockDataSource: DataSource = {
   async completeOnboarding(_input) {
@@ -355,7 +364,7 @@ export const mockDataSource: DataSource = {
       : [];
   },
   async getProfile() {
-    return { ...PROFILE, targetLang: mockActiveLang as Profile['targetLang'], displayName: mockDisplayName };
+    return { ...PROFILE, targetLang: mockActiveLang as Profile['targetLang'], displayName: mockDisplayName, username: mockUsername, usernameChanges: mockUsernameChanges };
   },
   async getEntitlement() {
     return entitlementFor(scenario().plan);
@@ -441,6 +450,24 @@ export const mockDataSource: DataSource = {
   async updateProfile(patch) {
     if (patch.displayName != null) mockDisplayName = patch.displayName.trim() || 'Casey';
     // quizLength mirror is a server concern; mock keeps the prefsStore value authoritative.
+  },
+
+  // ── 20 §3 v2: username identity (mock — mirrors set_username's rules) ────
+  async getAccountIdentity() {
+    return { email: 'casey@lexicamp.dev', provider: 'email' as const };
+  },
+  async setUsername(name) {
+    // Same order as the RPC: decompose (no-free-form) → idempotent → free
+    // lifetime-1 (scenario plan = entitlement) → taken race → claim.
+    const canonical = name.trim().toLowerCase();
+    if (decomposeUsername(canonical) == null) throw new Error('username_invalid');
+    if (canonical === mockUsername) return mockUsername; // never burns a change
+    const paid = scenario().plan !== 'free';
+    if (!paid && mockUsernameChanges >= 1) throw new Error('username_change_limit');
+    if (MOCK_TAKEN.has(canonical)) throw new Error('username_taken');
+    mockUsername = canonical;
+    mockUsernameChanges += 1;
+    return mockUsername;
   },
   async logEvent() {
     // 3.4: analytics are live-mode only; mock swallows emits.

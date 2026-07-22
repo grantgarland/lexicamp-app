@@ -13,6 +13,8 @@ import type { WordListItem } from '../DataSource';
 // ── Row shapes (the exact select() projections the source requests) ──────────
 export interface ProfileRow {
   id: string;
+  username: string;
+  username_changes: number;
   display_name: string | null;
   native_lang: string;
   learning_lang: string;
@@ -126,6 +128,8 @@ function senseExample(card: Pick<CardRow, 'custom_back'>, tr: TranslationJoin): 
 // ── Mappers ───────────────────────────────────────────────────────────────────
 export const mapProfile = (r: ProfileRow): Profile => ({
   id: r.id,
+  username: r.username,
+  usernameChanges: r.username_changes,
   displayName: r.display_name,
   nativeLang: r.native_lang,
   targetLang: r.learning_lang,

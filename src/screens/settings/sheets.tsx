@@ -10,10 +10,11 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { languageName } from '@/domain/derive';
 import type { LanguageCode, NotificationPrefs, Profile } from '@/domain/types';
+import { formatUsername, generateUsernameCandidate } from '@/domain/username';
 import { useTranslation } from '@/i18n';
 import { registerForPush } from '@/notifications/push';
 import { LEGAL_URLS } from '@/constants/legal';
-import { useNotificationPrefs, useUpdateNotificationPrefs, useUpdateProfile } from '@/query/hooks';
+import { useAccountIdentity, useNotificationPrefs, useSetUsername, useUpdateNotificationPrefs, useUpdateProfile } from '@/query/hooks';
 import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
 import { useUiStore } from '@/store/uiStore';
 import {
@@ -25,8 +26,8 @@ import {
   IconInfo,
   IconLock,
   IconMail,
+  IconRefresh,
   IconStar,
-  Input,
   ListItem,
   RawText,
   Sheet,
@@ -37,7 +38,7 @@ import {
 // strings (03 §notification_prefs); the scheduler fires them ±30min in the
 // profile timezone. The Date round-trip uses a fixed dummy day so only the
 // hour/minute fields ever matter (no DST sensitivity).
-const FALLBACK_WINDOW = '19:00'; // mirrors the server-side default
+const FALLBACK_WINDOW = '09:00'; // mirrors the server-side default (Casey 2026-07-22: 7pm -> 9am)
 function parseHHMM(s: string): { h: number; m: number } {
   const [h = 0, m = 0] = s.split(':').map(Number);
   return { h: Number.isFinite(h) ? h : 0, m: Number.isFinite(m) ? m : 0 };
@@ -94,16 +95,32 @@ function PremiumGate({ title, body, onUpgrade }: { title: string; body: string; 
 }
 
 // ── SE-01 Edit Profile ────────────────────────────────────────────────────────
-// Phase D (D6): learning-language editing moved OUT to the Learning Languages
-// flow (Settings row + global indicator → LanguageSwitcherSheet); this sheet is
-// identity only: display name (persisted for REAL now — UX-17e closed) + the
-// read-only native language + delete account.
-export function EditProfileSheet({ visible, profile, onClose }: { visible: boolean; profile: Profile | undefined; onClose: () => void }) {
+// 20 §3 v2 (R5: reroll-only identity, cycle/save split — Casey 2026-07-22):
+// read-only Account block (email + auth provider), the username CYCLER
+// (candidates draft locally from the official word lists; "New name" never
+// writes), a dirty-gated Save (the ONLY write — set_username re-validates
+// list membership server-side, so free-form names are impossible), the
+// read-only native language, and delete account.
+//
+// Tier rules (server-enforced, UI-mirrored):
+//   free, 0 changes  → cycle + Save; Save opens a one-free-change confirm sheet
+//   free, ≥1 change  → cycler replaced by the PremiumGate callout
+//   premium          → cycle + Save directly; 20/day cap surfaces reactively
+//                      (rate_limited → cycler disables until reopen/tomorrow)
+export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade }: { visible: boolean; profile: Profile | undefined; isPaid: boolean; onClose: () => void; onUpgrade: () => void }) {
+  const { theme } = useUnistyles();
   const { t } = useTranslation();
   const showToast = useUiStore((s) => s.showToast);
-  const updateProfile = useUpdateProfile();
-  const [name, setName] = useState(profile?.displayName ?? '');
+  const identity = useAccountIdentity();
+  const setUsername = useSetUsername();
+  const current = profile?.username ?? '';
+  const changesUsed = profile?.usernameChanges ?? 0;
+  const [draft, setDraft] = useState(current);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmFreeChange, setConfirmFreeChange] = useState(false);
+  // Premium 20/day cap is discovered reactively (a rate_limited save) — the
+  // cycler then disables like the free post-limit state until the next open.
+  const [rateLimited, setRateLimited] = useState(false);
 
   // Re-seed the draft each open (render-adjust, same as NotificationSheet) so
   // dirty-gating compares against current profile state, not stale edits.
@@ -111,34 +128,114 @@ export function EditProfileSheet({ visible, profile, onClose }: { visible: boole
   if (!visible && seededOpen) setSeededOpen(false);
   if (visible && !seededOpen) {
     setSeededOpen(true);
-    setName(profile?.displayName ?? '');
+    setDraft(current);
+    setConfirmFreeChange(false);
+    setRateLimited(false);
   }
-  // C4 pattern: Save stays disabled until something changed.
-  const dirty = name.trim() !== (profile?.displayName ?? '') && name.trim() !== '';
+
+  const dirty = draft !== current && draft !== '';
+  const canCycle = !rateLimited && (isPaid || changesUsed === 0);
+
+  const cycle = () => setDraft(generateUsernameCandidate(Math.random, draft));
+
+  const commit = () => {
+    setConfirmFreeChange(false);
+    setUsername.mutate(draft, {
+      onSuccess: () => {
+        showToast({ variant: 'success', message: t('settings.profileSaved') });
+        onClose();
+      },
+      onError: (e) => {
+        // Informative failure paths (Casey 2026-07-22) — every token gets its
+        // own actionable copy; the optimistic update already rolled back.
+        const token = e instanceof Error ? e.message : '';
+        if (token === 'username_taken') {
+          // The drafted name was claimed between cycle and save — rare race;
+          // the sheet stays open so the user just cycles again.
+          showToast({ variant: 'destructive', message: t('settings.usernameTakenToast') });
+        } else if (token === 'username_change_limit') {
+          // Stale local state (limit already spent elsewhere) — the profile
+          // refetch (onSettled) flips this sheet to the PremiumGate.
+          showToast({ variant: 'destructive', message: t('settings.usernameChangeLimitToast') });
+        } else if (token === 'rate_limited') {
+          setRateLimited(true);
+          showToast({ variant: 'destructive', message: t('settings.usernameRateLimited') });
+        } else {
+          showToast({ variant: 'destructive', message: t('settings.saveError') });
+        }
+      },
+    });
+  };
 
   const save = () => {
-    updateProfile.mutate(
-      { displayName: name.trim() },
-      { onSuccess: () => showToast({ variant: 'success', message: t('settings.profileSaved') }) },
-    );
-    onClose(); // optimistic update repaints immediately; errors roll back + refetch
+    // Free tier: the one-change warning sheet stands between Save and commit
+    // (premium saves directly — no interstitial).
+    if (!isPaid) setConfirmFreeChange(true);
+    else commit();
   };
 
   return (
     <>
-      <Sheet visible={visible} onClose={onClose} title={t('settings.editProfileTitle')}>
-        <FieldLabel>{t('settings.displayName')}</FieldLabel>
-        <Input placeholder={t('settings.displayNamePlaceholder')} value={name} onChangeText={setName} />
+      <Sheet visible={visible && !confirmFreeChange} onClose={onClose} title={t('settings.editProfileTitle')}>
+        <FieldLabel>{t('settings.accountField')}</FieldLabel>
+        <ReadOnlyField
+          value={identity?.email ?? '…'}
+          note={t(identity?.provider === 'apple' ? 'settings.providerApple' : identity?.provider === 'google' ? 'settings.providerGoogle' : 'settings.providerEmail')}
+        />
+
+        <FieldLabel>{t('settings.username')}</FieldLabel>
+        <View style={[styles.usernameBox, dirty && { borderColor: theme.color.brand }]}>
+          <RawText style={styles.usernameValue} numberOfLines={1}>{formatUsername(draft)}</RawText>
+          {canCycle && (
+            <Pressable
+              onPress={cycle}
+              accessibilityRole="button"
+              accessibilityLabel={t('settings.usernameCycle')}
+              accessibilityHint={t('settings.usernameCycleHint')}
+              hitSlop={8}
+              style={({ pressed }) => [styles.cycleBtn, pressed && { opacity: 0.6 }]}
+            >
+              <IconRefresh size={18} color={theme.color.brand} />
+            </Pressable>
+          )}
+        </View>
+        <RawText style={styles.usernameNote}>
+          {rateLimited
+            ? t('settings.usernameRateLimitedHint')
+            : dirty
+              ? t('settings.usernameDirtyHint')
+              : t('settings.usernameNote')}
+        </RawText>
+        {/* Free tier with the single change spent: the cycler is gone; the
+            gate explains why and routes to the paywall (Casey: "tooltip
+            indicating that creating a new username is a Premium feature"). */}
+        {!isPaid && changesUsed >= 1 && (
+          <PremiumGate title={t('settings.usernameGateTitle')} body={t('settings.usernameGateBody')} onUpgrade={onUpgrade} />
+        )}
 
         <FieldLabel>{t('settings.nativeLanguage')}</FieldLabel>
         <ReadOnlyField value={languageName((profile?.nativeLang ?? 'en') as LanguageCode)} note={t('settings.nativeNote')} />
 
         <View style={styles.saveWrap}>
-          <Button title={t('settings.save')} variant="primary" disabled={!dirty || updateProfile.isPending} onPress={save} />
+          <Button title={t('settings.save')} variant="primary" disabled={!dirty || !canCycle || setUsername.isPending} onPress={save} />
         </View>
         <Pressable onPress={() => setConfirmDelete(true)} style={({ pressed }) => [styles.deleteRow, pressed && { opacity: 0.7 }]} accessibilityRole="button">
           <RawText style={styles.deleteText}>{t('settings.deleteAccount')}</RawText>
         </Pressable>
+      </Sheet>
+
+      {/* Free-tier one-change confirmation (stacked sheet, same pattern as the
+          iOS time picker): honest UI — the user learns the cost BEFORE the
+          change is spent, with a no-harm way back to cycling. */}
+      <Sheet visible={visible && confirmFreeChange} onClose={() => setConfirmFreeChange(false)} title={t('settings.usernameConfirmTitle')}>
+        <RawText style={styles.confirmName}>{formatUsername(draft)}</RawText>
+        <RawText style={styles.confirmBody}>{t('settings.usernameConfirmBody')}</RawText>
+        <View style={styles.saveWrap}>
+          <Button title={t('settings.usernameConfirmCta')} variant="primary" disabled={setUsername.isPending} onPress={commit} />
+        </View>
+        <View style={styles.confirmCancelWrap}>
+          <Button title={t('settings.usernameConfirmCancel')} variant="secondary" onPress={() => setConfirmFreeChange(false)} />
+        </View>
       </Sheet>
 
       <ConfirmDialog
@@ -523,6 +620,17 @@ const styles = StyleSheet.create((theme) => {
     osBlockedLink: { fontFamily: theme.fonts.sans.bold, fontSize: 13, color: theme.palette.amber[700], marginTop: 4 },
     flex1: { flex: 1 },
     fieldLabel: { fontFamily: fonts.sans.semibold, fontSize: 12, letterSpacing: 0.5, textTransform: 'uppercase', color: color.textMuted, marginBottom: 6, marginTop: 4 },
+
+    // 20 §3 v2: username cycler — the recycle button lives inside the field
+    // itself (Casey 2026-07-22b: "pressable 'recycle' icon button in the
+    // input itself"), hidden (not just disabled) once canCycle is false.
+    usernameBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingVertical: 11, paddingHorizontal: 14, borderRadius: radius.md, borderWidth: 1.5, borderColor: color.border, backgroundColor: color.surfaceSunken },
+    usernameValue: { flex: 1, fontFamily: fonts.sans.semibold, fontSize: 16, color: color.textStrong },
+    cycleBtn: { padding: 6, borderRadius: radius.pill },
+    usernameNote: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textFaint, marginTop: 4, marginBottom: 12 },
+    confirmName: { fontFamily: fonts.sans.extra, fontSize: 22, color: color.textStrong, textAlign: 'center', marginTop: 4 },
+    confirmBody: { fontFamily: fonts.sans.regular, fontSize: 14, lineHeight: 21, color: color.textMuted, textAlign: 'center', marginTop: 10 },
+    confirmCancelWrap: { marginTop: 8 },
 
     readOnlyWrap: { marginBottom: 16 },
     readOnly: { paddingVertical: 11, paddingHorizontal: 14, borderRadius: radius.md, borderWidth: 1.5, borderColor: color.border, backgroundColor: color.surfaceSunken },

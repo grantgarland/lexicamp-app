@@ -8,6 +8,7 @@ import { sessionStats } from '@/domain/quiz';
 import { homeSnapshot, MASTERY_STABILITY } from '@/domain/derive';
 import { isPaid } from '@/domain/types';
 import { TIERS } from '@/theme/tiers';
+import { decomposeUsername, generateUsernameCandidate, validateUsername } from '@/domain/username';
 
 import type { DataSource } from '../DataSource';
 
@@ -171,6 +172,54 @@ export function describeDataSourceContract(name: string, source: DataSource): vo
           notificationsEnabled: true,
         }),
       ).resolves.toBeUndefined();
+    });
+
+
+    it('username identity (20 \u00a73 v2): profile carries a valid, decomposable username', async () => {
+      const p = await source.getProfile();
+      expect(validateUsername(p.username).ok).toBe(true);
+      expect(p.usernameChanges).toBeGreaterThanOrEqual(0);
+    });
+
+    it('cycling is draft-only: candidates never write until setUsername', async () => {
+      const before = (await source.getProfile()).username;
+      // 10 local cycles — all decomposable, none persisted.
+      let draft = before;
+      for (let i = 0; i < 10; i += 1) {
+        draft = generateUsernameCandidate(Math.random, draft);
+        expect(decomposeUsername(draft)).not.toBeNull();
+      }
+      expect((await source.getProfile()).username).toBe(before);
+    });
+
+    it('setUsername claims a cycled draft and round-trips into the profile', async () => {
+      const before = await source.getProfile();
+      let draft = generateUsernameCandidate();
+      // steer clear of the mock's taken fixtures — that path has its own test
+      while (['alpine-elk', 'steady-ibex', 'quick-pika'].includes(draft)) draft = generateUsernameCandidate();
+      expect(await source.setUsername(draft)).toBe(draft);
+      const after = await source.getProfile();
+      expect(after.username).toBe(draft);
+      expect(after.usernameChanges).toBe(before.usernameChanges + 1);
+      // idempotent re-save of the current name never burns a change
+      expect(await source.setUsername(draft.toUpperCase())).toBe(draft);
+      expect((await source.getProfile()).usernameChanges).toBe(after.usernameChanges);
+    });
+
+    it('setUsername rejects with the machine-token contract', async () => {
+      // No-free-form guarantee: non-list words can never be claimed.
+      await expect(source.setUsername('assmuncher-fox')).rejects.toThrow('username_invalid');
+      await expect(source.setUsername('totally-custom-name')).rejects.toThrow('username_invalid');
+      // Taken race (mock fixture) → username_taken, and the profile is untouched.
+      const before = (await source.getProfile()).username;
+      await expect(source.setUsername('alpine-elk')).rejects.toThrow('username_taken');
+      expect((await source.getProfile()).username).toBe(before);
+    });
+
+    it('getAccountIdentity returns an email + a known provider', async () => {
+      const id = await source.getAccountIdentity();
+      expect(['apple', 'google', 'email']).toContain(id.provider);
+      expect(id.email == null || id.email.includes('@')).toBe(true);
     });
 
     it('getEngagement / getProgressStats return sane non-negatives', async () => {

@@ -30,6 +30,7 @@ import {
   IconMail,
   IconMountain,
   IconStar,
+  IconUser,
   ListItem,
   PremiumBadge,
   RawText,
@@ -54,7 +55,9 @@ export function SettingsScreen() {
   const [sheet, setSheet] = useState<SheetId>(null);
   const openPaywall = () => router.push('/paywall');
 
-  const initial = (profile?.displayName ?? 'L').charAt(0).toUpperCase();
+  // 20 §8 R1 revised (Casey 2026-07-22k): the username moved into the User
+  // Info sheet itself — this row is a static entry point (icon + "User Info"),
+  // same as every other Settings row, not a profile card.
   const profileSub = t('settings.profileNative', { lang: t(`languages.${profile?.nativeLang ?? 'en'}`) });
   // DF-9 v2 (spec 19 rev): two-phase meter — the 50-word starter allotment,
   // then the 5-a-day counter (resets daily, never banks). addedToday comes from
@@ -71,7 +74,7 @@ export function SettingsScreen() {
   // only the custom time is gated (inside the sheet).
   // D12: free users see the EFFECTIVE schedule (default time, every day) — their
   // stored premium-era settings are preserved but not honored while unentitled.
-  const effectiveTime = isPaid ? (notifPrefs?.windows[0]?.time ?? '19:00') : '19:00';
+  const effectiveTime = isPaid ? (notifPrefs?.windows[0]?.time ?? '09:00') : '09:00';
   const remindersSubtitle =
     notifPrefs == null
       ? '…'
@@ -97,16 +100,13 @@ export function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Account */}
         <Section label={t('settings.account')}>
-          <Pressable style={({ pressed }) => [styles.profileRow, pressed && styles.rowPressed]} onPress={() => setSheet('editProfile')} accessibilityRole="button">
-            <View style={styles.avatar}>
-              <RawText style={styles.avatarText}>{initial}</RawText>
-            </View>
-            <View style={styles.profileBody}>
-              <RawText style={styles.profileName} numberOfLines={1}>{profile?.displayName ?? '—'}</RawText>
-              <RawText style={styles.profileSub} numberOfLines={1}>{profileSub}</RawText>
-            </View>
-            <IconChevronRight size={16} color={theme.color.textFaint} />
-          </Pressable>
+          <ListItem
+            leading={<IconTile><IconUser size={16} color={theme.color.brand} /></IconTile>}
+            title={t('settings.editProfileTitle')}
+            subtitle={profileSub}
+            trailing={<Chevron />}
+            onPress={() => setSheet('editProfile')}
+          />
           {/* Phase D (D6): Learning Languages is the PRIMARY language flow — add,
               switch, upgrade — one sheet shared with the global indicator. */}
           <ListItem
@@ -234,7 +234,7 @@ export function SettingsScreen() {
       </ScrollView>
 
       {/* Deep-editor sheets */}
-      <EditProfileSheet visible={sheet === 'editProfile'} profile={profile} onClose={() => setSheet(null)} />
+      <EditProfileSheet visible={sheet === 'editProfile'} profile={profile} isPaid={isPaid} onClose={() => setSheet(null)} onUpgrade={openPaywall} />
       <NotificationSheet visible={sheet === 'notifications'} isPaid={isPaid} onClose={() => setSheet(null)} onUpgrade={openPaywall} />
       <QuizLengthSheet visible={sheet === 'quizLength'} isPaid={isPaid} onClose={() => setSheet(null)} onUpgrade={openPaywall} />
       <SupportSheet visible={sheet === 'support'} onClose={() => setSheet(null)} />
@@ -298,15 +298,7 @@ const styles = StyleSheet.create((theme) => {
     sectionLabel: { fontFamily: fonts.sans.bold, fontSize: 11, letterSpacing: 0.9, textTransform: 'uppercase', color: color.textMuted, marginBottom: 6, marginLeft: 4 },
     sectionCard: { backgroundColor: color.surfaceCard, borderWidth: theme.borderWidth.thin, borderColor: color.border, borderRadius: radius.lg, overflow: 'hidden' },
 
-    rowPressed: { backgroundColor: color.surfaceSunken },
     iconTile: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-
-    profileRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14, backgroundColor: color.surfaceCard },
-    avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: color.brandSoft, alignItems: 'center', justifyContent: 'center' },
-    avatarText: { fontFamily: fonts.sans.bold, fontSize: 18, color: color.brand },
-    profileBody: { flex: 1, minWidth: 0 },
-    profileName: { fontFamily: fonts.sans.bold, fontSize: 16, color: color.textStrong },
-    profileSub: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted, marginTop: 2 },
 
     planCard: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.divider },
     planTop: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },

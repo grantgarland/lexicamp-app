@@ -3,6 +3,7 @@
 // the future SupabaseDataSource must. Scenario-specific expectations live here;
 // implementation-agnostic invariants live in dataSourceContract.ts.
 import { isPaid } from '@/domain/types';
+import { generateUsernameCandidate } from '@/domain/username';
 import { useDevStore, type DevUserState } from '@/store/devStore';
 
 import { mockDataSource } from '../mock';
@@ -33,6 +34,28 @@ describe('mock scenarios', () => {
     } else {
       expect(cards.length).toBeGreaterThan(0);
     }
+  });
+
+  it('free tier: exactly one lifetime username change (20 R5)', async () => {
+    useDevStore.setState({ plan: 'free' });
+    const TAKEN = ['alpine-elk', 'steady-ibex', 'quick-pika'];
+    const fresh = async () => {
+      const current = (await mockDataSource.getProfile()).username;
+      let d = generateUsernameCandidate();
+      while (TAKEN.includes(d) || d === current) d = generateUsernameCandidate();
+      return d;
+    };
+    // Deterministic regardless of what earlier (paid) tests spent: if the
+    // allowance is intact, the first change succeeds; every change after the
+    // counter is non-zero rejects with the machine token.
+    if ((await mockDataSource.getProfile()).usernameChanges === 0) {
+      const first = await fresh();
+      await expect(mockDataSource.setUsername(first)).resolves.toBe(first);
+    }
+    await expect(mockDataSource.setUsername(await fresh())).rejects.toThrow('username_change_limit');
+    // …and the idempotent re-save of the CURRENT name still succeeds.
+    const current = (await mockDataSource.getProfile()).username;
+    await expect(mockDataSource.setUsername(current)).resolves.toBe(current);
   });
 
   it('plan knob flips the entitlement (free ↔ paid)', async () => {

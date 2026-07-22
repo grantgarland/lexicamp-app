@@ -62,6 +62,8 @@ export {
   IconStar,
   IconGlobe,
   IconInfinity,
+  IconRefresh,
+  IconUser,
   type IconProps,
 } from './icons';
 export { PRESS_OPACITY, pressableOpacity } from './pressable';

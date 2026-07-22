@@ -9,7 +9,7 @@ import type { LookupOutcome, UsageExample } from '@/domain/translation';
 import type { Card, CardFsrsState, Deck, Entitlement, NotificationPrefs, Profile, SearchDirection } from '@/domain/types';
 import { directionLangs } from '@/domain/derive';
 
-import type { DataSource, DeckCards, DeckSummary, Engagement, ProgressStats, WordListItem } from '../DataSource';
+import type { AccountIdentity, DataSource, DeckCards, DeckSummary, Engagement, ProgressStats, WordListItem } from '../DataSource';
 import { supabase } from './client';
 import {
   mapCard,
@@ -38,6 +38,15 @@ async function uid(): Promise<string> {
 
 function bail(error: { message: string } | null): void {
   if (error) throw new Error(error.message);
+}
+
+/** 20 §3 v2: set_username errors carry the machine token in DETAIL (errcode
+ *  P0004) — surface THAT, so callers match on the same contract as
+ *  free_word_cap. Engine/transport errors pass through. */
+function bailUsername(error: { message: string; details?: string | null } | null): void {
+  if (!error) return;
+  const detail = error.details ?? '';
+  throw new Error(/^(username_taken|username_invalid|username_change_limit|rate_limited)$/.test(detail) ? detail : error.message);
 }
 
 /** cards joined to translation + fsrs — the projection words/due-cards share.
@@ -144,6 +153,25 @@ export const supabaseDataSource: DataSource = {
     if (Object.keys(row).length === 0) return;
     const { error } = await supabase.from('profiles').update(row).eq('id', await uid());
     bail(error);
+  },
+
+  // ── 20 §3: username identity ──────────────────────────────────────────────
+  async getAccountIdentity(): Promise<AccountIdentity> {
+    const { data, error } = await supabase.auth.getUser();
+    if (error) throw new Error(error.message);
+    const user = data.user;
+    // app_metadata.provider = the FIRST provider the account was created with
+    // (identities[] lists all linked); that's the "associated with" answer the
+    // Account block promises (20 §3.1).
+    const raw = (user.app_metadata?.provider ?? user.identities?.[0]?.provider ?? 'email') as string;
+    const provider: AccountIdentity['provider'] = raw === 'apple' || raw === 'google' ? raw : 'email';
+    return { email: user.email ?? null, provider };
+  },
+
+  async setUsername(name: string): Promise<string> {
+    const { data, error } = await supabase.rpc('set_username', { p_username: name });
+    bailUsername(error);
+    return data as string;
   },
 
   async logEvent(event: string, props: Record<string, unknown> = {}): Promise<void> {
@@ -309,11 +337,11 @@ export const supabaseDataSource: DataSource = {
   async getNotificationPrefs(): Promise<NotificationPrefs> {
     const { data, error } = await supabase.from('notification_prefs').select('*').maybeSingle();
     bail(error);
-    if (data == null) return { enabled: false, frequency: 'daily', windows: [{ time: '19:00' }], minDueToNotify: 1, days: [0, 1, 2, 3, 4, 5, 6] };
+    if (data == null) return { enabled: false, frequency: 'daily', windows: [{ time: '09:00' }], minDueToNotify: 1, days: [0, 1, 2, 3, 4, 5, 6] };
     return {
       enabled: data.enabled,
       frequency: data.frequency,
-      windows: data.windows ?? [{ time: '19:00' }],
+      windows: data.windows ?? [{ time: '09:00' }],
       minDueToNotify: data.min_due_to_notify ?? 1,
       days: data.days ?? [0, 1, 2, 3, 4, 5, 6],
     };

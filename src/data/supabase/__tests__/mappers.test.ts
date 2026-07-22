@@ -73,6 +73,8 @@ describe('mapProfile / mapEntitlement', () => {
   it('maps snake_case profile rows', () => {
     const p = mapProfile({
       id: 'u1',
+      username: 'fluent-marmot',
+      username_changes: 2,
       display_name: 'Casey',
       native_lang: 'en',
       learning_lang: 'es',
@@ -83,6 +85,8 @@ describe('mapProfile / mapEntitlement', () => {
     });
     expect(p).toEqual({
       id: 'u1',
+      username: 'fluent-marmot',
+      usernameChanges: 2,
       displayName: 'Casey',
       nativeLang: 'en',
       targetLang: 'es',

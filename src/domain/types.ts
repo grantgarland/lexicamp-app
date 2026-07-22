@@ -10,6 +10,16 @@ export type SearchDirection = 'native_to_target' | 'target_to_native';
 /** profiles */
 export interface Profile {
   id: string;
+  /** Public pseudonymous identity (spec 20 §3): generated at signup, unique,
+   *  user-editable via set_username. THE name shown anywhere public
+   *  (Settings row, leaderboard). */
+  username: string;
+  /** Lifetime username changes (server counter — spec 20 R5: free tier gets
+   *  exactly ONE; premium is capped 20/day server-side). Drives the Edit
+   *  Profile cycle/save gating. */
+  usernameChanges: number;
+  /** RETIRED from UI (20 §8 R1 — column frozen server-side, kept in the row
+   *  mapping only so nothing breaks on old data). Do not render. */
   displayName: string | null;
   nativeLang: LanguageCode;
   targetLang: LanguageCode;
@@ -102,7 +112,7 @@ export interface ReviewLog {
 export interface NotificationPrefs {
   enabled: boolean;
   frequency: 'daily' | 'twice_daily' | 'custom';
-  /** e.g. [{ time: '19:00' }] — local times in the user's profile timezone. */
+  /** e.g. [{ time: '09:00' }] (default). Local times in the user's profile timezone. */
   windows: { time: string }[];
   minDueToNotify: number;
   /** Weekdays the reminder may fire (dow 0=Sun..6=Sat, user's local tz; 18 §C1).

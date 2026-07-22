@@ -100,6 +100,47 @@ export function useRemoveLanguage() {
   });
 }
 
+// ── 20 §3: username identity ─────────────────────────────────────────────────
+/** Read-only Account block (email + auth provider). Stable per session. */
+export function useAccountIdentity() {
+  const uid = useUserKey();
+  return useQuery({ queryKey: ['accountIdentity', uid], queryFn: () => ds.getAccountIdentity(), staleTime: Infinity }).data;
+}
+
+/** Claim a CYCLED username (20 §3 v2 — candidates are local drafts; this is
+ *  the only write). Optimistic cache update incl. the change counter,
+ *  rollback on error. Error messages carry the machine token
+ *  (`UsernameSaveError`): username_taken (snapped up between cycle and save),
+ *  username_change_limit (free single change spent), rate_limited (20/day),
+ *  username_invalid (impossible via the cycle UI). */
+export function useSetUsername() {
+  const qc = useQueryClient();
+  const uid = useUserKey();
+  return useMutation({
+    mutationFn: (name: string) => ds.setUsername(name),
+    onMutate: async (name) => {
+      await qc.cancelQueries({ queryKey: ['profile', uid] });
+      const prev = qc.getQueryData(['profile', uid]);
+      qc.setQueryData(['profile', uid], (p: unknown) =>
+        p == null
+          ? p
+          : {
+              ...(p as object),
+              username: name.trim().toLowerCase(),
+              usernameChanges: ((p as { usernameChanges?: number }).usernameChanges ?? 0) + 1,
+            },
+      );
+      return { prev };
+    },
+    onError: (_e, _n, ctx) => {
+      if (ctx?.prev != null) qc.setQueryData(['profile', uid], ctx.prev);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['profile'] });
+    },
+  });
+}
+
 /** Update editable profile fields (D6 / UX-17e) — optimistic name update. */
 export function useUpdateProfile() {
   const qc = useQueryClient();

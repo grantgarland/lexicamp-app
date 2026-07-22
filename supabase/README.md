@@ -10,9 +10,21 @@ that applies a migration through the Supabase connector ends by refreshing the
 mirror (`npx supabase migration fetch`) and committing it. Verify sync with
 `npx supabase migration list`.
 
-**Mirror status (fetched 2026-07-21, post-`growing_free_word_cap`):** all 27
-live migrations are mirrored — Casey's fetch closed both the 07-18 six-file
-gap and the 07-21 pair (`language_archival`, `growing_free_word_cap`).
+**Mirror status (2026-07-22, post-`default_reminder_time_9am`):** all 32 live
+migrations are mirrored. The 07-22 additions (`daily_free_save_allowance`,
+`username_identity` + `username_trigger_fn_lockdown`,
+`username_change_policy` — the R5 cycle/save redesign: `username_words`
+table, list-decomposition validation in `set_username` v2, free lifetime-1 +
+20/day caps, probe RPCs revoked — and `default_reminder_time_9am` — the
+study-reminder default moved 7pm → 9am: `notification_prefs.windows` column
+default + `run_push_scheduler()`'s free-tier effective-windows fallback,
+kept in lockstep; existing users' stored windows untouched) were hand-written
+from the exact applied SQL — verify with `npx supabase migration list`. The
+vocabulary is parity-pinned to `src/domain/username.ts` by `username.test.ts`
+(20 §3.4).
+
+*(Prior: fetched 2026-07-21 post-`growing_free_word_cap` — Casey's fetch
+closed both the 07-18 six-file gap and the 07-21 pair.)*
 
 *(Resolved 2026-07-22: the stray `20260721191732_language_archival.sql` — an
 authored-but-superseded duplicate of `20260721205502`, SQL-identical — was
