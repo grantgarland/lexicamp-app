@@ -1,6 +1,7 @@
 // WordDetailSheet (W-03) — the shared saved-word detail sheet. Used from the Word List
 // and the deck detail sheet. Tier + memory-strength card, example, a DetailStats strip
 // (Next review · Reviews · Added), and a delete action.
+import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
@@ -29,11 +30,23 @@ export function WordDetailSheet({ word, onClose, onDelete, onToggleArchive }: Wo
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const tier = word ? getTierByStability(word.stability) : null;
-  // W-03 is the "first card view" of 16 §3 — fetch the example lazily when the
-  // row doesn't carry one yet (cached server-side once, free thereafter).
-  // senseTarget scopes the fetch to THIS card's sense (per-sense examples,
-  // 2026-07-17 — sibling sense cards used to share the primary's example).
-  const { examples } = useExamples(word != null && word.example === '' ? word.translationId : null, word?.senseTarget);
+  // Examples (16 §3) are USER-GATED (2026-07-22): a saved word with no cached
+  // example shows a "Show example sentence" button instead of auto-fetching; the
+  // fetch (and its permanent server-side cache) happens only on press. senseTarget
+  // scopes it to THIS card's sense (per-sense examples, 2026-07-17). Reset the
+  // request when the sheet's word changes (render-adjust, not an effect).
+  const [exampleReqId, setExampleReqId] = useState<string | null>(null);
+  const [lastWordId, setLastWordId] = useState(word?.id);
+  if (word?.id !== lastWordId) {
+    setLastWordId(word?.id);
+    setExampleReqId(null);
+  }
+  const needsFetch = word != null && word.example === '';
+  const exampleRequested = word != null && exampleReqId === word.id;
+  const { examples, isLoading: exampleLoading } = useExamples(
+    needsFetch && exampleRequested ? word.translationId : null,
+    word?.senseTarget,
+  );
   const fetched = examples?.[0];
   const example = word?.example || (fetched ? `${fetched.sourcePrefix}${fetched.sourceTerm}${fetched.sourceSuffix}` : '');
   // Target-side line, mirroring the search card's example pair.
@@ -62,13 +75,28 @@ export function WordDetailSheet({ word, onClose, onDelete, onToggleArchive }: Wo
                 say it; the hint below is the one line that earns the space. */}
             <Text style={[styles.memoryHint, { color: tier.text, borderTopColor: tier.border }]}>{t('wordList.memoryHint')}</Text>
           </View>
-          {example !== '' && (
+          {example !== '' ? (
             <>
               <Text style={styles.sectionLabel}>{t('wordList.example')}</Text>
               <Text style={[styles.example, exampleTranslation !== '' && styles.exampleTight]}>&ldquo;{example}&rdquo;</Text>
               {exampleTranslation !== '' && <Text style={styles.exampleTranslation}>{exampleTranslation}</Text>}
             </>
-          )}
+          ) : needsFetch ? (
+            <View style={styles.exampleReqWrap}>
+              <Text style={styles.sectionLabel}>{t('wordList.example')}</Text>
+              {exampleLoading ? (
+                <Text style={styles.exampleReqLoading}>{t('wordList.loadingExample')}</Text>
+              ) : (
+                <Pressable
+                  onPress={() => setExampleReqId(word.id)}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [styles.exampleReqBtn, pressed && { opacity: 0.6 }]}
+                >
+                  <Text style={styles.exampleReqText}>{t('wordList.showExample')}</Text>
+                </Pressable>
+              )}
+            </View>
+          ) : null}
           <DetailStats
             style={styles.stats}
             items={[
@@ -115,6 +143,18 @@ const styles = StyleSheet.create((theme) => {
     memoryDays: { fontFamily: fonts.sans.semibold, fontSize: 12 },
     memoryHint: { fontFamily: fonts.sans.regular, fontSize: 11, lineHeight: 15, opacity: 0.7, marginTop: 8, paddingTop: 8, borderTopWidth: theme.borderWidth.thin },
     sectionLabel: { fontFamily: fonts.sans.bold, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', color: color.textMuted, marginBottom: 6 },
+    exampleReqWrap: { marginBottom: 16 },
+    exampleReqBtn: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 11,
+      borderRadius: 10,
+      backgroundColor: palette.slate[100],
+      borderWidth: theme.borderWidth.thin,
+      borderColor: color.border,
+    },
+    exampleReqText: { fontFamily: fonts.sans.semibold, fontSize: 14, color: color.brand },
+    exampleReqLoading: { fontFamily: fonts.sans.regular, fontSize: 13, fontStyle: 'italic', color: color.textMuted, paddingVertical: 4 },
     example: { fontFamily: fonts.sans.regular, fontSize: 14, fontStyle: 'italic', lineHeight: 21, color: color.textBody, marginBottom: 16 },
     exampleTight: { marginBottom: 4 },
     exampleTranslation: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 19, color: color.textMuted, marginBottom: 16 },

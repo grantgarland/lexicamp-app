@@ -3,7 +3,7 @@
 // headword · phonetic) over an accordion of translations; the expanded ("current")
 // item shows an example, optional details, and a save / saved / delete action.
 import { Pressable, View } from 'react-native';
-import Animated, { LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
@@ -13,7 +13,7 @@ import { RawText as RNText } from './Text';
 
 export interface TranslationExample {
   source: string;
-  target: string;
+  target?: string;
 }
 export interface TranslationDetail {
   label: string;
@@ -52,6 +52,13 @@ export interface TranslationCardProps {
   saveable?: boolean;
   /** Inline reason shown when `saveable` is false. */
   noticeText?: string;
+  /** Fetch the example sentence for the primary word (16 §3). Examples are NEVER
+   *  auto-fetched — the button rendered on the primary sense (when no example
+   *  exists yet) calls this; the first fetch caches server-side and then also
+   *  shows on the saved word and in quiz/review cards. Omit to hide the affordance. */
+  onRequestExample?: (index: number) => void;
+  /** True while the example fetch is in flight (drives the button's loading label). */
+  exampleLoading?: boolean;
 }
 
 type ButtonState = 'save' | 'saved' | 'delete';
@@ -68,6 +75,8 @@ export function TranslationCard({
   targetLang,
   saveable = true,
   noticeText,
+  onRequestExample,
+  exampleLoading,
 }: TranslationCardProps) {
   const { theme } = useUnistyles();
 
@@ -108,6 +117,9 @@ export function TranslationCard({
             noticeText={noticeText}
             onSave={() => onSave(i)}
             onDelete={() => onDelete(i)}
+            canRequestExample={saveable}
+            exampleLoading={exampleLoading}
+            onRequestExample={onRequestExample != null ? () => onRequestExample(i) : undefined}
           />
         ))}
       </Animated.View>
@@ -124,6 +136,9 @@ function TranslationItem({
   noticeText,
   onSave,
   onDelete,
+  canRequestExample,
+  exampleLoading,
+  onRequestExample,
 }: {
   translation: Translation;
   isExpanded: boolean;
@@ -133,16 +148,21 @@ function TranslationItem({
   noticeText?: string;
   onSave: () => void;
   onDelete: () => void;
+  canRequestExample: boolean;
+  exampleLoading?: boolean;
+  onRequestExample?: () => void;
 }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
+  // Local binding keeps TS narrowing inside the .map closure (drops the `!`).
+  const details = translation.details;
 
   // Layout-animated shell: height animates as the current word changes; the
   // collapsed row and the expanded "current word" block crossfade in/out.
   return (
     <Animated.View layout={LinearTransition.duration(240)}>
       {!isExpanded ? (
-        <View key="collapsed">
+        <Animated.View key="collapsed" entering={FadeIn.duration(180)} exiting={FadeOut.duration(120)}>
           <Pressable onPress={onExpand} style={styles.collapsed} accessibilityRole="button">
             <View style={styles.collapsedLeft}>
               <RNText style={styles.collapsedWord}>{translation.word}</RNText>
@@ -150,31 +170,52 @@ function TranslationItem({
             </View>
             <IconChevronDown size={14} color={theme.color.textFaint} />
           </Pressable>
-        </View>
+        </Animated.View>
       ) : (
-        <View key="expanded" style={styles.expanded}>
+        <Animated.View key="expanded" entering={FadeIn.duration(220)} exiting={FadeOut.duration(120)} style={styles.expanded}>
           <View style={styles.expandedHead}>
             <RNText style={styles.eyebrow}>{t('translationCard.currentWord')}</RNText>
             <RNText style={styles.expandedWord}>{translation.word}</RNText>
-            <RNText style={[styles.expandedPos, { marginBottom: translation.example ? 12 : 0 }]}>{translation.pos}</RNText>
+            <RNText style={[styles.expandedPos, { marginBottom: translation.example != null || canRequestExample ? 12 : 0 }]}>{translation.pos}</RNText>
           </View>
 
-          {translation.example != null && (
+          {translation.example != null ? (
             <View style={styles.exampleBox}>
               <RNText style={styles.exampleSource}>&ldquo;{translation.example.source}&rdquo;</RNText>
-              <RNText style={styles.exampleTarget}>{translation.example.target}</RNText>
+              {translation.example.target != null && <RNText style={styles.exampleTarget}>{translation.example.target}</RNText>}
             </View>
-          )}
+          ) : canRequestExample && onRequestExample != null ? (
+            /* Example sentences are user-gated (16 §3): no auto-fetch. Pressing
+               this spends one Azure examples call, caches it server-side, and
+               surfaces the example here + on the saved word + in quizzes. */
+            <View style={styles.exampleReqWrap}>
+              {exampleLoading === true ? (
+                <View style={styles.exampleReqBtn} accessibilityRole="button" accessibilityState={{ busy: true }}>
+                  <RNText style={styles.exampleReqText}>{t('translationCard.loadingExample')}</RNText>
+                </View>
+              ) : (
+                <Pressable
+                  onPress={onRequestExample}
+                  style={({ pressed }) => [styles.exampleReqBtn, pressed && styles.exampleReqBtnPressed]}
+                  accessibilityRole="button"
+                  testID="result-example"
+                >
+                  <IconBook size={14} color={theme.color.brand} />
+                  <RNText style={styles.exampleReqText}>{t('translationCard.showExample')}</RNText>
+                </Pressable>
+              )}
+            </View>
+          ) : null}
 
           {/* Details render unconditionally when present (Casey, 2026-07-16: the
               "More details" disclosure was a tap-tax paid on every lookup). */}
-          {translation.details != null && translation.details.length > 0 && (
+          {details != null && details.length > 0 && (
             <View style={styles.detailsWrap}>
               <View style={styles.detailsList}>
-                {translation.details.map((d, i) => (
+                {details.map((d, i) => (
                   <View
                     key={d.label}
-                    style={[styles.detailRow, i < translation.details!.length - 1 && styles.detailRowBorder]}
+                    style={[styles.detailRow, i < details.length - 1 && styles.detailRowBorder]}
                   >
                     <RNText style={styles.detailLabel}>{d.label}</RNText>
                     <RNText style={styles.detailValue}>{d.value}</RNText>
@@ -213,10 +254,10 @@ function TranslationItem({
               </Pressable>
             )}
             {saveable && buttonState === 'saved' && (
-              <View key="saved" style={[styles.action, styles.actionSaved]} testID="result-saved">
+              <Animated.View key="saved" entering={FadeIn.duration(200)} style={[styles.action, styles.actionSaved]} testID="result-saved">
                 <IconCheck size={17} color="#fff" />
                 <RNText style={styles.actionTextLight}>{t('translationCard.saved')}</RNText>
-              </View>
+              </Animated.View>
             )}
             {saveable && buttonState === 'delete' && (
               <Pressable onPress={onDelete} style={[styles.action, styles.actionDelete]} accessibilityRole="button" testID="result-delete">
@@ -225,7 +266,7 @@ function TranslationItem({
               </Pressable>
             )}
           </View>
-        </View>
+        </Animated.View>
       )}
     </Animated.View>
   );
@@ -297,6 +338,23 @@ const styles = StyleSheet.create((theme) => {
     },
     exampleSource: { fontFamily: fonts.sans.regular, fontSize: 13, fontStyle: 'italic', color: color.textBody, lineHeight: 20, marginBottom: 4 },
     exampleTarget: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted, lineHeight: 18 },
+
+    // Gated example affordance (16 §3): a light outline chip on the primary sense
+    // when no example is cached yet. Same horizontal inset as the example box.
+    exampleReqWrap: { marginHorizontal: 18, marginBottom: 12 },
+    exampleReqBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 7,
+      paddingVertical: 10,
+      borderRadius: 10,
+      backgroundColor: 'rgba(255, 255, 255, 0.7)',
+      borderWidth: theme.borderWidth.thin,
+      borderColor: palette.blue[100],
+    },
+    exampleReqBtnPressed: { opacity: 0.6 },
+    exampleReqText: { fontFamily: fonts.sans.semibold, fontSize: 13, color: color.brand },
 
     detailsWrap: { marginHorizontal: 18, marginBottom: 12 },
     detailsList: { marginTop: 8 },

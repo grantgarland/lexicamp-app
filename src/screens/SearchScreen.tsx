@@ -13,7 +13,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { captureReasonI18nKey, evaluateCaptureInput } from '@/domain/capture';
 import { tourTargets } from '@/tour/walkthrough';
 import { directionLangs } from '@/domain/derive';
-import { type LookupResult, posTagI18nKey, qualityReasonI18nKey } from '@/domain/translation';
+import { type LookupResult, posTagI18nKey, qualityReasonI18nKey, type UsageExample } from '@/domain/translation';
 import type { Profile, SearchDirection } from '@/domain/types';
 import { useTranslation } from '@/i18n';
 import { useDeleteCard, useExamples, useLookup, useProfile, useSaveCard, useWords } from '@/query/hooks';
@@ -34,8 +34,24 @@ import {
 } from '@/ui';
 
 /** Adapt a domain LookupResult (Azure dictionary shape) to the card's view model. */
-function toCardResult(r: LookupResult, t: (k: string, o?: Record<string, unknown>) => string): TranslationResult {
-  const example = r.examples?.[0];
+function toCardResult(
+  r: LookupResult,
+  t: (k: string, o?: Record<string, unknown>) => string,
+  learningLang?: string,
+  exampleAt?: { index: number; example: UsageExample },
+): TranslationResult {
+  // #1 (2026-07-22): render the example in the LEARNING language on top, its
+  // native translation beneath — direction-aware. The Azure example's source side
+  // is in r.sourceLang and the target side in r.targetLang; whichever equals the
+  // language being studied becomes the prominent line, so the learner always reads
+  // the target language first regardless of search direction. (When the learning
+  // language can't be resolved, keep the source side on top — prior behavior.)
+  const buildExample = (ex: UsageExample) => {
+    const src = `${ex.sourcePrefix}${ex.sourceTerm}${ex.sourceSuffix}`;
+    const tgt = `${ex.targetPrefix}${ex.targetTerm}${ex.targetSuffix}`;
+    const learningIsTarget = learningLang != null && r.targetLang === learningLang;
+    return learningIsTarget ? { source: tgt, target: src } : { source: src, target: tgt };
+  };
   return {
     sourceText: r.displaySource,
     phonetic: '', // IPA comes from lexical enrichment (3.6), not the dictionary
@@ -44,13 +60,7 @@ function toCardResult(r: LookupResult, t: (k: string, o?: Record<string, unknown
       id: `${r.normalizedSource}:${s.normalizedTarget}`,
       word: s.prefixWord ? `${s.prefixWord} ${s.displayTarget}` : s.displayTarget,
       pos: t(posTagI18nKey(s.posTag)),
-      ...(i === 0 && example
-        ? {
-            example: {
-              source: `${example.sourcePrefix}${example.sourceTerm}${example.sourceSuffix}`,
-            },
-          }
-        : {}),
+      ...(exampleAt != null && exampleAt.index === i ? { example: buildExample(exampleAt.example) } : {}),
       ...(s.backTranslations.length > 1
         ? {
             details: [
@@ -135,20 +145,42 @@ export function SearchView({ onClose }: { onClose: () => void }) {
     debouncedQ === q && verdict?.ok === true, // wait out the debounce + the gate
   );
 
-  // Lazy examples (16 §3): the primary sense is expanded by default in the
-  // result card (per the S-series prototype), so fetch on first found-view when
-  // the cache row doesn't carry examples yet. Cached once, free thereafter.
-  // DWELL 700ms: only spend the Azure examples call once the
-  // SAME result has stayed on screen — a prefix that flashes by while the user
-  // keeps typing ("hell" en route to "hello") no longer triggers one.
-  const examplesCandidate = outcome?.status === 'found' && outcome.result.examples == null ? outcome.result.translationId : null;
-  const dwelledCandidate = useDebouncedValue(examplesCandidate, 700);
-  const { examples: fetchedExamples } = useExamples(dwelledCandidate != null && dwelledCandidate === examplesCandidate ? dwelledCandidate : null);
+  // Examples (16 §3) are USER-GATED (2026-07-22): never auto-fetched. If the
+  // cache row already carries examples they show immediately; otherwise the card
+  // renders a "Show example sentence" button, and only pressing it spends the
+  // Azure examples call (which caches server-side forever — the example then also
+  // shows on the saved word and in quiz/review cards). Keeps casual lookups free
+  // (429-hardening) and makes example generation a deliberate, saved choice.
+  const foundTranslationId = outcome?.status === 'found' ? outcome.result.translationId : null;
+  // Per-sense (2026-07-22): each sense can generate its OWN example. Only the
+  // EXPANDED sense shows a button (the accordion reveals one at a time), so a
+  // single fetch — keyed to that sense's normalized target — serves them all;
+  // react-query caches each sense (staleTime Infinity), so re-expanding an
+  // already-generated sense shows it instantly and never re-fetches.
+  const senses = outcome?.status === 'found' ? outcome.result.senses : [];
+  const expandedSense = senses[currentIdx];
+  const expandedSenseId =
+    outcome?.status === 'found' && expandedSense != null
+      ? `${outcome.result.normalizedSource}:${expandedSense.normalizedTarget}`
+      : null;
+  const [exampleReqIds, setExampleReqIds] = useState<Set<string>>(new Set());
+  const expandedRequested = expandedSenseId != null && exampleReqIds.has(expandedSenseId);
+  // The primary sense's example can ride in with the lookup row; every other sense
+  // is fetched on demand (targetTerm scopes the examples fn to that sense).
+  const isPrimaryExpanded = currentIdx === 0;
+  const serverExample = isPrimaryExpanded && outcome?.status === 'found' ? outcome.result.examples?.[0] : undefined;
+  const { examples: fetchedExamples, isLoading: exampleLoading } = useExamples(
+    expandedRequested && serverExample == null && foundTranslationId != null ? foundTranslationId : null,
+    isPrimaryExpanded ? undefined : expandedSense?.normalizedTarget,
+  );
+  const expandedExample = serverExample ?? (expandedRequested ? fetchedExamples?.[0] : undefined);
   const result =
     outcome?.status === 'found'
       ? toCardResult(
-          { ...outcome.result, examples: outcome.result.examples ?? fetchedExamples ?? undefined },
+          outcome.result,
           t,
+          profile?.targetLang,
+          expandedExample != null ? { index: currentIdx, example: expandedExample } : undefined,
         )
       : null;
   // Result-quality gate (16 §2): a found result may still be unsaveable (e.g. the
@@ -179,6 +211,9 @@ export function SearchView({ onClose }: { onClose: () => void }) {
   if (headword !== lastHeadword) {
     setLastHeadword(headword);
     setCurrentIdx(0);
+    // A new headword clears any example request from the previous word — the next
+    // word starts with the button again (no example carried over / auto-fetched).
+    setExampleReqIds(new Set());
   }
 
   // The set the card renders: server truth plus this session's optimistic adds,
@@ -321,6 +356,11 @@ export function SearchView({ onClose }: { onClose: () => void }) {
               noticeText={noticeText}
               onSave={save}
               onDelete={setPendingUnsave}
+              onRequestExample={(index) => {
+                const id = result?.translations[index]?.id;
+                if (id != null) setExampleReqIds((s) => new Set(s).add(id));
+              }}
+              exampleLoading={exampleLoading}
             />
           </View>
         )}
