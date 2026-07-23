@@ -307,17 +307,20 @@ function mockLookupResult(query: string, direction: SearchDirection): LookupOutc
     ];
   }
 
+  // Same PER-SENSE result-quality rule the Edge Function applies server-side
+  // (2026-07-23: stamps quality onto each sense, not once for the whole result —
+  // see assessResultQuality's doc comment).
+  const { senses: qualitySenses } = assessResultQuality({ normalizedSource: verdict.normalized, senses });
+
   const result: LookupResult = {
     translationId: `mock-t:${verdict.normalized}`,
     normalizedSource: verdict.normalized,
     displaySource: verdict.display,
     sourceLang: sourceCode,
     targetLang: targetCode,
-    senses,
+    senses: qualitySenses,
     entryKind: isPhrase ? 'phrase' : 'word',
     provider: 'azure_dictionary',
-    // Same result-quality rule the Edge Function applies server-side.
-    ...assessResultQuality({ normalizedSource: verdict.normalized, senses }),
   };
   return { status: 'found', result };
 }

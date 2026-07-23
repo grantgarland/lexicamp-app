@@ -71,6 +71,12 @@ function toCardResult(
             ],
           }
         : {}),
+      // Result-quality gate (16 §2), read PER SENSE (2026-07-23 fix — was a single
+      // card-wide flag derived from the primary sense only, which wrongly blocked
+      // other, genuinely valid senses whenever the primary was an echo).
+      ...(s.quality === 'unsaveable'
+        ? { saveable: false, noticeText: t(qualityReasonI18nKey(s.qualityReason ?? 'echo')) }
+        : {}),
     })),
   };
 }
@@ -183,13 +189,11 @@ export function SearchView({ onClose }: { onClose: () => void }) {
           expandedExample != null ? { index: currentIdx, example: expandedExample } : undefined,
         )
       : null;
-  // Result-quality gate (16 §2): a found result may still be unsaveable (e.g. the
-  // translation echoes the input). Show the card, disable Save, explain why.
-  const saveable = outcome?.status === 'found' ? outcome.result.quality !== 'unsaveable' : true;
-  const noticeText =
-    outcome?.status === 'found' && outcome.result.quality === 'unsaveable'
-      ? t(qualityReasonI18nKey(outcome.result.qualityReason ?? 'echo'))
-      : undefined;
+  // Result-quality gate (16 §2): a found sense may still be unsaveable (e.g. the
+  // translation echoes the input). Evaluated PER SENSE now (2026-07-23 fix) — each
+  // `result.translations[i]` carries its own `saveable`/`noticeText`, threaded through
+  // toCardResult from `outcome.result.senses[i].quality`; TranslationCard reads them
+  // per item so one bad sense never disables a sibling's Save button.
   const rejectReason = verdict != null && !verdict.ok ? verdict.reason : outcome?.status === 'rejected' ? outcome.reason : null;
   const phase: 'recents' | 'typing' | 'results' | 'noresults' | 'rejected' | 'error' =
     q === ''
@@ -237,7 +241,7 @@ export function SearchView({ onClose }: { onClose: () => void }) {
   const saveCard = useSaveCard();
   const deleteCard = useDeleteCard();
   const save = (i: number) => {
-    if (result == null || outcome?.status !== 'found' || !saveable) return;
+    if (result == null || outcome?.status !== 'found' || result.translations[i]?.saveable === false) return;
     const tid = outcome.result.translationId;
     const id = result.translations[i].id;
     // Optimistic UI on the sense chip. D10: senses are independent cards —
@@ -352,8 +356,6 @@ export function SearchView({ onClose }: { onClose: () => void }) {
               onSetCurrent={setCurrentIdx}
               savedIds={savedIds}
               justSavedId={justSaved}
-              saveable={saveable}
-              noticeText={noticeText}
               onSave={save}
               onDelete={setPendingUnsave}
               onRequestExample={(index) => {

@@ -102,6 +102,10 @@ interface AzureSense {
   confidence: number;
   prefixWord: string;
   backTranslations: { normalizedText: string; displayText: string; numExamples: number; frequencyCount: number }[];
+  // Result-quality gate (16 §2), evaluated PER SENSE — mirror of
+  // src/domain/translation.ts#DictionarySense.
+  quality?: 'unsaveable';
+  qualityReason?: 'echo';
 }
 
 // 'busy' = Azure throttled US (429) — surfaced to the client as OUR 429 so it
@@ -148,10 +152,17 @@ function rowToOutcome(row: any): Record<string, unknown> {
     prefixWord: row.prefix_word ?? '',
     backTranslations: row.back_translations ?? [],
   };
-  // Result-quality gate: echo (from the rejected-echo path, or a legacy allowed row
-  // whose translation equals the source) renders read-only. Mirror of
-  // src/domain/translation.ts#assessResultQuality.
-  const unsaveable = isEcho || primary.normalizedTarget === row.source_text;
+  // Result-quality gate, evaluated PER SENSE (2026-07-23 fix — was: once for the
+  // whole result from `primary` alone). Senses render as independent cards (D10:
+  // saving one never touches its siblings), so a bad sense must never poison a
+  // sibling that's a real, distinct translation — e.g. "bobcat" (EN→RU) had an
+  // untranslated-echo primary sense that wrongly blocked its valid second sense
+  // ("рысь"). `isEcho` (from the MT-fallback rejected-echo row) only ever applies to
+  // the single MT sense; a dictionary row's own senses are each checked against the
+  // source independently. Mirror of src/domain/translation.ts#assessResultQuality.
+  const withQuality = (s: AzureSense): AzureSense =>
+    isEcho || s.normalizedTarget === row.source_text ? { ...s, quality: 'unsaveable', qualityReason: 'echo' } : s;
+  const senses = [primary, ...((row.alt_translations ?? []) as AzureSense[])].map(withQuality);
   // Per-sense examples (2026-07-17): row.examples is a jsonb map keyed by the
   // sense's normalized target. LookupResult.examples stays the PRIMARY sense's
   // list (the search card attaches the example to the primary sense only);
@@ -170,11 +181,10 @@ function rowToOutcome(row: any): Record<string, unknown> {
       displaySource: row.display_source,
       sourceLang: row.source_lang,
       targetLang: row.target_lang,
-      senses: [primary, ...((row.alt_translations ?? []) as AzureSense[])],
+      senses,
       entryKind: row.entry_kind,
       provider: row.provider,
       ...(primaryExamples ? { examples: primaryExamples } : {}),
-      ...(unsaveable ? { quality: 'unsaveable', qualityReason: 'echo' } : {}),
     },
   };
 }

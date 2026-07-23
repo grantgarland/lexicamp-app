@@ -25,6 +25,12 @@ export interface Translation {
   pos: string;
   example?: TranslationExample;
   details?: TranslationDetail[];
+  /** Result-quality gate (16 §2), evaluated PER SENSE (2026-07-23 fix — was a single
+   *  card-wide flag, which let one bad sense block a sibling's Save button). Absent
+   *  ⇒ saveable. */
+  saveable?: boolean;
+  /** Inline reason shown when `saveable` is false. */
+  noticeText?: string;
 }
 export interface TranslationResult {
   sourceText: string;
@@ -47,11 +53,6 @@ export interface TranslationCardProps {
    *  from the user's profile + search direction. Presentational only. */
   sourceLang?: string;
   targetLang?: string;
-  /** Result-quality gate (16 §2). When false the card is read-only: Save is disabled
-   *  and `noticeText` explains why (e.g. the translation echoes the input). Default true. */
-  saveable?: boolean;
-  /** Inline reason shown when `saveable` is false. */
-  noticeText?: string;
   /** Fetch the example sentence for the primary word (16 §3). Examples are NEVER
    *  auto-fetched — the button rendered on the primary sense (when no example
    *  exists yet) calls this; the first fetch caches server-side and then also
@@ -73,8 +74,6 @@ export function TranslationCard({
   onDelete,
   sourceLang,
   targetLang,
-  saveable = true,
-  noticeText,
   onRequestExample,
   exampleLoading,
 }: TranslationCardProps) {
@@ -113,11 +112,11 @@ export function TranslationCard({
             isExpanded={i === currentIdx}
             onExpand={() => onSetCurrent(i)}
             buttonState={buttonState(t)}
-            saveable={saveable}
-            noticeText={noticeText}
+            saveable={t.saveable ?? true}
+            noticeText={t.noticeText}
             onSave={() => onSave(i)}
             onDelete={() => onDelete(i)}
-            canRequestExample={saveable}
+            canRequestExample={t.saveable ?? true}
             exampleLoading={exampleLoading}
             onRequestExample={onRequestExample != null ? () => onRequestExample(i) : undefined}
           />

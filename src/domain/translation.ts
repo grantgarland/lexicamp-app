@@ -32,6 +32,13 @@ export interface DictionarySense {
   /** Gendered determiner for the target ('la' for mosca), '' when none. */
   prefixWord: string;
   backTranslations: BackTranslation[];
+  /** Result-quality gate (16 §2), evaluated PER SENSE. A lookup can return
+   *  several senses in one card and they render as independent cards (D10:
+   *  saving one never touches its siblings) — so one bad (echo) sense must
+   *  never block a sibling sense that's a real, distinct translation. Absent
+   *  or 'ok' ⇒ saveable. */
+  quality?: ResultQuality;
+  qualityReason?: ResultQualityReason;
 }
 
 export interface BackTranslation {
@@ -73,12 +80,6 @@ export interface LookupResult {
   provider: 'azure_dictionary' | 'azure_mt';
   /** Lazily populated (16 §3). */
   examples?: UsageExample[];
-  /** Result-quality gate (16 §2). Absent or 'ok' ⇒ saveable. 'unsaveable' ⇒ the
-   *  card renders read-only (Save disabled) with `qualityReason`. Decided
-   *  authoritatively server-side (Edge Function); the mock + a client re-check
-   *  mirror the same rule. */
-  quality?: ResultQuality;
-  qualityReason?: ResultQualityReason;
 }
 
 export type ResultQuality = 'ok' | 'unsaveable';
@@ -90,19 +91,26 @@ export type ResultQualityReason = 'echo';
 /** i18n key for a quality reason ('translationCard.unsaveable.echo'). */
 export const qualityReasonI18nKey = (r: ResultQualityReason): string => `translationCard.unsaveable.${r}`;
 
-/** Assess whether a found result is safe to save. Pure + deterministic so the Edge
- *  Function and the client agree. Today: the identity-echo check, generalized to ANY
- *  length (16 §2 originally had it only for >3-token sources — the gap that let a
- *  single untranslated word through). `normalizedTarget`/`normalizedSource` are both
- *  NFC-lowercased cache-key forms, so an exact compare is the echo test. */
+/** Assess whether each sense of a found result is safe to save. Pure + deterministic
+ *  so the Edge Function and the client agree. Today: the identity-echo check,
+ *  generalized to ANY length (16 §2 originally had it only for >3-token sources — the
+ *  gap that let a single untranslated word through). `normalizedTarget`/
+ *  `normalizedSource` are both NFC-lowercased cache-key forms, so an exact compare is
+ *  the echo test.
+ *
+ *  Evaluated PER SENSE, not once for the whole result (2026-07-23 fix): a dictionary
+ *  lookup can return several senses in one card, and D10 already treats them as
+ *  independent (saving one never touches its siblings) — so a bad primary sense must
+ *  never poison a genuinely different, valid secondary sense, and vice versa. Bug:
+ *  "bobcat" (EN→RU) had an untranslated-echo primary sense, which wrongly marked the
+ *  whole card unsaveable even though its second sense ("рысь") was a real translation. */
 export function assessResultQuality(
   r: Pick<LookupResult, 'normalizedSource' | 'senses'>,
-): { quality: ResultQuality; qualityReason?: ResultQualityReason } {
-  const primary = r.senses[0];
-  if (primary != null && primary.normalizedTarget === r.normalizedSource) {
-    return { quality: 'unsaveable', qualityReason: 'echo' };
-  }
-  return { quality: 'ok' };
+): { senses: DictionarySense[] } {
+  const senses = r.senses.map((s) =>
+    s.normalizedTarget === r.normalizedSource ? { ...s, quality: 'unsaveable' as const, qualityReason: 'echo' as const } : s,
+  );
+  return { senses };
 }
 
 /** Lookup outcome: found, gate-rejected (422 path), or dictionary+fallback miss. */
