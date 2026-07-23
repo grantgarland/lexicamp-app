@@ -480,6 +480,7 @@ function SearchBar({ value, onChange, placeholder }: { value: string; onChange: 
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
+          accessibilityLabel={placeholder ?? t('common.search')}
           // Maestro tap target (word-capture.yaml) — taps by id, never by
           // placeholder text (placeholder is locale/profile-dependent).
           testID="search-input"

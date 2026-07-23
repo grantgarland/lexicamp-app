@@ -38,7 +38,9 @@ export function Button({
       ? theme.color.textBody
       : isGhost
         ? theme.color.textMuted
-        : theme.color.textOnAccent; // primary / destructive / pill
+        : variant === 'destructive'
+          ? theme.color.textOnDanger
+          : theme.color.textOnAccent; // primary / pill
 
   return (
     <Pressable

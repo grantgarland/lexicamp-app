@@ -65,7 +65,7 @@ export function HowItWorksList({ onStartTour }: HowItWorksListProps = {}) {
           accessibilityRole="button"
           style={({ pressed }) => [styles.tourCta, pressed && { opacity: 0.85 }]}
         >
-          <IconPlay size={14} color={theme.color.accent} />
+          <IconPlay size={14} color={theme.color.accentStrong} />
           <RawText style={styles.tourCtaText}>{t('walkthrough.replayCta')}</RawText>
         </Pressable>
       )}
@@ -77,7 +77,7 @@ const styles = StyleSheet.create((theme) => {
   const { color, fonts } = theme;
   return {
     tourCta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 12, paddingVertical: 12, borderRadius: 10, borderWidth: theme.borderWidth.thin, borderColor: theme.color.border, backgroundColor: theme.color.surfaceCard },
-    tourCtaText: { fontFamily: theme.fonts.sans.semibold, fontSize: 14, color: theme.color.accent },
+    tourCtaText: { fontFamily: theme.fonts.sans.semibold, fontSize: 14, color: theme.color.accentStrong },
     item: { borderTopWidth: theme.borderWidth.thin, borderTopColor: color.divider },
     itemHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11 },
     itemTitle: { flex: 1, fontFamily: fonts.sans.semibold, fontSize: 13, color: color.textStrong },

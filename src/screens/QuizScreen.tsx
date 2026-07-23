@@ -323,6 +323,7 @@ function EndScreen({
             style={styles.pika}
             resizeMode="contain"
             accessibilityLabel={good ? t('quiz.pikaGoodJobA11y') : t('quiz.pikaHugsA11y')}
+            accessibilityIgnoresInvertColors
           />
         </Animated.View>
         <Animated.View entering={FadeInDown.duration(400).delay(180)} style={styles.endHead}>
@@ -521,7 +522,13 @@ function TierPromoScreen({ promotions, onContinue }: { promotions: PromotedWord[
         )}
 
         <Animated.View entering={ZoomIn.duration(520).delay(320)}>
-          <Image source={pikaCelebrate} style={styles.promoPika} resizeMode="contain" accessibilityLabel={t('quiz.pikaCelebrateA11y')} />
+          <Image
+            source={pikaCelebrate}
+            style={styles.promoPika}
+            resizeMode="contain"
+            accessibilityLabel={t('quiz.pikaCelebrateA11y')}
+            accessibilityIgnoresInvertColors
+          />
         </Animated.View>
 
         <Animated.View entering={FadeInDown.duration(400).delay(560)} style={styles.promoCtaWrap}>

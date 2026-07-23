@@ -33,6 +33,7 @@ export function SearchBar({ value, onChange, placeholder, onFilter, filterActive
           autoCapitalize="none"
           autoCorrect={false}
           autoFocus={autoFocus}
+          accessibilityLabel={placeholder ?? t('common.search')}
           style={[styles.input, { fontFamily: theme.fonts.sans.regular, color: theme.color.textBody }]}
         />
         {value !== '' && (

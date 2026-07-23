@@ -548,9 +548,9 @@ function FilterSortSheet({
                   {localSort.dir === 0 ? (
                     <IconArrowDown size={12} color={theme.color.evergreen} />
                   ) : (
-                    <IconArrowUp size={12} color={theme.color.accent} />
+                    <IconArrowUp size={12} color={theme.color.accentStrong} />
                   )}
-                  <RawText style={[styles.sortDirText, { color: localSort.dir === 0 ? theme.color.evergreen : theme.color.accent }]}>
+                  <RawText style={[styles.sortDirText, { color: localSort.dir === 0 ? theme.color.evergreen : theme.color.accentStrong }]}>
                     {dirLabel}
                   </RawText>
                 </Animated.View>
@@ -726,6 +726,7 @@ function CreateDeckSheet({ visible, words, initialWord, onClose, onCreate }: { v
         onChangeText={setName}
         placeholder={t('wordList.deckNamePlaceholder')}
         placeholderTextColor={theme.color.textMuted}
+        accessibilityLabel={t('wordList.deckNamePlaceholder')}
         style={[styles.deckNameInput, { fontFamily: theme.fonts.sans.medium, color: theme.color.textStrong }]}
       />
       <RawText style={styles.pickerLabel}>{t('wordList.selectWords', { count: selected.size })}</RawText>

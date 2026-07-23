@@ -17,6 +17,7 @@ import {
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { useTranslation } from '@/i18n';
 import { FONT_SCALE_MAX } from './Text';
 
 export interface WordCharInputProps {
@@ -42,6 +43,7 @@ const PAD = 6;
 
 export function WordCharInput({ word, accentColor, borderColor, backgroundColor, autoFocus, onComplete }: WordCharInputProps) {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   const accent = accentColor ?? theme.color.accent;
   const idle = borderColor ?? theme.color.border;
   const fadeBg = backgroundColor ?? theme.color.surfaceCard;
@@ -167,13 +169,14 @@ export function WordCharInput({ word, accentColor, borderColor, backgroundColor,
               }}
               value={values[si] ?? ''}
               autoFocus={autoFocus === true && si === 0}
-              onChangeText={(t) => handleChange(si, t)}
+              onChangeText={(txt) => handleChange(si, txt)}
               onKeyPress={(e) => handleKeyPress(si, e)}
               onFocus={() => {
                 setFocused(si);
                 scrollToSlot(si);
               }}
               onBlur={() => setFocused((f) => (f === si ? null : f))}
+              accessibilityLabel={t('quiz.letterInputA11y', { position: si + 1, total: letterCount })}
               caretHidden
               autoCapitalize="none"
               autoCorrect={false}

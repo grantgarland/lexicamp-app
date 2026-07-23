@@ -249,8 +249,8 @@ function TranslationItem({
               /* Maestro action-state ids: only the EXPANDED sense renders its
                  action block, so at most one of these exists at a time. */
               <Pressable onPress={onSave} style={[styles.action, styles.actionSave]} accessibilityRole="button" testID="result-save">
-                <IconBook size={16} color="#fff" />
-                <RNText style={styles.actionTextLight}>{t('translationCard.saveWord')}</RNText>
+                <IconBook size={16} color={theme.color.textOnAccent} />
+                <RNText style={styles.actionTextOnAccent}>{t('translationCard.saveWord')}</RNText>
               </Pressable>
             )}
             {saveable && buttonState === 'saved' && (
@@ -385,6 +385,7 @@ const styles = StyleSheet.create((theme) => {
     actionDelete: { backgroundColor: color.dangerSoft, borderColor: palette.red[100] },
     actionDisabled: { backgroundColor: palette.slate[100], borderColor: color.border },
     actionTextLight: { fontFamily: fonts.sans.bold, fontSize: 15, color: '#fff' },
+    actionTextOnAccent: { fontFamily: fonts.sans.bold, fontSize: 15, color: theme.color.textOnAccent },
     actionTextDanger: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.danger },
     actionTextDisabled: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.textFaint },
 

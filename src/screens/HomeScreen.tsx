@@ -173,7 +173,7 @@ function StudyCard({ due, onStudy }: { due: number; onStudy: () => void }) {
           style={({ pressed }) => [styles.studyBtn, pressed && styles.studyBtnPressed]}
         >
           <RawText style={styles.studyBtnText}>{t('home.studyNow')}</RawText>
-          <IconArrowRight size={16} color="#fff" />
+          <IconArrowRight size={16} color={theme.color.textOnAccent} />
         </Pressable>
       </View>
     </View>
@@ -372,7 +372,7 @@ const styles = StyleSheet.create((theme) => {
       justifyContent: 'center',
       boxShadow: theme.shadow.accent,
     },
-    caughtUpBtnText: { fontFamily: fonts.sans.bold, fontSize: 16, color: '#fff' },
+    caughtUpBtnText: { fontFamily: fonts.sans.bold, fontSize: 16, color: color.textOnAccent },
 
     // No `overflow: hidden` — that would clip the Study button's glow. The gradient is
     // rounded via the SVG Rect's rx/ry instead, so the card corners still read clean.
@@ -393,7 +393,7 @@ const styles = StyleSheet.create((theme) => {
       boxShadow: '0 4px 12px rgba(232, 119, 34, 0.4)',
     },
     studyBtnPressed: { transform: [{ scale: 0.98 }] },
-    studyBtnText: { fontFamily: fonts.sans.bold, fontSize: 16, color: '#fff' },
+    studyBtnText: { fontFamily: fonts.sans.bold, fontSize: 16, color: color.textOnAccent },
 
     emptyCard: {
       backgroundColor: palette.blue[50],
@@ -416,7 +416,7 @@ const styles = StyleSheet.create((theme) => {
       justifyContent: 'center',
       boxShadow: theme.shadow.accent,
     },
-    emptyBtnText: { fontFamily: fonts.sans.bold, fontSize: 16, color: '#fff' },
+    emptyBtnText: { fontFamily: fonts.sans.bold, fontSize: 16, color: color.textOnAccent },
 
     eduCard: {
       backgroundColor: color.surfaceCard,

@@ -78,7 +78,7 @@ export function DevBadge() {
     <>
       {open && (
         <>
-          <Pressable style={styles.scrim} onPress={() => setOpen(false)} />
+          <Pressable style={styles.scrim} onPress={() => setOpen(false)} accessibilityRole="button" accessibilityLabel="Dismiss dev panel" />
           <View style={[styles.panel, { top: top + 34 }]}>
             <Text style={styles.heading} allowFontScaling={false}>
               Dev · app state {USE_SUPABASE ? '· LIVE' : '· mock'}
@@ -146,7 +146,13 @@ export function DevBadge() {
 
 function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
+    <Pressable
+      onPress={onPress}
+      style={[styles.chip, active && styles.chipActive]}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={label}
+    >
       <Text style={[styles.chipText, active && styles.chipTextActive]} allowFontScaling={false}>
         {label}
       </Text>

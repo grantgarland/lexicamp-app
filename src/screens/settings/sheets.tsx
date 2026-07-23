@@ -574,7 +574,7 @@ export function AboutSheet({ visible, onClose }: { visible: boolean; onClose: ()
   return (
     <Sheet visible={visible} onClose={onClose} title={t('settings.aboutTitle')}>
       <View style={styles.aboutHead}>
-        <IconStar size={40} color={theme.color.accent} />
+        <IconStar size={40} color={theme.color.accentStrong} />
         <RawText style={styles.aboutName}>Lexicamp</RawText>
         <RawText style={styles.aboutTagline}>{t('settings.aboutTagline')}</RawText>
         <RawText style={styles.aboutVersion}>{t('settings.aboutVersion', { version: '1.0.0', build: 1 })}</RawText>

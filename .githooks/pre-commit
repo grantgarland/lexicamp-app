@@ -1,11 +1,12 @@
 #!/bin/sh
 # Keep generated artifacts in sync with the design-system source of truth.
 #
-# Two independent drift guards, each runs only when its inputs are staged:
-#   1. Brand assets  (sync-brand-assets.js + managed PNGs)
-#   2. Design tokens (sync-tokens.mjs -> src/theme/tokens.generated.ts)
-# Each re-syncs from the design system and re-stages its outputs, so whatever
-# gets committed matches the source of truth.
+# Independent drift/quality guards, each runs only when its inputs are staged:
+#   1. Brand assets    (sync-brand-assets.js + managed PNGs)
+#   2. Design tokens    (sync-tokens.mjs -> src/theme/tokens.generated.ts)
+#   3. Token contrast   (check-contrast.mjs — WCAG AA over tokens.generated.ts, 3.11)
+# Guards 1/2 re-sync from the design system and re-stage their outputs, so
+# whatever gets committed matches the source of truth.
 #
 # Installed via `git config core.hooksPath .githooks` (wired up automatically
 # by the package.json "prepare" script on npm install).
@@ -40,6 +41,15 @@ if [ "$token_relevant" -eq 1 ]; then
       exit 1
     fi
     git add src/theme/tokens.generated.ts
+  fi
+
+  # ── Guard 3: WCAG contrast check ──────────────────────────────────────────
+  # Runs against whatever tokens.generated.ts ends up staged above (synced or
+  # not) — self-contained, no design-system dir needed.
+  echo "pre-commit: checking token contrast (WCAG AA)…"
+  if ! node scripts/check-contrast.mjs; then
+    echo "pre-commit: contrast check failed; aborting commit." >&2
+    exit 1
   fi
 fi
 

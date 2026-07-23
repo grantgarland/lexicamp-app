@@ -234,6 +234,7 @@
     "keepClimbing": "Keep climbing →",
     "promptRecognition": "What's the translation?",
     "promptRecall": "Recall the {{lang}} word.",
+    "letterInputA11y": "Letter {{position}} of {{total}}",
     "promoHeadline": "New camp reached!",
     "promoSubtitle": "These words climbed to a higher camp this session.",
     "commitError": "Your progress couldn't be saved. Check your connection and study these words again.",

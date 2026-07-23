@@ -234,6 +234,7 @@
     "keepClimbing": "Sigue subiendo →",
     "promptRecognition": "¿Cuál es la traducción?",
     "promptRecall": "Recuerda la palabra en {{lang}}.",
+    "letterInputA11y": "Letra {{position}} de {{total}}",
     "promoHeadline": "¡Nuevo campamento alcanzado!",
     "promoSubtitle": "Estas palabras subieron a un campamento superior en esta sesión.",
     "commitError": "No se pudo guardar tu progreso. Revisa tu conexión y vuelve a estudiar estas palabras.",

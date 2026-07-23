@@ -55,7 +55,13 @@ export function EmptyState({
       )}
 
       {secondary != null && (
-        <Pressable onPress={onSecondary} hitSlop={8} style={{ marginBottom: networkNote ? 20 : 0 }}>
+        <Pressable
+          onPress={onSecondary}
+          hitSlop={8}
+          style={{ marginBottom: networkNote ? 20 : 0 }}
+          accessibilityRole="button"
+          accessibilityLabel={secondary}
+        >
           <Text variant="footnote" style={styles.secondary}>
             {secondary}
           </Text>

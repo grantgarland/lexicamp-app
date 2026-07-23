@@ -42,8 +42,8 @@ export function DeckRow({ deck, wordCount, onPress, onStudy, onDelete }: DeckRow
           onStudy?.();
         }}
       >
-        <IconPlay size={18} color="#fff" />
-        <Text variant="label" style={styles.actionLabel}>
+        <IconPlay size={18} color={theme.color.textOnAccent} />
+        <Text variant="label" style={[styles.actionLabel, { color: theme.color.textOnAccent }]}>
           {t('deckRow.study')}
         </Text>
       </Pressable>
