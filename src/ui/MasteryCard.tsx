@@ -78,7 +78,7 @@ export function MasteryCard({
                   styles.seg,
                   i === 0 && styles.segFirst,
                   i === TIERS.length - 1 && styles.segLast,
-                  { backgroundColor: filled ? tier.color : theme.palette.slate[100] },
+                  { backgroundColor: filled ? tier.color : theme.color.surfaceSunken },
                   active !== null && active !== i && styles.segDim,
                   active === i && { borderWidth: 2, borderColor: tier.color },
                 ]}
@@ -126,7 +126,7 @@ export function MasteryCard({
       {/* Stats row */}
       <View style={styles.statsRow}>
         <View style={styles.stat}>
-          <IconBook size={13} color={isEmpty ? theme.palette.slate[300] : theme.color.textMuted} />
+          <IconBook size={13} color={isEmpty ? theme.color.borderStrong : theme.color.textMuted} />
           <RNText style={[styles.statValue, { color: isEmpty ? theme.color.textFaint : theme.color.textStrong }]}>
             {isEmpty ? 0 : wordsSaved}
           </RNText>
@@ -134,7 +134,7 @@ export function MasteryCard({
         </View>
         <View style={styles.statDivider} />
         <View style={styles.stat}>
-          <RNText style={[styles.star, { color: isEmpty || mastered === 0 ? theme.palette.slate[300] : theme.color.accent }]}>
+          <RNText style={[styles.star, { color: isEmpty || mastered === 0 ? theme.color.borderStrong : theme.color.accent }]}>
             ★
           </RNText>
           <RNText
@@ -172,7 +172,7 @@ function tierTip(t: TFunction, tier: Tier, count: number) {
 }
 
 const styles = StyleSheet.create((theme) => {
-  const { color, palette, fonts } = theme;
+  const { color, fonts } = theme;
   return {
     ttHead: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 4 },
     ttDot: { width: 9, height: 9, borderRadius: 2 },
@@ -188,7 +188,7 @@ const styles = StyleSheet.create((theme) => {
       paddingHorizontal: 18,
       paddingBottom: 18,
     },
-    cardFull: { borderColor: palette.blue[100], boxShadow: theme.shadow.sm },
+    cardFull: { borderColor: color.brandSoft, boxShadow: theme.shadow.sm },
     cardEmpty: { borderColor: color.border, boxShadow: theme.shadow.xs },
     header: { marginBottom: 14 },
     eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },

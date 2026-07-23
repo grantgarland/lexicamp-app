@@ -48,7 +48,7 @@ export function PaywallScreen() {
       <Screen edges={['top', 'bottom']}>
         <View style={styles.successWrap}>
           <View style={styles.successBadge}>
-            <IconStar size={40} color={theme.color.textOnAccent} />
+            <IconStar size={40} color={theme.color.textOnAccentCta} />
           </View>
           <RawText style={styles.successTitle}>{t('paywall.successTitle')}</RawText>
           <RawText style={styles.successBody}>{t('paywall.successBody')}</RawText>
@@ -70,7 +70,7 @@ export function PaywallScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.crest}>
-          <IconStar size={30} color={theme.color.textOnAccent} />
+          <IconStar size={30} color={theme.color.textOnAccentCta} />
         </View>
         <RawText style={styles.heading}>{t(isPace ? 'paywall.paceHeading' : 'paywall.heading')}</RawText>
         <RawText style={styles.sub}>
@@ -128,7 +128,7 @@ function PlanCard({ selected, onPress, title, price, sub, badge, note }: { selec
       accessibilityState={{ selected }}
       style={[styles.plan, { borderColor: selected ? theme.color.brand : theme.color.border, backgroundColor: selected ? theme.color.brandSoft : theme.color.surfaceCard }]}
     >
-      <View style={[styles.radio, { borderColor: selected ? theme.color.brand : theme.palette.slate[300], borderWidth: selected ? 6 : 2 }]} />
+      <View style={[styles.radio, { borderColor: selected ? theme.color.brand : theme.color.borderStrong, borderWidth: selected ? 6 : 2 }]} />
       <View style={styles.planBody}>
         <View style={styles.planTitleRow}>
           <RawText style={styles.planTitle}>{title}</RawText>
@@ -168,7 +168,7 @@ const styles = StyleSheet.create((theme) => {
     planTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     planTitle: { fontFamily: fonts.sans.bold, fontSize: 16, color: color.textStrong },
     planBadge: { backgroundColor: color.accent, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
-    planBadgeText: { fontFamily: fonts.sans.bold, fontSize: 10, letterSpacing: 0.3, color: color.textOnAccent },
+    planBadgeText: { fontFamily: fonts.sans.bold, fontSize: 10, letterSpacing: 0.3, color: color.textOnAccentCta },
     planSub: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted, marginTop: 2 },
     planNote: { fontFamily: fonts.sans.semibold, fontSize: 11, color: color.brand, marginTop: 4 },
     planPrice: { fontFamily: fonts.sans.bold, fontSize: 16, color: color.textStrong },

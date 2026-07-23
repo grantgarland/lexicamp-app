@@ -33,7 +33,7 @@ if (!m) {
   process.exit(1);
 }
 const tokens = JSON.parse(m[1]);
-const { color } = tokens;
+const { color, colorDark } = tokens;
 
 // ── 2. WCAG relative luminance + contrast ratio (solid hex colors only) ──────
 function hexToRgb(hex) {
@@ -87,6 +87,9 @@ const PAIRS = [
   // Solid-fill CTA labels: Button primary/pill + PaywallScreen crest/badge
   // icons all sit on `color.accent` via `textOnAccent` (src/ui/Button.tsx).
   { fg: 'textOnAccent', bg: 'accent', kind: 'text' },
+  // Primary-CTA fill option (accent-cta = amber-700 + white label) — the
+  // amber-700-on-white treatment Casey is validating.
+  { fg: 'textOnAccentCta', bg: 'accentCta', kind: 'text' },
   // Button `destructive` variant — split from textOnAccent in 3.11b (the two
   // only shared a value by coincidence before).
   { fg: 'textOnDanger', bg: 'danger', kind: 'text' },
@@ -97,14 +100,22 @@ const PAIRS = [
   // logo star (src/screens/settings/sheets.tsx). Needs the darker
   // `accentStrong` alias; the vivid `accent` fill itself fails here.
   { fg: 'accentStrong', bg: 'surfaceCard', kind: 'text' },
-  // Amber sort-direction pill text/icon on its amber-50 tint background
-  // (src/screens/WordListScreen.tsx) — a literal palette step, not a `color.*`
-  // semantic alias, so referenced by hex directly.
-  { fg: 'accentStrong', bg: '#fff5ed', kind: 'text' },
+  // Amber sort-direction pill text/icon on the accent tint background
+  // (src/screens/WordListScreen.tsx). Tokenized in the dark-mode pass (was a
+  // hardcoded #fff5ed) so it flips: light accentTint in light, dark in dark.
+  { fg: 'accentStrong', bg: 'accentTint', kind: 'text' },
   // Danger as error/validation copy (Input, Auth/Reset/Quiz screens, Settings
   // sheets all render `color.danger` directly as text on these 2 surfaces).
   { fg: 'danger', bg: 'canvas', kind: 'text' },
   { fg: 'danger', bg: 'surfaceCard', kind: 'text' },
+  // "On-soft" text/icon colors sitting on the tinted status/brand chips — the
+  // dark-mode tokenization pass routes badge & tint-tile text through these so
+  // they stay readable in both themes (light dark-ink on a pale tint → light
+  // ink on a dark tint).
+  { fg: 'onBrandSoft', bg: 'brandSoft', kind: 'text' },
+  { fg: 'onBrandSoft', bg: 'brandTint', kind: 'text' },
+  { fg: 'accentStrong', bg: 'accentSoft', kind: 'text' },
+  { fg: 'onSuccessSoft', bg: 'successSoft', kind: 'text' },
 ];
 
 const AA = { text: 4.5, ui: 3 };
@@ -116,39 +127,64 @@ const AA = { text: 4.5, ui: 3 };
 // accentStrong aliases) rather than muted here. Kept as a mechanism for
 // future gaps that turn out to need a deliberate, tracked design tradeoff
 // instead of an immediate fix.
-const KNOWN_EXCEPTIONS = [];
+//
+// 2026-07-23d — DELIBERATE, tracked exception (Casey's call): the primary-CTA
+// fill is bright brand amber-500 with a WHITE bold label (accent-cta token).
+// White on amber-500 is 2.96:1 — below AA — but the vivid "autumnal orange" CTA
+// is a core brand signal and darkening it (or flipping the label to dark ink)
+// was rejected on look. Bold weight aids perceived legibility; the ratio itself
+// is unchanged (contrast is luminance-only). Recorded here so CI WARNS (not
+// fails) on exactly this pair, while still catching any NEW/worse regression
+// (e.g. if amber-500 were darkened, dropping below the 2.96 floor).
+const KNOWN_EXCEPTIONS = [
+  { fg: 'textOnAccentCta', bg: 'accentCta', floor: 2.96, theme: 'light' },
+  { fg: 'textOnAccentCta', bg: 'accentCta', floor: 2.96, theme: 'dark' },
+];
 
-let failed = 0;
-let excepted = 0;
-for (const { fg, bg, kind } of PAIRS) {
-  const fgHex = fg.startsWith('#') ? fg : color[fg];
-  const bgHex = bg.startsWith('#') ? bg : color[bg];
-  if (fgHex == null || bgHex == null) {
-    console.error(`check-contrast: unknown token in pair {fg: ${fg}, bg: ${bg}} — a token was renamed/removed; update PAIRS.`);
-    failed++;
-    continue;
-  }
-  const ratio = contrastRatio(fgHex, bgHex);
-  const min = AA[kind];
-  if (ratio >= min) continue;
+// ── 5. Run the same pair list against each theme's color map ─────────────────
+// Both light and dark must clear AA. The dark set (colorDark) is generated from
+// colors.dark.css; if it's absent (older tokens file) only light is checked.
+function checkTheme(themeName, colorMap) {
+  let failed = 0;
+  let excepted = 0;
+  for (const { fg, bg, kind } of PAIRS) {
+    const fgHex = fg.startsWith('#') ? fg : colorMap[fg];
+    const bgHex = bg.startsWith('#') ? bg : colorMap[bg];
+    if (fgHex == null || bgHex == null) {
+      console.error(`check-contrast [${themeName}]: unknown token in pair {fg: ${fg}, bg: ${bg}} — a token was renamed/removed; update PAIRS.`);
+      failed++;
+      continue;
+    }
+    const ratio = contrastRatio(fgHex, bgHex);
+    const min = AA[kind];
+    if (ratio >= min) continue;
 
-  const known = KNOWN_EXCEPTIONS.find((e) => e.fg === fg && e.bg === bg);
-  if (known && ratio >= known.floor - 0.01) {
-    console.warn(
-      `check-contrast: known gap  ${fg} (${fgHex}) on ${bg} (${bgHex}) = ${ratio.toFixed(2)}:1, needs ≥${min}:1 (${kind}) — tracked in 08, needs a design-system palette fix, not an app change.`,
+    const known = KNOWN_EXCEPTIONS.find((e) => e.fg === fg && e.bg === bg && (e.theme ?? 'light') === themeName);
+    if (known && ratio >= known.floor - 0.01) {
+      console.warn(
+        `check-contrast [${themeName}]: accepted tradeoff  ${fg} (${fgHex}) on ${bg} (${bgHex}) = ${ratio.toFixed(2)}:1 vs ≥${min}:1 (${kind}) — deliberate, tracked in KNOWN_EXCEPTIONS (see note); not a regression.`,
+      );
+      excepted++;
+      continue;
+    }
+    console.error(
+      `check-contrast [${themeName}]: FAIL  ${fg} (${fgHex}) on ${bg} (${bgHex}) = ${ratio.toFixed(2)}:1, needs ≥${min}:1 (${kind})` +
+        (known ? ` — WORSE than the recorded floor of ${known.floor}:1; this regressed.` : ''),
     );
-    excepted++;
-    continue;
+    failed++;
   }
-  console.error(
-    `check-contrast: FAIL  ${fg} (${fgHex}) on ${bg} (${bgHex}) = ${ratio.toFixed(2)}:1, needs ≥${min}:1 (${kind})` +
-      (known ? ` — WORSE than the recorded floor of ${known.floor}:1; this regressed.` : ''),
-  );
-  failed++;
+  if (failed === 0) {
+    console.log(`check-contrast [${themeName}]: ${PAIRS.length - excepted}/${PAIRS.length} fg/bg pairs meet WCAG AA ✓ (${excepted} known, tracked gap(s))`);
+  }
+  return failed;
 }
 
-if (failed > 0) {
-  console.error(`\ncheck-contrast: ${failed} pair(s) below WCAG AA. Fix at the src/ui/ kit layer (all screens compose it).`);
+const themes = [['light', color]];
+if (colorDark) themes.push(['dark', colorDark]);
+let totalFailed = 0;
+for (const [name, map] of themes) totalFailed += checkTheme(name, map);
+
+if (totalFailed > 0) {
+  console.error(`\ncheck-contrast: ${totalFailed} pair(s) below WCAG AA across ${themes.length} theme(s). Fix at the src/ui/ kit layer or the design-system palette.`);
   process.exit(1);
 }
-console.log(`check-contrast: ${PAIRS.length - excepted}/${PAIRS.length} fg/bg pairs meet WCAG AA ✓ (${excepted} known, tracked gap(s) — see 08-execution-backlog.md 3.11)`);

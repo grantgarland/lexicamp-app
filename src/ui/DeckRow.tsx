@@ -36,14 +36,14 @@ export function DeckRow({ deck, wordCount, onPress, onStudy, onDelete }: DeckRow
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t('deckRow.studyA11y')}
-        style={[styles.action, { backgroundColor: theme.color.accent }]}
+        style={[styles.action, { backgroundColor: theme.color.accentCta }]}
         onPress={() => {
           ref.current?.close();
           onStudy?.();
         }}
       >
-        <IconPlay size={18} color={theme.color.textOnAccent} />
-        <Text variant="label" style={[styles.actionLabel, { color: theme.color.textOnAccent }]}>
+        <IconPlay size={18} color={theme.color.textOnAccentCta} />
+        <Text variant="label" style={[styles.actionLabel, { color: theme.color.textOnAccentCta }]}>
           {t('deckRow.study')}
         </Text>
       </Pressable>
@@ -56,8 +56,8 @@ export function DeckRow({ deck, wordCount, onPress, onStudy, onDelete }: DeckRow
           onDelete?.();
         }}
       >
-        <IconTrash size={18} color="#fff" />
-        <Text variant="label" style={styles.actionLabel}>
+        <IconTrash size={18} color={theme.color.textOnDanger} />
+        <Text variant="label" style={[styles.actionLabel, { color: theme.color.textOnDanger }]}>
           {t('deckRow.delete')}
         </Text>
       </Pressable>
@@ -110,9 +110,9 @@ const styles = StyleSheet.create((theme) => ({
     width: 40,
     height: 40,
     borderRadius: 10,
-    backgroundColor: theme.palette.blue[50],
+    backgroundColor: theme.color.brandTint,
     borderWidth: theme.borderWidth.thin,
-    borderColor: theme.palette.blue[200],
+    borderColor: theme.color.brandSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },

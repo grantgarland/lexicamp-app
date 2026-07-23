@@ -1,7 +1,10 @@
 // Unistyles themes, assembled from the generated design tokens.
-// Light is the real theme (prototypes are light-only). `dark` is a documented
-// placeholder = light, until dark mode is designed (tracked in 14 §5). Adaptive
-// themes stay OFF in unistyles.ts so the placeholder never ships by accident.
+// Light and dark are both real themes: `dark` swaps in the `colorDark` semantic
+// set (surfaces/text/status inverted for "Alpine Night"; brand hues keep their
+// identity), generated from lexicamp-design-system/project/tokens/colors.dark.css.
+// Everything else (fonts/space/radius/shadow/motion) is shared. Adaptive themes
+// are ON in unistyles.ts, so the device system color scheme drives the swap;
+// there is no in-app toggle (14 §5).
 //
 // RN font notes:
 //  • fontFamily must be a single registered name (see App font loading in P1).
@@ -14,6 +17,9 @@
 import { tokens } from './tokens.generated';
 
 const { palette, color, font, space, radius, borderWidth, shadow, motion } = tokens;
+// Dark semantic set (generated from colors.dark.css). Falls back to light if the
+// dark file is ever removed, so the app never loses its color map.
+const colorDark = ('colorDark' in tokens ? tokens.colorDark : color) as typeof color;
 
 // Registered font-family names. RN custom fonts don't pick a weight from
 // `fontWeight` reliably (esp. Android) → register ONE family per weight and select
@@ -62,7 +68,8 @@ const base = {
 } as const;
 
 export const lightTheme = base;
-export const darkTheme = base; // TODO(14 §5): design dark mode, then diverge surfaces/text.
+// Dark diverges ONLY in the semantic color set; all other tokens are shared.
+export const darkTheme = { ...base, color: colorDark } as const;
 
 export const breakpoints = { xs: 0, sm: 360, md: 768, lg: 1024 } as const;
 

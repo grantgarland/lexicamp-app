@@ -47,7 +47,7 @@ export function SearchBar({ value, onChange, placeholder, onFilter, filterActive
           onPress={onFilter}
           accessibilityRole="button"
           accessibilityLabel={t('common.filter')}
-          style={[styles.filterBtn, { backgroundColor: filterActive ? theme.color.brand : theme.palette.slate[100] }]}
+          style={[styles.filterBtn, { backgroundColor: filterActive ? theme.color.brand : theme.color.surfaceSunken }]}
         >
           <IconSliders size={16} color={filterActive ? '#fff' : theme.color.textMuted} />
         </Pressable>
@@ -58,7 +58,7 @@ export function SearchBar({ value, onChange, placeholder, onFilter, filterActive
 
 const styles = StyleSheet.create((theme) => ({
   row: { flexDirection: 'row', gap: 8 },
-  field: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: theme.palette.slate[100], borderRadius: 10, paddingHorizontal: 12, height: 40 },
+  field: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: theme.color.surfaceSunken, borderRadius: 10, paddingHorizontal: 12, height: 40 },
   input: { flex: 1, fontSize: 15, padding: 0 },
   filterBtn: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
 }));

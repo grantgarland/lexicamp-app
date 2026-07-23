@@ -27,6 +27,6 @@ export function ProgressDots({ count, index, style }: ProgressDotsProps) {
 const styles = StyleSheet.create((theme) => ({
   row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   dot: { height: 6, borderRadius: 3 },
-  inactive: { width: 6, backgroundColor: theme.palette.slate[200] },
+  inactive: { width: 6, backgroundColor: theme.color.border },
   active: { width: 22, backgroundColor: theme.color.brand },
 }));

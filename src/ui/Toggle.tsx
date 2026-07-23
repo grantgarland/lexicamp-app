@@ -27,7 +27,7 @@ export function Toggle({ value, onValueChange, disabled = false }: ToggleProps) 
 
   const backgroundColor = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: [theme.palette.slate[300], theme.color.brand],
+    outputRange: [theme.color.borderStrong, theme.color.brand],
   });
   const translateX = anim.interpolate({ inputRange: [0, 1], outputRange: [0, 20] });
 

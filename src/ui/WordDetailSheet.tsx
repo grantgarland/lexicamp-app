@@ -2,14 +2,14 @@
 // and the deck detail sheet. Tier + memory-strength card, example, a DetailStats strip
 // (Next review · Reviews · Added), and a delete action.
 import { useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, useColorScheme, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import type { WordListItem } from '@/data/DataSource';
 import { useTranslation } from '@/i18n';
 import { addedLabel, dueLabel } from '@/lib/relativeTime';
 import { useExamples } from '@/query/hooks';
-import { getTierByStability } from '@/theme/tiers';
+import { getTierByStability, tierView } from '@/theme/tiers';
 import { DetailStats } from './DetailStats';
 import { IconArchive, IconTrash } from './icons';
 import { Button } from './Button';
@@ -28,8 +28,9 @@ export interface WordDetailSheetProps {
 
 export function WordDetailSheet({ word, onClose, onDelete, onToggleArchive }: WordDetailSheetProps) {
   const { theme } = useUnistyles();
+  const isDark = useColorScheme() === 'dark';
   const { t } = useTranslation();
-  const tier = word ? getTierByStability(word.stability) : null;
+  const tier = word ? tierView(getTierByStability(word.stability), isDark) : null;
   // Examples (16 §3) are USER-GATED (2026-07-22): a saved word with no cached
   // example shows a "Show example sentence" button instead of auto-fetching; the
   // fetch (and its permanent server-side cache) happens only on press. senseTarget
@@ -129,13 +130,13 @@ export function WordDetailSheet({ word, onClose, onDelete, onToggleArchive }: Wo
 }
 
 const styles = StyleSheet.create((theme) => {
-  const { color, palette, fonts } = theme;
+  const { color, fonts } = theme;
   return {
     head: { marginBottom: 14 },
     word: { fontFamily: fonts.serif.bold, fontSize: 24, color: color.textStrong, letterSpacing: -0.3 },
     target: { fontFamily: fonts.sans.regular, fontSize: 16, color: color.textMuted, marginTop: 3 },
     metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
-    posPill: { backgroundColor: palette.slate[100], borderRadius: 4, paddingVertical: 2, paddingHorizontal: 8 },
+    posPill: { backgroundColor: color.surfaceSunken, borderRadius: 4, paddingVertical: 2, paddingHorizontal: 8 },
     posPillText: { fontFamily: fonts.sans.semibold, fontSize: 12, color: color.textMuted },
     memoryCard: { borderWidth: theme.borderWidth.thin, borderRadius: 10, padding: 12, marginBottom: 14 },
     memoryTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
@@ -149,7 +150,7 @@ const styles = StyleSheet.create((theme) => {
       justifyContent: 'center',
       paddingVertical: 11,
       borderRadius: 10,
-      backgroundColor: palette.slate[100],
+      backgroundColor: color.surfaceSunken,
       borderWidth: theme.borderWidth.thin,
       borderColor: color.border,
     },
@@ -159,7 +160,7 @@ const styles = StyleSheet.create((theme) => {
     exampleTight: { marginBottom: 4 },
     exampleTranslation: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 19, color: color.textMuted, marginBottom: 16 },
     stats: { marginBottom: 18 },
-    archive: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: palette.slate[100], borderRadius: 10, paddingVertical: 12, marginBottom: 10 },
+    archive: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: color.surfaceSunken, borderRadius: 10, paddingVertical: 12, marginBottom: 10 },
     archiveText: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.textMuted },
     delete: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(209, 73, 91, 0.12)', borderRadius: 10, paddingVertical: 12 },
     deleteText: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.danger },

@@ -120,8 +120,9 @@ export function WordRow({ word, onPress, onDelete, onAddToDeck, onToggleArchive,
             onDelete?.();
           }}
         >
-          <IconTrash size={18} color="#fff" />
-          <Text variant="label" style={styles.actionLabel}>
+          {/* danger flips to a light red in dark mode → icon/label follow textOnDanger */}
+          <IconTrash size={18} color={theme.color.textOnDanger} />
+          <Text variant="label" style={[styles.actionLabel, { color: theme.color.textOnDanger }]}>
             {t('wordRow.delete')}
           </Text>
         </Pressable>

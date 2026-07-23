@@ -108,7 +108,7 @@ const styles = StyleSheet.create((theme) => ({
   note: {
     flexDirection: 'row',
     gap: 10,
-    backgroundColor: theme.palette.slate[50],
+    backgroundColor: theme.color.surfaceSunken,
     borderWidth: theme.borderWidth.thin,
     borderColor: theme.color.border,
     borderRadius: 12,

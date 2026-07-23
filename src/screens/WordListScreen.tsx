@@ -526,7 +526,7 @@ function FilterSortSheet({
               accessibilityState={{ selected: on }}
               accessibilityLabel={on ? t('wordList.sortA11yActive', { dim: label, dir: dirLabel }) : t('wordList.sortA11yInactive', { dim: label })}
             >
-              <View style={[styles.radio, { borderColor: on ? theme.color.brand : theme.palette.slate[300] }]}>
+              <View style={[styles.radio, { borderColor: on ? theme.color.brand : theme.color.borderStrong }]}>
                 {on && <View style={styles.radioDot} />}
               </View>
               <RawText style={[styles.optionLabel, on && styles.optionLabelOn]}>{label}</RawText>
@@ -542,7 +542,7 @@ function FilterSortSheet({
                     styles.sortDirPill,
                     localSort.dir === 0
                       ? { backgroundColor: theme.color.evergreenTint, borderColor: theme.color.evergreenSoft }
-                      : { backgroundColor: theme.palette.amber[50], borderColor: theme.palette.amber[200] },
+                      : { backgroundColor: theme.color.accentTint, borderColor: theme.color.accentSoft },
                   ]}
                 >
                   {localSort.dir === 0 ? (
@@ -622,7 +622,7 @@ function PremiumGate() {
   return (
     <View style={styles.gate}>
       <View style={styles.gateLock}>
-        <IconLock size={28} color={theme.palette.amber[600]} />
+        <IconLock size={28} color={theme.color.accentStrong} />
       </View>
       <RawText style={styles.gateTitle}>{t('wordList.premiumTitle')}</RawText>
       <RawText style={styles.gateBody}>{t('wordList.premiumBody')}</RawText>
@@ -855,7 +855,7 @@ function AddToDeckSheet({
 }
 
 const styles = StyleSheet.create((theme) => {
-  const { color, fonts, palette } = theme;
+  const { color, fonts } = theme;
   return {
     header: { paddingHorizontal: 16, paddingTop: 4 },
     titleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 },
@@ -867,8 +867,8 @@ const styles = StyleSheet.create((theme) => {
 
     listContent: { paddingBottom: 16 },
     empty: { paddingTop: 64 },
-    proBadge: { backgroundColor: palette.amber[100], borderRadius: 3, paddingHorizontal: 5, paddingVertical: 1 },
-    proBadgeText: { fontFamily: fonts.sans.bold, fontSize: 9, letterSpacing: 0.3, color: palette.amber[800] },
+    proBadge: { backgroundColor: color.accentSoft, borderRadius: 3, paddingHorizontal: 5, paddingVertical: 1 },
+    proBadgeText: { fontFamily: fonts.sans.bold, fontSize: 9, letterSpacing: 0.3, color: color.accentStrong },
 
     // decks tab
     decksBody: { flex: 1 },
@@ -883,10 +883,10 @@ const styles = StyleSheet.create((theme) => {
     decksEmptyTitle: { fontFamily: fonts.serif.semibold, fontSize: 18, color: color.textStrong, marginBottom: 6 },
     decksEmptyBody: { fontFamily: fonts.sans.regular, fontSize: 14, color: color.textMuted, textAlign: 'center' },
     gate: { alignItems: 'center', paddingHorizontal: 24, paddingTop: 48 },
-    gateLock: { width: 64, height: 64, borderRadius: 32, backgroundColor: palette.amber[100], alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+    gateLock: { width: 64, height: 64, borderRadius: 32, backgroundColor: color.accentSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
     gateTitle: { fontFamily: fonts.sans.bold, fontSize: 17, color: color.textStrong, marginBottom: 8 },
     gateBody: { fontFamily: fonts.sans.regular, fontSize: 14, lineHeight: 22, color: color.textMuted, textAlign: 'center', marginBottom: 28, maxWidth: 280 },
-    gateBtn: { backgroundColor: color.accent, borderRadius: theme.radius.md, paddingVertical: 13, paddingHorizontal: 32, boxShadow: theme.shadow.accent },
+    gateBtn: { backgroundColor: color.accentCta, borderRadius: theme.radius.md, paddingVertical: 13, paddingHorizontal: 32, boxShadow: theme.shadow.accent },
     gateBtnText: { fontFamily: fonts.sans.bold, fontSize: 15, color: '#fff' },
     gatePricing: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textFaint, marginTop: 12 },
 
@@ -897,10 +897,10 @@ const styles = StyleSheet.create((theme) => {
     pickerList: { maxHeight: 320 },
     pickerCta: { marginTop: 14 },
     addToDeckSub: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted, marginBottom: 12, marginTop: -6 },
-    deckIconTile: { width: 38, height: 38, borderRadius: 9, backgroundColor: palette.blue[50], borderWidth: theme.borderWidth.thin, borderColor: palette.blue[200], alignItems: 'center', justifyContent: 'center' },
+    deckIconTile: { width: 38, height: 38, borderRadius: 9, backgroundColor: color.brandTint, borderWidth: theme.borderWidth.thin, borderColor: color.brandSoft, alignItems: 'center', justifyContent: 'center' },
     alreadyAdded: { fontFamily: fonts.sans.semibold, fontSize: 11, color: color.brand },
     createNewRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, paddingHorizontal: 0 },
-    createNewTile: { width: 38, height: 38, borderRadius: 9, borderWidth: 1.5, borderColor: palette.slate[300], borderStyle: 'dashed', backgroundColor: palette.slate[50], alignItems: 'center', justifyContent: 'center' },
+    createNewTile: { width: 38, height: 38, borderRadius: 9, borderWidth: 1.5, borderColor: color.borderStrong, borderStyle: 'dashed', backgroundColor: color.surfaceSunken, alignItems: 'center', justifyContent: 'center' },
     createNewPlus: { fontFamily: fonts.sans.regular, fontSize: 20, color: color.textMuted, lineHeight: 22 },
     createNewText: { fontFamily: fonts.sans.semibold, fontSize: 14, color: color.brand },
     archivedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },

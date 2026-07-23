@@ -3,7 +3,7 @@
 // (search-plus → blue + rotate-to-× when a sheet is open). Frosted nav surface via
 // expo-glass-effect on liquid-glass devices, opaque-white fallback elsewhere.
 import { type ComponentType, useEffect, useState } from 'react';
-import { Animated, Pressable, View } from 'react-native';
+import { Animated, Pressable, useColorScheme, View } from 'react-native';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -67,6 +67,8 @@ export function TabBar({ activeTab, onTabChange, sheetOpen = false, onFabPress, 
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  // Frosted-glass surface follows the device color scheme (adaptive themes).
+  const scheme: 'light' | 'dark' = useColorScheme() === 'dark' ? 'dark' : 'light';
   // Lazy `useState` init (not `useRef().current`) so the stable Animated.Value can be used
   const [rot] = useState(() => new Animated.Value(sheetOpen ? 1 : 0));
 
@@ -115,7 +117,7 @@ export function TabBar({ activeTab, onTabChange, sheetOpen = false, onFabPress, 
       </View>
 
       {glass ? (
-        <GlassView style={[styles.bar, { paddingBottom: insets.bottom }]} glassEffectStyle="regular" colorScheme="light">
+        <GlassView style={[styles.bar, { paddingBottom: insets.bottom }]} glassEffectStyle="regular" colorScheme={scheme}>
           {tabs}
         </GlassView>
       ) : (
@@ -133,7 +135,7 @@ const styles = StyleSheet.create((theme) => ({
     borderTopWidth: theme.borderWidth.thin,
     borderTopColor: theme.color.border,
   },
-  barFallback: { backgroundColor: 'rgba(255, 255, 255, 0.96)' },
+  barFallback: { backgroundColor: theme.color.overlayGlass },
   gap: { flex: 1.3 },
   tab: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3, paddingTop: 10, minHeight: 48 },
   tabLabel: { fontSize: 10, lineHeight: 12, letterSpacing: 0.1 },

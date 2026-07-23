@@ -2,11 +2,11 @@
 // Front has two modes: `recognition` (tap to reveal) and `recall` (WordCharInput).
 // Colors come from the tier registry; the screen owns the flip between front/back.
 import type { TFunction } from 'i18next';
-import { Pressable, View, type ViewStyle } from 'react-native';
+import { Pressable, useColorScheme, View, type ViewStyle } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
-import { getTier, type Tier, type TierId } from '@/theme/tiers';
+import { getTier, tierView, type Tier, type TierId } from '@/theme/tiers';
 import { IconChevronDown } from './icons';
 import { RawText as RNText } from './Text';
 import { TierBadge } from './TierBadge';
@@ -53,7 +53,8 @@ export interface QuizCardFrontProps {
 
 export function QuizCardFront({ tier, card, mode = 'recognition', onReveal, autoFocus = true, revealCta = true, style }: QuizCardFrontProps) {
   const { t: translate } = useTranslation();
-  const tr = toTier(tier);
+  const isDark = useColorScheme() === 'dark';
+  const tr = tierView(toTier(tier), isDark);
   const recall = mode === 'recall';
 
   return (
@@ -93,7 +94,8 @@ export function QuizCardFront({ tier, card, mode = 'recognition', onReveal, auto
  *  interaction while the keyboard is up. */
 export function QuizRevealButton({ tier, mode = 'recognition', onPress, style }: { tier: Tier | TierId | string; mode?: QuizMode; onPress: () => void; style?: ViewStyle }) {
   const { t: translate } = useTranslation();
-  const tr = toTier(tier);
+  const isDark = useColorScheme() === 'dark';
+  const tr = tierView(toTier(tier), isDark);
   if (mode === 'recall') {
     return (
       <Pressable
@@ -126,7 +128,8 @@ export interface QuizCardBackProps {
 export function QuizCardBack({ tier, card, style }: QuizCardBackProps) {
   const { theme } = useUnistyles();
   const { t: translate } = useTranslation();
-  const tr = toTier(tier);
+  const isDark = useColorScheme() === 'dark';
+  const tr = tierView(toTier(tier), isDark);
 
   return (
     <View style={[styles.cardBase, styles.backCard, { borderColor: tr.border }, style]}>
@@ -166,7 +169,7 @@ export function QuizCardBack({ tier, card, style }: QuizCardBackProps) {
 }
 
 const styles = StyleSheet.create((theme) => {
-  const { color, palette, fonts, radius } = theme;
+  const { color, fonts, radius } = theme;
   return {
     cardBase: {
       borderWidth: theme.borderWidth.base,
@@ -222,7 +225,7 @@ const styles = StyleSheet.create((theme) => {
     backHeadRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
     backTierRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     backTierName: { fontFamily: fonts.sans.semibold, fontSize: 11, letterSpacing: 0.7, textTransform: 'uppercase', color: color.textMuted },
-    posPill: { backgroundColor: palette.slate[100], borderRadius: radius.pill, paddingVertical: 3, paddingHorizontal: 10 },
+    posPill: { backgroundColor: color.surfaceSunken, borderRadius: radius.pill, paddingVertical: 3, paddingHorizontal: 10 },
     posPillText: { fontFamily: fonts.sans.medium, fontSize: 12, color: color.textMuted },
     backWord: { fontFamily: fonts.serif.semibold, fontSize: 40, letterSpacing: -0.8, color: color.textStrong, marginBottom: 8 },
     backIpa: { fontFamily: fonts.mono.regular, fontSize: 13, marginBottom: 20 },

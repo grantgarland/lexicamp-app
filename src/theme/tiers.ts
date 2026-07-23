@@ -23,7 +23,26 @@ export interface Tier {
   stMin: number; stMax: number; // FSRS stability range (days)
   stabilityRange: string; stabilityDesc: string;
   aliases: string[];
+  /** Dark-mode overrides for the theme-varying colors (surfaces/text/badges +
+   *  a brighter `color` accent that pops on dark). `accent` (button-fill,
+   *  white-label-safe) is deliberately NOT overridden. Applied via `tierView`;
+   *  light mode is untouched. See 08 backlog 3.13. */
+  dark: Partial<Pick<Tier, 'bg' | 'border' | 'text' | 'labelColor' | 'badgeBg' | 'badgeText' | 'badgeBorder' | 'color'>>;
 }
+
+// Shared dark tint sets by hue (deep tinted surface + light on-surface text).
+const DARK_GREEN = {
+  bg: '#152a1e', border: '#2c4a37', text: c.green[200], labelColor: c.green[300],
+  badgeBg: '#1b3527', badgeText: c.green[200], badgeBorder: '#2f5540', color: c.green[400],
+};
+const DARK_BLUE = {
+  bg: '#14283a', border: '#2b4763', text: c.blue[200], labelColor: c.blue[300],
+  badgeBg: '#193044', badgeText: c.blue[200], badgeBorder: '#2f5473', color: c.blue[400],
+};
+const DARK_AMBER = {
+  bg: '#2a1e0e', border: '#4a3418', text: c.amber[200], labelColor: c.amber[300],
+  badgeBg: '#33240f', badgeText: c.amber[200], badgeBorder: '#553a18', color: c.amber[400],
+};
 
 export const TIERS: Tier[] = [
   {
@@ -36,6 +55,7 @@ export const TIERS: Tier[] = [
     stMin: 0, stMax: 3,
     stabilityRange: 'Stability < 3 days', stabilityDesc: 'Recently introduced words. Keep reviewing to build memory.',
     aliases: ['base_camp', 'basecamp'],
+    dark: DARK_GREEN,
   },
   {
     id: 'abc', name: 'Adv. Base Camp', short: 'ABC', numeral: 2, chipGlyph: 2,
@@ -47,6 +67,7 @@ export const TIERS: Tier[] = [
     stMin: 3, stMax: 7,
     stabilityRange: 'Stability 3 – 7 days', stabilityDesc: 'Retention is forming. Consistent reviews push words higher.',
     aliases: ['adv_base', 'advance_base_camp'],
+    dark: DARK_GREEN,
   },
   {
     id: 'hc', name: 'High Camp', short: 'HC', numeral: 3, chipGlyph: 3,
@@ -58,6 +79,7 @@ export const TIERS: Tier[] = [
     stMin: 7, stMax: 14,
     stabilityRange: 'Stability 7 – 14 days', stabilityDesc: 'Strong memory forming. These words are getting sticky.',
     aliases: ['high_camp'],
+    dark: DARK_BLUE,
   },
   {
     id: 'sr', name: 'Summit Ridge', short: 'SR', numeral: 4, chipGlyph: 4,
@@ -69,6 +91,7 @@ export const TIERS: Tier[] = [
     stMin: 14, stMax: 30,
     stabilityRange: 'Stability 14 – 30 days', stabilityDesc: 'Long-term retention. These words rarely slip now.',
     aliases: ['summit_ridge'],
+    dark: DARK_BLUE,
   },
   {
     id: 'summit', name: 'Summit', short: '★', numeral: 5, chipGlyph: '★',
@@ -80,6 +103,7 @@ export const TIERS: Tier[] = [
     stMin: 30, stMax: Infinity,
     stabilityRange: 'Stability 30+ days', stabilityDesc: 'Mastered. Retained for the long haul — fluency vocabulary.',
     aliases: ['s'],
+    dark: DARK_AMBER,
   },
 ];
 
@@ -95,3 +119,9 @@ export const getTier = (idOrAlias: string): Tier => TIER_BY_ID[idOrAlias] ?? TIE
 /** FSRS stability (days) → tier. */
 export const getTierByStability = (stability: number): Tier =>
   TIERS.find((t) => stability >= t.stMin && stability < t.stMax) ?? TIERS[0];
+
+/** Theme-aware tier colors: in dark mode, merge the tier's `dark` overrides
+ *  (deep tinted surfaces + light text + a brighter accent `color`). Light mode
+ *  returns the tier unchanged. Consumers pass `useColorScheme() === 'dark'`. */
+export const tierView = (tier: Tier, isDark: boolean): Tier =>
+  isDark ? { ...tier, ...tier.dark } : tier;

@@ -19,8 +19,10 @@ import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
+import { useUnistyles } from 'react-native-unistyles';
 
 import { useRecoveryLink } from '@/auth/useRecoveryLink';
 import { DevBadge } from '@/dev/DevBadge';
@@ -35,6 +37,9 @@ import { WalkthroughProvider } from '@/tour/walkthrough';
 export default function RootLayout() {
   // DF-3: turn password-recovery deep links into a session + /reset-password.
   useRecoveryLink();
+  // Adaptive-theme aware: the nav scene background follows the canvas token so
+  // transitions / behind-modal areas don't flash white in dark mode.
+  const { theme } = useUnistyles();
   const [fontsLoaded] = useFonts({
     Spectral: Spectral_400Regular,
     'Spectral-Medium': Spectral_500Medium,
@@ -57,11 +62,13 @@ export default function RootLayout() {
             fullScreenModal routes (e.g. quiz), which cover the status-bar area and
             must inset content themselves. initialWindowMetrics avoids a first-frame flash. */}
         <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+          {/* `style="auto"` flips status-bar glyphs to light in dark mode. */}
+          <StatusBar style="auto" />
           <BottomSheetModalProvider>
             {/* Walkthrough context at the ROOT: the quiz fullScreenModal mounts its
                 own overlay host and must share the tabs layout's tour state. */}
             <WalkthroughProvider>
-            <Stack screenOptions={{ headerShown: false }}>
+            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.color.canvas } }}>
               {/* Search is a route, presented as a slide-up modal sheet (from the Home FAB). */}
               <Stack.Screen name="search" options={{ presentation: 'modal' }} />
               {/* Quiz is an immersive full-screen modal (from Home "Study now"). */}

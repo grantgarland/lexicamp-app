@@ -6,7 +6,7 @@
 import type { TFunction } from 'i18next';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet as RNStyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet as RNStyleSheet, useColorScheme, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -98,8 +98,9 @@ function GreetingRow({ dateLabel, streakDays, subline }: { dateLabel: string; st
   const [streakOpen, setStreakOpen] = useState(false);
   // bestStreak rides the already-cached progress-stats query (17 §H4).
   const { bestStreak } = useProgressData();
+  const isDark = useColorScheme() === 'dark';
   const hot = streakDays > 1;
-  const fg = hot ? theme.palette.amber[600] : theme.palette.slate[500];
+  const fg = hot ? theme.color.accentStrong : theme.palette.slate[500];
   return (
     <View style={styles.greetRow}>
       <View style={styles.greetText}>
@@ -117,8 +118,8 @@ function GreetingRow({ dateLabel, streakDays, subline }: { dateLabel: string; st
         style={({ pressed }) => [
           styles.streak,
           {
-            backgroundColor: hot ? theme.palette.amber[50] : theme.palette.slate[50],
-            borderColor: hot ? theme.palette.amber[200] : theme.palette.slate[200],
+            backgroundColor: hot ? theme.color.accentTint : theme.color.surfaceSunken,
+            borderColor: hot ? theme.color.accentSoft : theme.color.border,
           },
           pressed && { opacity: 0.7 },
         ]}
@@ -132,11 +133,11 @@ function GreetingRow({ dateLabel, streakDays, subline }: { dateLabel: string; st
 
       <Sheet visible={streakOpen} onClose={() => setStreakOpen(false)} title={t('home.streakTitle')}>
         <View style={styles.streakStatsRow}>
-          <View style={styles.streakStat}>
+          <View style={[styles.streakStat, isDark && styles.streakStatDark]}>
             <RawText style={styles.streakStatNum}>{streakDays}</RawText>
             <RawText style={styles.streakStatLabel}>{t('home.streakCurrent')}</RawText>
           </View>
-          <View style={styles.streakStat}>
+          <View style={[styles.streakStat, isDark && styles.streakStatDark]}>
             <RawText style={styles.streakStatNum}>{Math.max(bestStreak, streakDays)}</RawText>
             <RawText style={styles.streakStatLabel}>{t('home.streakBest')}</RawText>
           </View>
@@ -149,14 +150,16 @@ function GreetingRow({ dateLabel, streakDays, subline }: { dateLabel: string; st
 
 function StudyCard({ due, onStudy }: { due: number; onStudy: () => void }) {
   const { theme } = useUnistyles();
+  const isDark = useColorScheme() === 'dark';
   const { t } = useTranslation();
   return (
     <View style={styles.studyCard}>
       <Svg style={RNStyleSheet.absoluteFill} width="100%" height="100%">
         <Defs>
           <LinearGradient id="study" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={theme.palette.blue[600]} />
-            <Stop offset="1" stopColor={theme.palette.blue[500]} />
+            {/* Deeper navy gradient in dark so the hero reads as a rich card, not a washed mid-blue on near-black. */}
+            <Stop offset="0" stopColor={isDark ? theme.palette.blue[800] : theme.palette.blue[600]} />
+            <Stop offset="1" stopColor={isDark ? theme.palette.blue[600] : theme.palette.blue[500]} />
           </LinearGradient>
         </Defs>
         <Rect width="100%" height="100%" rx={theme.radius.lg} ry={theme.radius.lg} fill="url(#study)" />
@@ -173,7 +176,7 @@ function StudyCard({ due, onStudy }: { due: number; onStudy: () => void }) {
           style={({ pressed }) => [styles.studyBtn, pressed && styles.studyBtnPressed]}
         >
           <RawText style={styles.studyBtnText}>{t('home.studyNow')}</RawText>
-          <IconArrowRight size={16} color={theme.color.textOnAccent} />
+          <IconArrowRight size={16} color={theme.color.textOnAccentCta} />
         </Pressable>
       </View>
     </View>
@@ -188,11 +191,11 @@ function StatTiles({ mastered, addedToday, dueTomorrow }: { mastered: number; ad
   const { t } = useTranslation();
   const tiles = [
     {
-      label: t('home.statAddedToday'), value: addedToday, icon: <IconBook size={15} color={theme.color.brand} />, bg: theme.palette.blue[50], border: theme.palette.blue[100],
+      label: t('home.statAddedToday'), value: addedToday, icon: <IconBook size={15} color={theme.color.brand} />, bg: theme.color.brandTint, border: theme.color.brandSoft,
       tip: t('home.statAddedTodayTip'),
     },
     {
-      label: t('home.statDueTomorrow'), value: dueTomorrow, icon: <IconCalendar size={15} color={theme.color.textMuted} />, bg: theme.palette.slate[50], border: theme.palette.slate[200],
+      label: t('home.statDueTomorrow'), value: dueTomorrow, icon: <IconCalendar size={15} color={theme.color.textMuted} />, bg: theme.color.surfaceSunken, border: theme.color.border,
       tip: t('home.statDueTomorrowTip'),
     },
     {
@@ -332,7 +335,7 @@ function AddFirstWordCard({ onAdd }: { onAdd: () => void }) {
 }
 
 const styles = StyleSheet.create((theme) => {
-  const { color, palette, fonts } = theme;
+  const { color, fonts } = theme;
   return {
     content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16, gap: 14 },
 
@@ -346,7 +349,10 @@ const styles = StyleSheet.create((theme) => {
     streakNum: { fontFamily: fonts.mono.bold, fontSize: 18 },
     streakLabel: { fontFamily: fonts.sans.semibold, fontSize: 10, letterSpacing: 0.4, textTransform: 'uppercase' },
     streakStatsRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
-    streakStat: { flex: 1, alignItems: 'center', backgroundColor: palette.amber[50], borderWidth: theme.borderWidth.thin, borderColor: palette.amber[200], borderRadius: theme.radius.md, paddingVertical: 14 },
+    streakStat: { flex: 1, alignItems: 'center', backgroundColor: color.accentTint, borderWidth: theme.borderWidth.thin, borderColor: color.accentSoft, borderRadius: theme.radius.md, paddingVertical: 14 },
+    // Dark-only: accentTint (#211809) reads near-black as a card; a warmer, lighter
+    // amber-brown gives the streak stat cards presence without changing light mode.
+    streakStatDark: { backgroundColor: '#3a2a12', borderColor: '#55401c' },
     streakStatNum: { fontFamily: fonts.serif.bold, fontSize: 30, color: color.textStrong },
     streakStatLabel: { fontFamily: fonts.sans.semibold, fontSize: 11, letterSpacing: 0.4, textTransform: 'uppercase', color: color.textMuted, marginTop: 3 },
     streakRule: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 20, color: color.textMuted },
@@ -360,19 +366,19 @@ const styles = StyleSheet.create((theme) => {
       paddingVertical: 24,
       alignItems: 'center',
     },
-    caughtUpBadge: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+    caughtUpBadge: { width: 40, height: 40, borderRadius: 20, backgroundColor: color.surfaceCard, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
     caughtUpTitle: { fontFamily: fonts.serif.semibold, fontSize: 20, color: color.textStrong, textAlign: 'center', marginBottom: 6 },
     caughtUpBody: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 20, color: color.textMuted, textAlign: 'center', maxWidth: 260, marginBottom: 16 },
     caughtUpBtn: {
       alignSelf: 'stretch',
-      backgroundColor: color.accent,
+      backgroundColor: color.accentCta,
       borderRadius: theme.radius.md,
       paddingVertical: 13,
       alignItems: 'center',
       justifyContent: 'center',
       boxShadow: theme.shadow.accent,
     },
-    caughtUpBtnText: { fontFamily: fonts.sans.bold, fontSize: 16, color: color.textOnAccent },
+    caughtUpBtnText: { fontFamily: fonts.sans.bold, fontSize: 16, color: color.textOnAccentCta },
 
     // No `overflow: hidden` — that would clip the Study button's glow. The gradient is
     // rounded via the SVG Rect's rx/ry instead, so the card corners still read clean.
@@ -383,7 +389,7 @@ const styles = StyleSheet.create((theme) => {
     studyDue: { fontFamily: fonts.sans.semibold, fontSize: 15, color: '#fff', marginBottom: 3 },
     studySub: { fontFamily: fonts.sans.regular, fontSize: 13, color: 'rgba(255, 255, 255, 0.65)', marginBottom: 18 },
     studyBtn: {
-      backgroundColor: color.accent,
+      backgroundColor: color.accentCta,
       borderRadius: theme.radius.md,
       paddingVertical: 13,
       flexDirection: 'row',
@@ -393,12 +399,12 @@ const styles = StyleSheet.create((theme) => {
       boxShadow: '0 4px 12px rgba(232, 119, 34, 0.4)',
     },
     studyBtnPressed: { transform: [{ scale: 0.98 }] },
-    studyBtnText: { fontFamily: fonts.sans.bold, fontSize: 16, color: color.textOnAccent },
+    studyBtnText: { fontFamily: fonts.sans.bold, fontSize: 16, color: color.textOnAccentCta },
 
     emptyCard: {
-      backgroundColor: palette.blue[50],
+      backgroundColor: color.brandTint,
       borderWidth: theme.borderWidth.base,
-      borderColor: palette.blue[200],
+      borderColor: color.brandSoft,
       borderStyle: 'dashed',
       borderRadius: theme.radius.lg,
       paddingHorizontal: 22,
@@ -409,14 +415,14 @@ const styles = StyleSheet.create((theme) => {
     emptyBody: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 20, color: color.textMuted, textAlign: 'center', maxWidth: 240, marginBottom: 20 },
     emptyBtn: {
       alignSelf: 'stretch',
-      backgroundColor: color.accent,
+      backgroundColor: color.accentCta,
       borderRadius: theme.radius.md,
       paddingVertical: 13,
       alignItems: 'center',
       justifyContent: 'center',
       boxShadow: theme.shadow.accent,
     },
-    emptyBtnText: { fontFamily: fonts.sans.bold, fontSize: 16, color: color.textOnAccent },
+    emptyBtnText: { fontFamily: fonts.sans.bold, fontSize: 16, color: color.textOnAccentCta },
 
     eduCard: {
       backgroundColor: color.surfaceCard,
@@ -432,7 +438,7 @@ const styles = StyleSheet.create((theme) => {
       width: 34,
       height: 34,
       borderRadius: theme.radius.md,
-      backgroundColor: palette.blue[50],
+      backgroundColor: color.brandTint,
       alignItems: 'center',
       justifyContent: 'center',
     },

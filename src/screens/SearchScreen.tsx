@@ -568,16 +568,16 @@ function SkeletonCard({ typed }: { typed: string }) {
 }
 
 const styles = StyleSheet.create((theme) => {
-  const { color, palette, fonts } = theme;
+  const { color, fonts } = theme;
   return {
     fill: { flex: 1 },
-    handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: palette.slate[300], alignSelf: 'center', marginTop: 8, marginBottom: 4 },
+    handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: color.borderStrong, alignSelf: 'center', marginTop: 8, marginBottom: 4 },
     header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 4, paddingBottom: 2 },
     close: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
     headerSpacer: { minWidth: 32, alignItems: 'flex-end' },
 
     dirWrap: { flex: 1, alignItems: 'center', gap: 7 },
-    segmented: { flexDirection: 'row', backgroundColor: palette.slate[100], borderRadius: 10, padding: 3, gap: 2 },
+    segmented: { flexDirection: 'row', backgroundColor: color.surfaceSunken, borderRadius: 10, padding: 3, gap: 2 },
     segBtn: { paddingVertical: 6, paddingHorizontal: 18, borderRadius: 8 },
     segText: { fontSize: 13 },
 
@@ -586,14 +586,14 @@ const styles = StyleSheet.create((theme) => {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
-      backgroundColor: palette.slate[50],
+      backgroundColor: color.surfaceSunken,
       borderRadius: 14,
       borderWidth: theme.borderWidth.base,
       paddingVertical: 11,
       paddingHorizontal: 14,
     },
     searchInput: { flex: 1, fontSize: 16, color: color.textStrong, padding: 0 },
-    clear: { width: 20, height: 20, borderRadius: 10, backgroundColor: palette.slate[300], alignItems: 'center', justifyContent: 'center' },
+    clear: { width: 20, height: 20, borderRadius: 10, backgroundColor: color.borderStrong, alignItems: 'center', justifyContent: 'center' },
 
     content: { paddingBottom: 32 },
     resultWrap: { paddingHorizontal: 16, paddingTop: 8 },
@@ -603,7 +603,7 @@ const styles = StyleSheet.create((theme) => {
     recentListContent: { paddingBottom: 24 },
     recentRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11 },
     recentWord: { flex: 1, fontFamily: fonts.serif.regular, fontSize: 16, color: color.textBody },
-    recentX: { width: 18, height: 18, borderRadius: 9, backgroundColor: palette.slate[200], alignItems: 'center', justifyContent: 'center' },
+    recentX: { width: 18, height: 18, borderRadius: 9, backgroundColor: color.border, alignItems: 'center', justifyContent: 'center' },
     recentLabel: { fontFamily: fonts.sans.bold, fontSize: 10, color: color.textMuted, textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 10 },
 
     skelWrap: { paddingHorizontal: 16, paddingTop: 8 },

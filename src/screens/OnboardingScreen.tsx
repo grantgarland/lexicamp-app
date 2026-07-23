@@ -81,7 +81,7 @@ export function OnboardingScreen() {
       <Screen edges={['top', 'bottom']}>
         <View style={styles.welcome}>
           <View style={styles.welcomeHero}>
-            <IconMountain size={64} color={theme.color.textOnAccent} />
+            <IconMountain size={64} color={theme.color.textOnAccentCta} />
           </View>
           <RawText style={styles.wordmark}>Lexicamp</RawText>
           <RawText style={styles.welcomeTitle}>{t('onboarding.welcomeTitle')}</RawText>
@@ -224,7 +224,7 @@ const styles = StyleSheet.create((theme) => {
     targetValue: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.textStrong },
     targetNative: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted, marginTop: 1 },
     targetPlaceholder: { flex: 1, fontFamily: fonts.sans.medium, fontSize: 15, color: color.textMuted },
-    premiumNote: { flexDirection: 'row', gap: 8, backgroundColor: theme.palette.blue[50], borderWidth: theme.borderWidth.thin, borderColor: theme.palette.blue[100], borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 12, marginTop: 20 },
+    premiumNote: { flexDirection: 'row', gap: 8, backgroundColor: theme.color.brandTint, borderWidth: theme.borderWidth.thin, borderColor: theme.color.brandSoft, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 12, marginTop: 20 },
     premiumNoteText: { flex: 1, fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 19, color: color.brand },
 
     notif: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },

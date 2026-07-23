@@ -378,13 +378,13 @@ function StatsScreen({ cards, ratings, onStudyAgain, onDone }: { cards: QuizCard
         <RawText style={styles.statsTitle}>{t('quiz.sessionResults')}</RawText>
         <View style={styles.statsSummary}>
           <View style={styles.statsSummaryItem}>
-            <View style={[styles.statsDot, { backgroundColor: theme.palette.green[100] }]}>
+            <View style={[styles.statsDot, { backgroundColor: theme.color.successSoft }]}>
               <IconArrowUp size={10} color={theme.palette.green[600]} />
             </View>
             <RawText style={styles.statsSummaryText}>{t('quiz.strengthenedCount', { count: s.promoted })}</RawText>
           </View>
           <View style={styles.statsSummaryItem}>
-            <View style={[styles.statsDot, { backgroundColor: theme.palette.slate[100] }]}>
+            <View style={[styles.statsDot, { backgroundColor: theme.color.surfaceSunken }]}>
               <IconArrowDown size={10} color={theme.color.textMuted} />
             </View>
             <RawText style={styles.statsSummaryText}>{t('quiz.reviewAgainCount', { count: s.again })}</RawText>
@@ -450,7 +450,7 @@ function RatingPill({ rating, gained }: { rating: UiRating; gained: number }) {
   const { t } = useTranslation();
   if (rating === 'again') {
     return (
-      <View style={[styles.pill, { backgroundColor: theme.palette.slate[100] }]}>
+      <View style={[styles.pill, { backgroundColor: theme.color.surfaceSunken }]}>
         <IconArrowDown size={11} color={theme.color.textMuted} />
         <RawText style={[styles.pillText, { color: theme.color.textMuted }]}>{t('quiz.pillReview')}</RawText>
       </View>
@@ -459,9 +459,9 @@ function RatingPill({ rating, gained }: { rating: UiRating; gained: number }) {
   const label = gained >= 1 ? t('quiz.pillGainDays', { count: Math.round(gained) }) : t('quiz.pillGainSmall');
   const strong = rating === 'got_it';
   return (
-    <View style={[styles.pill, { backgroundColor: strong ? theme.palette.green[100] : theme.palette.blue[50] }]}>
+    <View style={[styles.pill, { backgroundColor: strong ? theme.color.successSoft : theme.color.brandTint }]}>
       <IconArrowUp size={11} color={strong ? theme.palette.green[600] : theme.palette.blue[500]} />
-      <RawText style={[styles.pillText, { color: strong ? theme.palette.green[700] : theme.palette.blue[700] }]}>{label}</RawText>
+      <RawText style={[styles.pillText, { color: strong ? theme.color.onSuccessSoft : theme.color.onBrandSoft }]}>{label}</RawText>
     </View>
   );
 }
@@ -543,14 +543,14 @@ function TierPromoScreen({ promotions, onContinue }: { promotions: PromotedWord[
 
 
 const styles = StyleSheet.create((theme) => {
-  const { color, palette, fonts, radius } = theme;
+  const { color, fonts, radius } = theme;
   return {
     // quiz phase
     topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 10 },
     counter: { fontFamily: fonts.mono.bold, fontSize: 14, color: color.textStrong, letterSpacing: 0.3 },
     counterTotal: { fontFamily: fonts.mono.regular, color: color.textMuted },
-    closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: palette.slate[100], alignItems: 'center', justifyContent: 'center' },
-    progressTrack: { height: 3, backgroundColor: palette.slate[100] },
+    closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: color.surfaceSunken, alignItems: 'center', justifyContent: 'center' },
+    progressTrack: { height: 3, backgroundColor: color.surfaceSunken },
     progressFill: { height: 3, backgroundColor: color.accent, borderTopRightRadius: 2, borderBottomRightRadius: 2 },
     cardArea: { flex: 1, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20, gap: 14 },
     cardScroll: { flexGrow: 1, justifyContent: 'center' },
@@ -614,14 +614,14 @@ const styles = StyleSheet.create((theme) => {
     commitError: { fontFamily: fonts.sans.medium, fontSize: 13, color: color.danger, textAlign: 'center', marginTop: 14, paddingHorizontal: 24 },
     promoPika: { width: 148, height: 148, marginBottom: 20 },
     promoCtaWrap: { alignSelf: 'stretch', width: '100%' },
-    promoBtn: { alignSelf: 'stretch', backgroundColor: color.accent, borderRadius: 14, paddingVertical: 15, alignItems: 'center', boxShadow: '0 6px 20px rgba(232, 119, 34, 0.35)' },
+    promoBtn: { alignSelf: 'stretch', backgroundColor: color.accentCta, borderRadius: 14, paddingVertical: 15, alignItems: 'center', boxShadow: '0 6px 20px rgba(232, 119, 34, 0.35)' },
     promoBtnText: { fontFamily: fonts.sans.bold, fontSize: 16, color: '#fff' },
 
     // exit confirm
     exitOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', zIndex: 50 },
     exitScrim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(14, 22, 36, 0.6)' },
     exitSheet: { backgroundColor: color.surfaceCard, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingHorizontal: 20, paddingTop: 12, gap: 10 },
-    exitHandle: { width: 32, height: 4, borderRadius: 2, backgroundColor: palette.slate[300], alignSelf: 'center', marginBottom: 8 },
+    exitHandle: { width: 32, height: 4, borderRadius: 2, backgroundColor: color.borderStrong, alignSelf: 'center', marginBottom: 8 },
     exitTitle: { fontFamily: fonts.serif.semibold, fontSize: 20, color: color.textStrong },
     exitBody: { fontFamily: fonts.sans.regular, fontSize: 14, lineHeight: 23, color: color.textMuted, marginBottom: 14 },
     exitCancel: { marginTop: 8 },

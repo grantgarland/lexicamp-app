@@ -613,11 +613,11 @@ function ReadOnlyField({ value, note }: { value: string; note?: string }) {
 }
 
 const styles = StyleSheet.create((theme) => {
-  const { color, fonts, radius, palette } = theme;
+  const { color, fonts, radius } = theme;
   return {
     osBlocked: { backgroundColor: 'rgba(217, 119, 6, 0.10)', borderWidth: theme.borderWidth.thin, borderColor: theme.palette.amber[300], borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 14 },
-    osBlockedText: { fontFamily: theme.fonts.sans.medium, fontSize: 13, lineHeight: 19, color: theme.palette.amber[700] },
-    osBlockedLink: { fontFamily: theme.fonts.sans.bold, fontSize: 13, color: theme.palette.amber[700], marginTop: 4 },
+    osBlockedText: { fontFamily: theme.fonts.sans.medium, fontSize: 13, lineHeight: 19, color: theme.color.accentStrong },
+    osBlockedLink: { fontFamily: theme.fonts.sans.bold, fontSize: 13, color: theme.color.accentStrong, marginTop: 4 },
     flex1: { flex: 1 },
     fieldLabel: { fontFamily: fonts.sans.semibold, fontSize: 12, letterSpacing: 0.5, textTransform: 'uppercase', color: color.textMuted, marginBottom: 6, marginTop: 4 },
 
@@ -648,12 +648,12 @@ const styles = StyleSheet.create((theme) => {
     deleteText: { fontFamily: fonts.sans.semibold, fontSize: 14, color: color.danger },
 
     // premium gate
-    gate: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: palette.amber[50], borderWidth: theme.borderWidth.thin, borderColor: palette.amber[200], borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 16 },
+    gate: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: color.accentTint, borderWidth: theme.borderWidth.thin, borderColor: color.accentSoft, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 16 },
     gateText: { flex: 1 },
     gateTitle: { fontFamily: fonts.sans.semibold, fontSize: 13, color: color.textStrong, marginBottom: 1 },
     gateBody: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted },
-    gateBtn: { backgroundColor: color.accent, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
-    gateBtnText: { fontFamily: fonts.sans.bold, fontSize: 12, color: color.textOnAccent },
+    gateBtn: { backgroundColor: color.accentCta, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+    gateBtnText: { fontFamily: fonts.sans.bold, fontSize: 12, color: color.textOnAccentCta },
 
     // notifications
     notifToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: color.surfaceSunken, borderRadius: radius.md, paddingVertical: 14, paddingHorizontal: 16, marginBottom: 20 },

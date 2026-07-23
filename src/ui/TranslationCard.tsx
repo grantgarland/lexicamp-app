@@ -248,7 +248,7 @@ function TranslationItem({
               /* Maestro action-state ids: only the EXPANDED sense renders its
                  action block, so at most one of these exists at a time. */
               <Pressable onPress={onSave} style={[styles.action, styles.actionSave]} accessibilityRole="button" testID="result-save">
-                <IconBook size={16} color={theme.color.textOnAccent} />
+                <IconBook size={16} color={theme.color.textOnAccentCta} />
                 <RNText style={styles.actionTextOnAccent}>{t('translationCard.saveWord')}</RNText>
               </Pressable>
             )}
@@ -278,11 +278,11 @@ const styles = StyleSheet.create((theme) => {
     header: { paddingTop: 18, paddingHorizontal: 18, paddingBottom: 14 },
     dirRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 10 },
     langChip: { borderRadius: 5, paddingVertical: 2, paddingHorizontal: 7 },
-    langChipSource: { backgroundColor: palette.blue[50] },
-    langChipTarget: { backgroundColor: palette.slate[100] },
+    langChipSource: { backgroundColor: color.brandTint },
+    langChipTarget: { backgroundColor: color.surfaceSunken },
     langChipText: { fontFamily: fonts.mono.bold, fontSize: 10, letterSpacing: 0.4 },
     posChip: {
-      backgroundColor: palette.slate[100],
+      backgroundColor: color.surfaceSunken,
       borderRadius: 6,
       paddingVertical: 2,
       paddingHorizontal: 7,
@@ -310,9 +310,9 @@ const styles = StyleSheet.create((theme) => {
     expanded: {
       borderTopWidth: theme.borderWidth.thin,
       borderTopColor: color.divider,
-      backgroundColor: palette.blue[50],
+      backgroundColor: color.brandTint,
       borderBottomWidth: theme.borderWidth.thin,
-      borderBottomColor: palette.blue[100],
+      borderBottomColor: color.brandSoft,
     },
     expandedHead: { paddingTop: 16, paddingHorizontal: 18 },
     eyebrow: {
@@ -330,7 +330,7 @@ const styles = StyleSheet.create((theme) => {
     exampleBox: {
       marginHorizontal: 18,
       marginBottom: 12,
-      backgroundColor: 'rgba(255, 255, 255, 0.7)',
+      backgroundColor: color.overlayGlass,
       borderRadius: 10,
       paddingVertical: 11,
       paddingHorizontal: 13,
@@ -348,9 +348,9 @@ const styles = StyleSheet.create((theme) => {
       gap: 7,
       paddingVertical: 10,
       borderRadius: 10,
-      backgroundColor: 'rgba(255, 255, 255, 0.7)',
+      backgroundColor: color.overlayGlass,
       borderWidth: theme.borderWidth.thin,
-      borderColor: palette.blue[100],
+      borderColor: color.brandSoft,
     },
     exampleReqBtnPressed: { opacity: 0.6 },
     exampleReqText: { fontFamily: fonts.sans.semibold, fontSize: 13, color: color.brand },
@@ -362,7 +362,7 @@ const styles = StyleSheet.create((theme) => {
     // do worse in Spanish or at large Dynamic Type. Stacking removes the whole
     // class of narrow-column wraps regardless of locale/font scale.
     detailRow: { paddingVertical: 7 },
-    detailRowBorder: { borderBottomWidth: theme.borderWidth.thin, borderBottomColor: palette.blue[100] },
+    detailRowBorder: { borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.brandSoft },
     detailLabel: { fontFamily: fonts.mono.regular, fontSize: 10, letterSpacing: 0.4, textTransform: 'uppercase', color: color.textFaint, marginBottom: 3 },
     detailValue: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textBody, lineHeight: 18 },
 
@@ -379,12 +379,12 @@ const styles = StyleSheet.create((theme) => {
       borderWidth: theme.borderWidth.base,
       borderColor: 'transparent',
     },
-    actionSave: { backgroundColor: color.accent, boxShadow: theme.shadow.accent },
+    actionSave: { backgroundColor: color.accentCta, boxShadow: theme.shadow.accent },
     actionSaved: { backgroundColor: palette.green[500] },
-    actionDelete: { backgroundColor: color.dangerSoft, borderColor: palette.red[100] },
-    actionDisabled: { backgroundColor: palette.slate[100], borderColor: color.border },
+    actionDelete: { backgroundColor: color.dangerSoft, borderColor: color.dangerSoft },
+    actionDisabled: { backgroundColor: color.surfaceSunken, borderColor: color.border },
     actionTextLight: { fontFamily: fonts.sans.bold, fontSize: 15, color: '#fff' },
-    actionTextOnAccent: { fontFamily: fonts.sans.bold, fontSize: 15, color: theme.color.textOnAccent },
+    actionTextOnAccent: { fontFamily: fonts.sans.bold, fontSize: 15, color: theme.color.textOnAccentCta },
     actionTextDanger: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.danger },
     actionTextDisabled: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.textFaint },
 
@@ -397,9 +397,9 @@ const styles = StyleSheet.create((theme) => {
       paddingVertical: 9,
       paddingHorizontal: 11,
       borderRadius: 10,
-      backgroundColor: palette.amber[50],
+      backgroundColor: color.accentTint,
       borderWidth: theme.borderWidth.thin,
-      borderColor: palette.amber[200],
+      borderColor: color.accentSoft,
     },
     noticeText: { flex: 1, fontFamily: fonts.sans.regular, fontSize: 12.5, lineHeight: 18, color: color.textBody },
   };

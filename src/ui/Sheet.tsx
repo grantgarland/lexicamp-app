@@ -75,7 +75,7 @@ export function Sheet({ visible, onClose, title, children }: SheetProps) {
 
 const styles = StyleSheet.create((theme) => ({
   container: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'flex-end' },
-  scrim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(24, 47, 63, 0.45)' },
+  scrim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: theme.color.overlayScrim },
   sheet: {
     backgroundColor: theme.color.surfaceCard,
     borderTopLeftRadius: theme.radius.xl,
@@ -83,6 +83,6 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.space[5],
     paddingTop: theme.space[3],
   },
-  handle: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: theme.palette.slate[300], marginBottom: theme.space[4] },
+  handle: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: theme.color.borderStrong, marginBottom: theme.space[4] },
   title: { marginBottom: theme.space[2] },
 }));

@@ -7,7 +7,7 @@
 // bottom nav is the persistent tab layout, not this screen.
 import type { TFunction } from 'i18next';
 import { useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, useColorScheme, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { findLanguage } from '@/constants/languages';
@@ -16,7 +16,7 @@ import { MOUNTAIN_TIERS, mountainTier } from '@/domain/derive';
 import { formatUsername } from '@/domain/username';
 import { useTranslation } from '@/i18n';
 import { useActiveLang, useLeaderboard, useProgressData, useWords } from '@/query/hooks';
-import { getTierByStability, TIERS } from '@/theme/tiers';
+import { getTierByStability, TIERS, tierView } from '@/theme/tiers';
 import { EmptyState, IconBook, IconChart, IconCheck, IconFire, IconInfo, IconLock, IconMountain, IconStar, RawText, Screen, SegmentedTabs, Sheet, SkeletonRows, Tooltip, WordDetailSheet, WordRow } from '@/ui';
 
 type SubTab = 'route' | 'inventory' | 'leaders';
@@ -78,6 +78,7 @@ type TabProps = {
 // ── Route ────────────────────────────────────────────────────────────────────
 function RouteTab({ data, t, onInfo }: TabProps) {
   const { theme } = useUnistyles();
+  const isDark = useColorScheme() === 'dark';
   const saved = data.totalSaved;
 
   if (saved === 0) {
@@ -89,7 +90,7 @@ function RouteTab({ data, t, onInfo }: TabProps) {
   const mastered = data.totalMastered;
   const curTierId = mountainTier(mastered).id;
   const cur = MOUNTAIN_TIERS.findIndex((x) => x.id === curTierId);
-  const curReg = tierRegistry(cur);
+  const curReg = tierView(tierRegistry(cur), isDark);
   const next = MOUNTAIN_TIERS[cur + 1];
   const min = masteredMinAt(cur);
   const max = masteredMaxAt(cur);
@@ -105,7 +106,7 @@ function RouteTab({ data, t, onInfo }: TabProps) {
             <RawText style={styles.hereTier}>{t(`tier.${curReg.id}.name`)}</RawText>
             <RawText style={[styles.hereCefr, { color: curReg.color }]}>{t('progress.cefr', { level: curReg.cefr })}</RawText>
           </View>
-          <Pressable onPress={() => onInfo?.('cefr')} accessibilityRole="button" accessibilityLabel={t('progress.aboutCefr')} hitSlop={8} style={({ pressed }) => [styles.hereInfo, { borderColor: curReg.border }, pressed && { opacity: 0.6 }]}>
+          <Pressable onPress={() => onInfo?.('cefr')} accessibilityRole="button" accessibilityLabel={t('progress.aboutCefr')} hitSlop={8} style={({ pressed }) => [styles.hereInfo, isDark && styles.hereInfoDark, { borderColor: curReg.border }, pressed && { opacity: 0.6 }]}>
             <IconInfo size={13} color={curReg.color} />
           </Pressable>
         </View>
@@ -116,14 +117,14 @@ function RouteTab({ data, t, onInfo }: TabProps) {
           </RawText>
           <RawText style={styles.hereToNext}>{next ? t('progress.toNext', { count: Math.max(0, max - mastered), tier: t(`tier.${next.id}.name`) }) : t('progress.summitReached')}</RawText>
         </View>
-        <View style={styles.hereTrack}>
+        <View style={[styles.hereTrack, isDark && styles.hereTrackDark]}>
           <View style={[styles.hereFill, { width: `${pctInTier}%`, backgroundColor: curReg.color }]} />
         </View>
         <RawText style={styles.herePct}>{t('progress.pctThrough', { pct: pctInTier, tier: t(`tier.${curReg.id}.name`) })}</RawText>
 
         {/* 0-mastered hint — the climb hasn't registered a mastered word yet */}
         {mastered === 0 && (
-          <View style={[styles.hereHint, { borderColor: curReg.border }]}>
+          <View style={[styles.hereHint, isDark && styles.hereHintDark, { borderColor: curReg.border }]}>
             <RawText style={styles.hereHintText}>{t('progress.masteredZeroHint')}</RawText>
           </View>
         )}
@@ -141,7 +142,7 @@ function RouteTab({ data, t, onInfo }: TabProps) {
         <View style={styles.ladderLine} />
         {[...MOUNTAIN_TIERS].reverse().map((mt) => {
             const origIdx = MOUNTAIN_TIERS.findIndex((x) => x.id === mt.id);
-            const tier = tierRegistry(origIdx);
+            const tier = tierView(tierRegistry(origIdx), isDark);
             const completed = origIdx < cur;
             const current = origIdx === cur;
             const locked = origIdx > cur;
@@ -150,7 +151,7 @@ function RouteTab({ data, t, onInfo }: TabProps) {
               ? { backgroundColor: theme.palette.green[500], borderColor: theme.palette.green[400] }
               : current
                 ? { backgroundColor: theme.color.brand, borderColor: theme.color.brand }
-                : { backgroundColor: theme.color.surfaceCard, borderColor: theme.palette.slate[200] };
+                : { backgroundColor: theme.color.surfaceCard, borderColor: theme.color.border };
             return (
               <View key={tier.id} style={styles.ladderRow}>
                 {/* Node stays fully opaque so the route line never bleeds through a locked tier;
@@ -158,7 +159,7 @@ function RouteTab({ data, t, onInfo }: TabProps) {
                 <View style={[styles.node, node, current && styles.nodeCurrent, locked && styles.nodeLocked]}>
                   {completed && <IconCheck size={14} color="#fff" />}
                   {current && <RawText style={styles.nodeNum}>{origIdx + 1}</RawText>}
-                  {locked && <IconLock size={12} color={theme.palette.slate[300]} />}
+                  {locked && <IconLock size={12} color={theme.color.borderStrong} />}
                 </View>
                 <View style={[styles.ladderBody, locked && { opacity: 0.5 }]}>
                   <View style={styles.ladderTitleRow}>
@@ -169,7 +170,7 @@ function RouteTab({ data, t, onInfo }: TabProps) {
                     {current && <RawText style={styles.badgeCurrent}>{t('progress.current')}</RawText>}
                     {completed && <RawText style={styles.badgeDone}>{t('progress.done')}</RawText>}
                   </View>
-                  <RawText style={[styles.ladderCefr, { color: current ? theme.color.brand : completed ? theme.palette.green[600] : theme.palette.slate[300] }]}>
+                  <RawText style={[styles.ladderCefr, { color: current ? theme.color.brand : completed ? theme.palette.green[600] : theme.color.borderStrong }]}>
                     {t('progress.cefr', { level: tier.cefr })}
                   </RawText>
                   <RawText style={styles.ladderStatus}>
@@ -212,7 +213,7 @@ function ProjectionCard({ data, t }: TabProps) {
   if (!canProject || daysToNext == null || next == null) {
     return (
       <View style={styles.projLocked}>
-        <IconMountain size={32} color={theme.palette.slate[300]} />
+        <IconMountain size={32} color={theme.color.borderStrong} />
         <RawText style={styles.projLockedTitle}>{t('progress.projectionLocked')}</RawText>
         <RawText style={styles.projLockedBody}>{t('progress.projectionLockedBody')}</RawText>
       </View>
@@ -484,14 +485,15 @@ function LeaderRow({ entry, prevRank, t }: { entry: LeaderboardEntry; prevRank?:
 // ── Info sheets (CEFR ladder / FSRS stability) ────────────────────────────────
 function InfoSheet({ infoKey, t, onClose }: { infoKey: InfoKey | null; t: TFunction; onClose: () => void }) {
   const { theme } = useUnistyles();
+  const isDark = useColorScheme() === 'dark';
   const isCefr = infoKey === 'cefr';
   return (
     <Sheet visible={infoKey != null} onClose={onClose} title={t(isCefr ? 'progress.cefrTitle' : 'progress.fsrsTitle')}>
       <RawText style={styles.infoIntro}>{t(isCefr ? 'progress.cefrIntro' : 'progress.fsrsIntro')}</RawText>
       <View style={styles.infoList}>
         {TIERS.map((tier, i) => (
-          <View key={tier.id} style={[styles.infoRow, { backgroundColor: isCefr ? tier.bg : theme.palette.slate[50], borderColor: isCefr ? tier.border : theme.color.border }]}>
-            <View style={[isCefr ? styles.infoDotRound : styles.infoDotSquare, { backgroundColor: tier.color }]} />
+          <View key={tier.id} style={[styles.infoRow, { backgroundColor: isCefr ? tierView(tier, isDark).bg : theme.color.surfaceSunken, borderColor: isCefr ? tierView(tier, isDark).border : theme.color.border }]}>
+            <View style={[isCefr ? styles.infoDotRound : styles.infoDotSquare, { backgroundColor: tierView(tier, isDark).color }]} />
             <View style={styles.infoRowBody}>
               <RawText style={styles.infoTier}>{t(`tier.${tier.id}.name`)}</RawText>
               <RawText style={styles.infoDesc}>{isCefr ? t('progress.masteredThreshold', { count: masteredMinAt(i).toLocaleString() }) : t(`tier.${tier.id}.desc`)}</RawText>
@@ -563,31 +565,36 @@ const styles = StyleSheet.create((theme) => {
     hereFill: { height: '100%', borderRadius: 6 },
     herePct: { fontFamily: fonts.sans.regular, fontSize: 11, color: color.textMuted, marginTop: 5, textAlign: 'right' },
     hereHint: { marginTop: 12, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: theme.borderWidth.thin, backgroundColor: 'rgba(255,255,255,0.55)' },
+    // Dark-only: the light rgba-white overlays become a light box that hides the
+    // (now light) muted text on the dark tier card — flip them to faint light-on-dark.
+    hereInfoDark: { backgroundColor: 'rgba(255,255,255,0.08)' },
+    hereTrackDark: { backgroundColor: 'rgba(255,255,255,0.15)' },
+    hereHintDark: { backgroundColor: 'rgba(255,255,255,0.06)' },
     hereHintText: { fontFamily: fonts.sans.regular, fontSize: 12, lineHeight: 18, color: color.textMuted, textAlign: 'center' },
 
     // Route — ladder
     ladder: { marginTop: 12, gap: 20, position: 'relative' },
-    ladderLine: { position: 'absolute', left: 18, top: 19, bottom: 19, width: 2, backgroundColor: palette.slate[200], borderRadius: 1 },
+    ladderLine: { position: 'absolute', left: 18, top: 19, bottom: 19, width: 2, backgroundColor: color.border, borderRadius: 1 },
     ladderRow: { flexDirection: 'row', gap: 14, alignItems: 'flex-start' },
     node: { width: 38, height: 38, borderRadius: 19, borderWidth: 3, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
-    nodeCurrent: { boxShadow: `0 0 0 5px ${palette.blue[100]}` },
+    nodeCurrent: { boxShadow: `0 0 0 5px ${color.brandSoft}` },
     // Opaque muted fill for locked nodes — hides the route line behind them without using
     // row opacity (which would let the line show through).
-    nodeLocked: { backgroundColor: palette.slate[50], borderColor: palette.slate[200] },
+    nodeLocked: { backgroundColor: color.surfaceSunken, borderColor: color.border },
     nodeNum: { fontFamily: fonts.sans.bold, fontSize: 12, color: '#fff' },
     ladderBody: { flex: 1, paddingTop: 4 },
     ladderTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 },
     ladderTier: { fontFamily: fonts.sans.semibold, fontSize: 15 },
-    badgeCurrent: { fontFamily: fonts.sans.bold, fontSize: 10, letterSpacing: 0.5, textTransform: 'uppercase', color: color.brand, backgroundColor: palette.blue[100], paddingVertical: 2, paddingHorizontal: 7, borderRadius: 4, overflow: 'hidden' },
-    badgeDone: { fontFamily: fonts.sans.bold, fontSize: 10, letterSpacing: 0.5, textTransform: 'uppercase', color: palette.green[700], backgroundColor: palette.green[100], paddingVertical: 2, paddingHorizontal: 7, borderRadius: 4, overflow: 'hidden' },
+    badgeCurrent: { fontFamily: fonts.sans.bold, fontSize: 10, letterSpacing: 0.5, textTransform: 'uppercase', color: color.onBrandSoft, backgroundColor: color.brandSoft, paddingVertical: 2, paddingHorizontal: 7, borderRadius: 4, overflow: 'hidden' },
+    badgeDone: { fontFamily: fonts.sans.bold, fontSize: 10, letterSpacing: 0.5, textTransform: 'uppercase', color: color.onSuccessSoft, backgroundColor: color.successSoft, paddingVertical: 2, paddingHorizontal: 7, borderRadius: 4, overflow: 'hidden' },
     ladderCefr: { fontFamily: fonts.sans.semibold, fontSize: 11, letterSpacing: 0.4, marginBottom: 4 },
     ladderStatus: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted },
 
     // Inventory
     invHead: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 },
     invHeadText: { flex: 1 },
-    headInfo: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.slate[100], marginLeft: 8 },
-    invBar: { flexDirection: 'row', height: 20, borderRadius: 10, overflow: 'hidden', backgroundColor: palette.slate[100], marginBottom: 20 },
+    headInfo: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: color.surfaceSunken, marginLeft: 8 },
+    invBar: { flexDirection: 'row', height: 20, borderRadius: 10, overflow: 'hidden', backgroundColor: color.surfaceSunken, marginBottom: 20 },
     invRows: { gap: 10 },
     invRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: color.surfaceCard, borderWidth: theme.borderWidth.thin, borderColor: color.border, borderRadius: radius.md, paddingVertical: 12, paddingHorizontal: 14 },
     invRowEmpty: { opacity: 0.5 },
@@ -601,7 +608,7 @@ const styles = StyleSheet.create((theme) => {
     invPct: { fontFamily: fonts.sans.regular, fontSize: 11, color: color.textMuted, marginLeft: 8 },
 
     // Projection (on Route) + all-time
-    projCard: { backgroundColor: palette.blue[50], borderWidth: 1.5, borderColor: palette.blue[200], borderRadius: radius.lg, padding: 18, marginBottom: 24 },
+    projCard: { backgroundColor: color.brandTint, borderWidth: 1.5, borderColor: color.brandSoft, borderRadius: radius.lg, padding: 18, marginBottom: 24 },
     projHead: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
     projSmall: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted, marginBottom: 2 },
     projTier: { fontFamily: fonts.sans.bold, fontSize: 16, color: color.textStrong },
@@ -610,7 +617,7 @@ const styles = StyleSheet.create((theme) => {
     projDays: { fontFamily: fonts.serif.bold, fontSize: 44, color: color.brand },
     projDaysLabel: { fontFamily: fonts.sans.semibold, fontSize: 18, color: color.textMuted, paddingBottom: 5 },
     projDetail: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted },
-    projLocked: { backgroundColor: palette.slate[50], borderWidth: theme.borderWidth.base, borderColor: palette.slate[200], borderStyle: 'dashed', borderRadius: radius.lg, padding: 20, alignItems: 'center', marginBottom: 24 },
+    projLocked: { backgroundColor: color.surfaceSunken, borderWidth: theme.borderWidth.base, borderColor: color.border, borderStyle: 'dashed', borderRadius: radius.lg, padding: 20, alignItems: 'center', marginBottom: 24 },
     projLockedTitle: { fontFamily: fonts.sans.semibold, fontSize: 14, color: color.textMuted, marginTop: 10, marginBottom: 6 },
     projLockedBody: { fontFamily: fonts.sans.regular, fontSize: 12, lineHeight: 18, color: color.textMuted, textAlign: 'center', maxWidth: 220 },
     tileGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 },
@@ -638,14 +645,14 @@ const styles = StyleSheet.create((theme) => {
 
     // Leaders (20 §4)
     leaderToggle: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-    leaderChip: { flexShrink: 1, paddingVertical: 8, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: palette.slate[100], borderWidth: theme.borderWidth.thin, borderColor: 'transparent' },
-    leaderChipActive: { backgroundColor: palette.blue[100], borderColor: palette.blue[300] },
+    leaderChip: { flexShrink: 1, paddingVertical: 8, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: color.surfaceSunken, borderWidth: theme.borderWidth.thin, borderColor: 'transparent' },
+    leaderChipActive: { backgroundColor: color.brandSoft, borderColor: palette.blue[300] },
     leaderChipText: { fontFamily: fonts.sans.semibold, fontSize: 13, color: color.textMuted },
     leaderChipTextActive: { color: color.brandStrong },
     leaderRows: { gap: 8 },
     leaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: color.surfaceCard, borderWidth: theme.borderWidth.thin, borderColor: color.border, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 12 },
-    leaderRowSelf: { backgroundColor: palette.blue[50], borderColor: palette.blue[200] },
-    leaderRank: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.slate[100] },
+    leaderRowSelf: { backgroundColor: color.brandTint, borderColor: color.brandSoft },
+    leaderRank: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: color.surfaceSunken },
     leaderRankText: { fontFamily: fonts.mono.bold, fontSize: 12, color: color.textMuted },
     leaderRankTextMedal: { color: '#fff' },
     leaderFlag: { fontSize: 17 },
@@ -654,7 +661,7 @@ const styles = StyleSheet.create((theme) => {
     leaderCount: { fontFamily: fonts.mono.bold, fontSize: 15, color: color.textStrong },
     leaderCountLabel: { fontFamily: fonts.sans.regular, fontSize: 11, color: color.textMuted },
     leaderGap: { alignItems: 'center', paddingVertical: 2 },
-    leaderGapText: { fontFamily: fonts.sans.bold, fontSize: 14, color: palette.slate[300], letterSpacing: 2 },
+    leaderGapText: { fontFamily: fonts.sans.bold, fontSize: 14, color: color.borderStrong, letterSpacing: 2 },
 
     // Leaderboard empty state — static ghost rows behind a centered overlay card
     leaderEmptyWrap: { position: 'relative' },
@@ -663,9 +670,9 @@ const styles = StyleSheet.create((theme) => {
     leaderEmptyText: { fontFamily: fonts.serif.semibold, fontSize: 14, lineHeight: 20, color: color.textStrong, textAlign: 'center' },
     leaderEmptySelfRow: { width: '100%', marginTop: 12 },
     ghostRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: color.surfaceCard, borderWidth: theme.borderWidth.thin, borderColor: color.border, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 8 },
-    ghostRank: { width: 28, height: 28, borderRadius: 14, backgroundColor: palette.slate[100] },
-    ghostFlag: { width: 20, height: 15, borderRadius: 3, backgroundColor: palette.slate[100] },
-    ghostName: { flex: 1, height: 12, borderRadius: 4, backgroundColor: palette.slate[100] },
-    ghostCount: { width: 40, height: 12, borderRadius: 4, backgroundColor: palette.slate[100] },
+    ghostRank: { width: 28, height: 28, borderRadius: 14, backgroundColor: color.surfaceSunken },
+    ghostFlag: { width: 20, height: 15, borderRadius: 3, backgroundColor: color.surfaceSunken },
+    ghostName: { flex: 1, height: 12, borderRadius: 4, backgroundColor: color.surfaceSunken },
+    ghostCount: { width: 40, height: 12, borderRadius: 4, backgroundColor: color.surfaceSunken },
   };
 });

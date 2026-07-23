@@ -259,8 +259,8 @@ function EnrolledLanguageRow({
               onDelete();
             }}
           >
-            <IconTrash size={18} color="#fff" />
-            <RawText style={styles.trayLabel}>{t('langSwitcher.removeAction')}</RawText>
+            <IconTrash size={18} color={theme.color.textOnDanger} />
+            <RawText style={[styles.trayLabel, { color: theme.color.textOnDanger }]}>{t('langSwitcher.removeAction')}</RawText>
           </Pressable>
         </View>
       )}
@@ -271,7 +271,7 @@ function EnrolledLanguageRow({
 }
 
 const styles = StyleSheet.create((theme) => {
-  const { color, fonts, radius, palette } = theme;
+  const { color, fonts, radius } = theme;
   return {
     pill: {
       flexDirection: 'row',
@@ -279,7 +279,7 @@ const styles = StyleSheet.create((theme) => {
       gap: 4,
       backgroundColor: color.brandSoft,
       borderWidth: theme.borderWidth.thin,
-      borderColor: palette.blue[200],
+      borderColor: color.brandSoft,
       borderRadius: 999,
       paddingVertical: 5,
       paddingHorizontal: 10,
@@ -290,19 +290,19 @@ const styles = StyleSheet.create((theme) => {
 
     reassure: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 19, color: color.textMuted, marginBottom: 12 },
     list: { borderWidth: theme.borderWidth.thin, borderColor: color.border, borderRadius: radius.lg, overflow: 'hidden', marginBottom: 12 },
-    codeBadge: { minWidth: 34, borderRadius: 8, backgroundColor: palette.slate[100], paddingVertical: 5, paddingHorizontal: 6, alignItems: 'center' },
+    codeBadge: { minWidth: 34, borderRadius: 8, backgroundColor: color.surfaceSunken, paddingVertical: 5, paddingHorizontal: 6, alignItems: 'center' },
     codeBadgeText: { fontFamily: fonts.mono.bold, fontSize: 11, color: color.textMuted, letterSpacing: 0.4 },
 
-    addRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: radius.md, borderWidth: 1.5, borderColor: palette.blue[200], borderStyle: 'dashed' },
+    addRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: radius.md, borderWidth: 1.5, borderColor: color.brandSoft, borderStyle: 'dashed' },
     addText: { fontFamily: fonts.sans.semibold, fontSize: 14, color: color.brand },
     capNote: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted, textAlign: 'center', paddingVertical: 6 },
 
-    gate: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: palette.amber[50], borderWidth: theme.borderWidth.thin, borderColor: palette.amber[200], borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 14 },
+    gate: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: color.accentTint, borderWidth: theme.borderWidth.thin, borderColor: color.accentSoft, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 14 },
     gateText: { flex: 1 },
     gateTitle: { fontFamily: fonts.sans.semibold, fontSize: 13, color: color.textStrong, marginBottom: 1 },
     gateBody: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted },
-    gateBtn: { backgroundColor: color.accent, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
-    gateBtnText: { fontFamily: fonts.sans.bold, fontSize: 12, color: color.textOnAccent },
+    gateBtn: { backgroundColor: color.accentCta, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+    gateBtnText: { fontFamily: fonts.sans.bold, fontSize: 12, color: color.textOnAccentCta },
 
     // manage-mode swipe tray (mirrors WordRow's action anatomy)
     swipeRow: { backgroundColor: color.surfaceCard },

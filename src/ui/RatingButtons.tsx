@@ -1,6 +1,6 @@
 // RatingButtons — the quiz recall self-grade (Again / Almost / Got it), ported
 // from Quiz's RATING_CONFIG. Full-width 56px rows, label + sublabel, press scale.
-import { Pressable, View } from 'react-native';
+import { Pressable, useColorScheme, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
@@ -25,10 +25,18 @@ export function RatingButtons({ onRate, prompt }: RatingButtonsProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const { color: c, palette: p } = theme;
+  const isDark = useColorScheme() === 'dark';
 
+  // Dark-only: the neutral "again" and blue "almost" buttons used light palette
+  // fills that don't flip (light box + now-light text = unreadable). Override to
+  // dark surfaces with light text; "got it" (green + white) works in both.
   const cfg: Record<Rating, { bg: string; border: string; text: string; sub: string }> = {
-    again: { bg: p.slate[100], border: p.slate[200], text: c.textBody, sub: c.textMuted },
-    almost: { bg: p.blue[50], border: p.blue[200], text: p.blue[700], sub: c.textMuted },
+    again: isDark
+      ? { bg: p.slate[800], border: p.slate[700], text: c.textBody, sub: c.textMuted }
+      : { bg: p.slate[100], border: p.slate[200], text: c.textBody, sub: c.textMuted },
+    almost: isDark
+      ? { bg: c.brandSoft, border: p.blue[700], text: p.blue[200], sub: c.textMuted }
+      : { bg: p.blue[50], border: p.blue[200], text: p.blue[700], sub: c.textMuted },
     got_it: { bg: p.green[500], border: 'transparent', text: '#fff', sub: 'rgba(255, 255, 255, 0.7)' },
   };
 

@@ -14,7 +14,7 @@ export function Checkbox({ checked, color }: { checked: boolean; color?: string 
   const { theme } = useUnistyles();
   const accent = color ?? theme.color.brand;
   return (
-    <View style={[styles.checkbox, { borderColor: checked ? accent : theme.palette.slate[300], backgroundColor: checked ? accent : 'transparent' }]}>
+    <View style={[styles.checkbox, { borderColor: checked ? accent : theme.color.borderStrong, backgroundColor: checked ? accent : 'transparent' }]}>
       {checked && <IconCheck size={13} color="#fff" />}
     </View>
   );
@@ -158,7 +158,7 @@ const styles = StyleSheet.create((theme) => {
     row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: color.surfaceCard },
     rowCompact: { paddingVertical: 10 },
     rowBorder: { borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.divider },
-    rowChecked: { backgroundColor: theme.palette.blue[50] },
+    rowChecked: { backgroundColor: theme.color.brandTint },
     rowDisabled: { opacity: 0.45 },
     rowPressed: { opacity: 0.7 },
     body: { flex: 1, minWidth: 0 },

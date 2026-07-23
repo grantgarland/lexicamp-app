@@ -16,7 +16,7 @@ export function PremiumBadge({ small = false, label = 'PREMIUM' }: PremiumBadgeP
   const { theme } = useUnistyles();
   return (
     <View style={[styles.badge, small ? styles.badgeSmall : styles.badgeBase]}>
-      <IconStar size={small ? 9 : 10} color={theme.palette.amber[600]} />
+      <IconStar size={small ? 9 : 10} color={theme.color.accentStrong} />
       <Text style={[styles.text, small && styles.textSmall]}>{label}</Text>
     </View>
   );
@@ -29,11 +29,11 @@ const styles = StyleSheet.create((theme) => ({
     gap: 3,
     borderRadius: 99,
     borderWidth: theme.borderWidth.thin,
-    borderColor: theme.palette.amber[200],
-    backgroundColor: theme.palette.amber[50],
+    borderColor: theme.color.accentSoft,
+    backgroundColor: theme.color.accentTint,
   },
   badgeBase: { paddingHorizontal: 8, paddingVertical: 3 },
   badgeSmall: { paddingHorizontal: 6, paddingVertical: 2 },
-  text: { fontFamily: theme.fonts.sans.bold, fontSize: 11, letterSpacing: 0.3, color: theme.palette.amber[600] },
+  text: { fontFamily: theme.fonts.sans.bold, fontSize: 11, letterSpacing: 0.3, color: theme.color.accentStrong },
   textSmall: { fontSize: 10 },
 }));

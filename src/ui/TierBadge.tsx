@@ -4,12 +4,12 @@
 //   chip  — circular numeral (quiz card corners)
 //   pill  — short-label pill (word-list rows); summit shows its ★ glyph
 //   badge — large bundled image (milestone screens) — needs `source` (assets pending)
-import { View, type ViewStyle } from 'react-native';
+import { useColorScheme, View, type ViewStyle } from 'react-native';
 import { SvgXml } from 'react-native-svg';
 import { StyleSheet } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
-import { getTier, type Tier, type TierId } from '@/theme/tiers';
+import { getTier, tierView, type Tier, type TierId } from '@/theme/tiers';
 import { RawText as Text } from './Text';
 import { TIER_BADGE_XML } from './tierBadges';
 
@@ -29,7 +29,8 @@ const toTier = (t: Tier | string): Tier => (typeof t === 'string' ? getTier(t) :
 
 export function TierBadge({ tier, variant = 'pill', size = 'md', px = 110, style }: TierBadgeProps) {
   const { t: translate } = useTranslation();
-  const tr = toTier(tier);
+  const isDark = useColorScheme() === 'dark';
+  const tr = tierView(toTier(tier), isDark);
   const name = translate(`tier.${tr.id}.name`);
 
   if (variant === 'badge') {

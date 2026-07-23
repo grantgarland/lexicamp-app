@@ -20,7 +20,9 @@ StyleSheet.configure({
   themes: { light: lightTheme, dark: darkTheme },
   breakpoints,
   settings: {
-    initialTheme: 'light',   // light-only until dark mode is designed (14 §5)
-    adaptiveThemes: false,
+    // Device system color scheme drives light/dark. No in-app toggle (14 §5).
+    // `adaptiveThemes` and `initialTheme` are mutually exclusive in Unistyles 3 —
+    // with adaptive on, the runtime resolves the initial theme from the OS.
+    adaptiveThemes: true,
   },
 });

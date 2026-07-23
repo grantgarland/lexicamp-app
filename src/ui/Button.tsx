@@ -40,7 +40,7 @@ export function Button({
         ? theme.color.textMuted
         : variant === 'destructive'
           ? theme.color.textOnDanger
-          : theme.color.textOnAccent; // primary / pill
+          : theme.color.textOnAccentCta; // primary / pill
 
   return (
     <Pressable
@@ -92,9 +92,9 @@ const styles = StyleSheet.create((theme) => {
     fullWidth: { alignSelf: 'stretch' },
 
     // ── primary ──
-    primary: { backgroundColor: color.accent, boxShadow: shadow.accent },
+    primary: { backgroundColor: color.accentCta, boxShadow: shadow.accent },
     primaryPressed: { backgroundColor: palette.amber[600], transform: [{ scale: 0.98 }] },
-    primaryDisabled: { backgroundColor: palette.slate[200] },
+    primaryDisabled: { backgroundColor: color.border },
 
     // ── secondary (canonical Cancel) ──
     secondary: {
@@ -112,7 +112,7 @@ const styles = StyleSheet.create((theme) => {
     // ── destructive ──
     destructive: { backgroundColor: color.danger },
     destructivePressed: { transform: [{ scale: 0.98 }] },
-    destructiveDisabled: { backgroundColor: palette.slate[200] },
+    destructiveDisabled: { backgroundColor: color.border },
 
     // ── ghost ──
     ghost: {},
@@ -120,15 +120,16 @@ const styles = StyleSheet.create((theme) => {
     ghostDisabled: {},
 
     // ── pill ──
-    pill: { backgroundColor: color.accent, boxShadow: shadow.accent },
+    pill: { backgroundColor: color.accentCta, boxShadow: shadow.accent },
     pillPressed: { opacity: 0.88 },
-    pillDisabled: { backgroundColor: palette.slate[200] },
+    pillDisabled: { backgroundColor: color.border },
 
     // ── labels ──
-    label_primary: { fontFamily: fonts.sans.semibold, fontSize: size.md, letterSpacing: -0.2 },
+    // primary/pill CTAs use bold (heavier stroke aids legibility of white-on-amber-500 — see accent-cta note).
+    label_primary: { fontFamily: fonts.sans.bold, fontSize: size.md, letterSpacing: -0.2 },
     label_secondary: { fontFamily: fonts.sans.semibold, fontSize: size.md, letterSpacing: -0.2 },
     label_destructive: { fontFamily: fonts.sans.semibold, fontSize: size.md, letterSpacing: -0.2 },
     label_ghost: { fontFamily: fonts.sans.medium, fontSize: size.sm },
-    label_pill: { fontFamily: fonts.sans.semibold, fontSize: 15, letterSpacing: 0.15 },
+    label_pill: { fontFamily: fonts.sans.bold, fontSize: 15, letterSpacing: 0.15 },
   };
 });

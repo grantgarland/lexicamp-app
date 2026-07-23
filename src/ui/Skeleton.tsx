@@ -33,7 +33,7 @@ export function SkeletonRows({ count = 8 }: { count?: number }) {
 }
 
 const styles = StyleSheet.create((theme) => ({
-  block: { backgroundColor: theme.palette.slate[200] },
+  block: { backgroundColor: theme.color.border },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: theme.borderWidth.thin, borderBottomColor: theme.color.divider },
   rowBody: { flex: 1 },
   gap: { height: 6 },
