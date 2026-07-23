@@ -5,11 +5,13 @@
  *
  * Source of truth: ../lexicamp-design-system/project/assets
  *
- * Most assets are copied verbatim. Two are *derived* from the Android adaptive
- * foreground via a flat recolour (preserving alpha), because the design system
- * has no native source for them:
- *   - android-icon-monochrome.png -> brand ink (#1F3D52)  (Android themed icon)
- *   - splash-icon.png             -> white     (#FFFFFF)   (splash logo mark)
+ * Most assets are copied verbatim. The splash mark is *derived* from the
+ * monochrome launcher art via a flat recolour (preserving alpha). It must be
+ * derived from the MONOCHROME art (transparent interior), NOT the adaptive
+ * foreground: the foreground's white circle fill is opaque, so recolouring it
+ * would flood the whole disc into a solid blob.
+ *   - splash-icon.png      -> brand ink (#1F3D52)  (light splash, cream bg)
+ *   - splash-icon-dark.png -> white     (#FFFFFF)  (dark splash, night-slate bg)
  *
  * Run after the design system changes:   npm run sync:assets
  * CI drift guard: run this, then `git diff --exit-code -- assets/images`.
@@ -28,16 +30,17 @@ const COPIES = [
   ["icons/app-icon-1024.png", "icon.png"],
   ["icons/android/ic_launcher_foreground.png", "android-icon-foreground.png"],
   ["icons/android/ic_launcher_background.png", "android-icon-background.png"],
+  ["icons/android/ic_launcher_monochrome.png", "android-icon-monochrome.png"],
   ["favicons/favicon-48.png", "favicon.png"],
 ];
 
-// Derived from the (just-copied) adaptive foreground via a flat recolour.
+// Derived from the (just-copied) monochrome art via a flat recolour.
 const DERIVED = [
-  { out: "android-icon-monochrome.png", hex: "1F3D52" },
-  { out: "splash-icon.png", hex: "FFFFFF" },
+  { out: "splash-icon.png", hex: "1F3D52" },
+  { out: "splash-icon-dark.png", hex: "FFFFFF" },
 ];
 
-const FOREGROUND = "android-icon-foreground.png";
+const DERIVE_SOURCE = "android-icon-monochrome.png";
 
 function fail(msg) {
   console.error(`✖ ${msg}`);
@@ -75,7 +78,7 @@ async function main() {
     console.log(`copied  ${to}`);
   }
 
-  const fgSrc = path.join(images, FOREGROUND);
+  const fgSrc = path.join(images, DERIVE_SOURCE);
   for (const { out, hex } of DERIVED) {
     await recolour(fgSrc, path.join(images, out), hex);
     console.log(`derived ${out}  (#${hex})`);

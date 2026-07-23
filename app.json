@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "lexicamp-app",
+    "name": "Lexicamp",
     "slug": "lexicamp-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -27,7 +27,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#11301F",
+        "backgroundColor": "#f5f1e8",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -47,7 +47,11 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 240,
           "resizeMode": "contain",
-          "backgroundColor": "#208AEF"
+          "backgroundColor": "#f5f1e8",
+          "dark": {
+            "image": "./assets/images/splash-icon-dark.png",
+            "backgroundColor": "#0f1519"
+          }
         }
       ],
       "expo-localization",
