@@ -182,7 +182,7 @@ export interface DataSource {
   // ── 20 §4: leaderboard ────────────────────────────────────────────────────
   /** `get_leaderboard` RPC. `scope` 'global' ranks every enrolled-language
    *  entry together; 'language' scopes to `lang` (the caller's ACTIVE learning
-   *  language — required then). Returns the top `limit` (default 50) ordered
+   *  language — required then). Returns the top `limit` (default 100) ordered
    *  by rank ascending, PLUS the caller's own row(s) even outside that window
    *  (own-row pinning). Zero-mastered entries are never included (4.3). */
   getLeaderboard(scope: 'global' | 'language', lang?: string, limit?: number): Promise<LeaderboardEntry[]>;

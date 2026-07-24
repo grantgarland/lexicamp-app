@@ -357,14 +357,12 @@ function LeadersTab({ t }: { t: TFunction }) {
   const { entries, isLoading } = useLeaderboard(scope, activeLang);
   const lang = activeLang != null ? findLanguage(activeLang) : undefined;
 
-  // R4: a multi-language user can have MULTIPLE self-rows in 'global' scope
-  // (one per enrolled language with ≥1 mastered word) — keep them all so the
-  // empty-state overlay never silently drops any of the caller's own rows.
-  const selfEntries = entries.filter((e) => e.isSelf);
-  const othersCount = entries.filter((e) => !e.isSelf).length;
-  // 4.3: a board with no OTHER entries reads as cold-start regardless of
-  // whether the caller's own row exists — same ghost treatment either way.
-  const showEmpty = !isLoading && othersCount === 0;
+  // 4.3 (REVISED 2026-07-24, Casey): the ghost/"mountain is quiet" state is
+  // for a genuinely empty board only — nobody, including the caller, has a
+  // qualifying mastered word in this scope yet. If the caller has ANY
+  // entries (e.g. they're the only one on the board so far), that's a real
+  // 1-row leaderboard, not a cold-start — render it normally below.
+  const showEmpty = !isLoading && entries.length === 0;
 
   return (
     <View style={styles.pad}>
@@ -396,7 +394,7 @@ function LeadersTab({ t }: { t: TFunction }) {
       {isLoading ? (
         <SkeletonRows count={10} />
       ) : showEmpty ? (
-        <LeadersEmpty t={t} selfEntries={selfEntries} />
+        <LeadersEmpty t={t} />
       ) : (
         <View style={styles.leaderRows}>
           {entries.map((e, i) => (
@@ -409,12 +407,15 @@ function LeadersTab({ t }: { t: TFunction }) {
 }
 
 // Cold-start empty state (4.3): a full screen of static (non-loading) "ghost"
-// row silhouettes with the empty-state card centrally overlaid on top, plus
-// the caller's own real row (once they have ≥1 mastered word) inside the
-// overlay — same treatment for an empty global OR language view. These are
-// deliberately NOT the animated Skeleton kit: a pulsing loader implies data is
-// still arriving, which is false here — the board is confirmed empty.
-function LeadersEmpty({ t, selfEntries }: { t: TFunction; selfEntries: LeaderboardEntry[] }) {
+// row silhouettes with the empty-state card centrally overlaid on top — same
+// treatment for an empty global OR language view. These are deliberately NOT
+// the animated Skeleton kit: a pulsing loader implies data is still arriving,
+// which is false here — the board is confirmed empty.
+// 2026-07-24 fix: dropped the caller's own pinned row from this overlay —
+// showing "you: #1, 26 mastered" directly under "the mountain is quiet" read
+// as contradictory/buggy in practice (Casey). The self row still appears
+// normally once the board has ≥1 OTHER entry (LeadersTab's non-empty branch).
+function LeadersEmpty({ t }: { t: TFunction }) {
   return (
     <View style={styles.leaderEmptyWrap}>
       <View pointerEvents="none">
@@ -426,13 +427,6 @@ function LeadersEmpty({ t, selfEntries }: { t: TFunction; selfEntries: Leaderboa
         <View style={styles.leaderEmptyCard}>
           <RawText style={styles.leaderEmptyText}>{t('progress.leaders.emptyTitle')}</RawText>
         </View>
-        {selfEntries.length > 0 && (
-          <View style={styles.leaderEmptySelfRow}>
-            {selfEntries.map((e) => (
-              <LeaderRow key={`${e.username}-${e.langCode}-${e.rank}`} entry={e} t={t} />
-            ))}
-          </View>
-        )}
       </View>
     </View>
   );

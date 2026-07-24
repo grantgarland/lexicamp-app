@@ -491,7 +491,7 @@ export const mockDataSource: DataSource = {
     return mockUsername;
   },
   // ── 20 §4: leaderboard (mock — mirrors get_leaderboard's shape) ──────────
-  async getLeaderboard(scope, lang, limit = 50): Promise<LeaderboardEntry[]> {
+  async getLeaderboard(scope, lang, limit = 100): Promise<LeaderboardEntry[]> {
     // Self entries mirror the server's (user, learning-language) grouping —
     // only 'es' carries mock fixture data ('fr' is the fresh Phase D demo
     // language, 0 mastered → excluded, same as the server would exclude it).

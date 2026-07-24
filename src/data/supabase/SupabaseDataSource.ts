@@ -174,7 +174,7 @@ export const supabaseDataSource: DataSource = {
     return data as string;
   },
 
-  async getLeaderboard(scope: 'global' | 'language', lang?: string, limit = 50): Promise<LeaderboardEntry[]> {
+  async getLeaderboard(scope: 'global' | 'language', lang?: string, limit = 100): Promise<LeaderboardEntry[]> {
     const { data, error } = await supabase.rpc('get_leaderboard', { p_scope: scope, p_lang: lang ?? null, p_limit: limit });
     bail(error);
     return ((data ?? []) as { rank: number; username: string; lang_code: string; mastered: number; is_self: boolean }[]).map((r) => ({
