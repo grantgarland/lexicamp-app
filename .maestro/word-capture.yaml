@@ -65,9 +65,25 @@ tags:
 # visible with the keyboard up; mosca and result-save do not. Re-taps on
 # search-input further down re-open the keyboard on their own.
 - hideKeyboard
+# mosca (2nd sense) + Save sit low: the expanded primary sense — now with the
+# Show-example affordance — pushes them down, and hideKeyboard alone still left
+# them off-screen on CI (2026-07-24). Scroll each into view before asserting /
+# tapping. scrollUntilVisible is a no-op when the element is already visible.
+- scrollUntilVisible:
+    element:
+      text: 'mosca'
+    direction: DOWN
+    centerElement: true
+    timeout: 15000
 - assertVisible: 'mosca'
 
 # ── CREATE: save flips to optimistic saved state ─────────────────────────────
+- scrollUntilVisible:
+    element:
+      id: 'result-save'
+    direction: DOWN
+    centerElement: true
+    timeout: 15000
 - tapOn:
     id: 'result-save'
 - assertVisible: 'Saved!'
