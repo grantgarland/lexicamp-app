@@ -694,7 +694,14 @@
     "switched": "Ahora aprendes {{lang}}",
     "added": "{{lang}} añadido, ya lo estás aprendiendo",
     "addFailed": "No se pudo añadir el idioma. Inténtalo de nuevo.",
-    "indicatorA11y": "Idioma activo: {{lang}}. Abre el selector de idiomas."
+    "indicatorA11y": "Idioma activo: {{lang}}. Abre el selector de idiomas.",
+    "removeAction": "Eliminar",
+    "removeA11y": "Eliminar {{lang}}",
+    "removeTitle": "¿Eliminar {{lang}}?",
+    "removeBody": "Tus palabras y progreso de {{lang}} se archivarán, no se elimina nada. Añade el idioma de nuevo cuando quieras y todo volverá.",
+    "removeConfirm": "Eliminar idioma",
+    "removed": "{{lang}} eliminado. Tus palabras quedan archivadas.",
+    "removeFailed": "No se pudo eliminar el idioma. Inténtalo de nuevo."
   },
   "walkthrough": {
     "w1Title": "Tu base de operaciones",

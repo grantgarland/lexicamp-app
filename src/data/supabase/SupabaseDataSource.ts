@@ -124,7 +124,7 @@ export const supabaseDataSource: DataSource = {
   },
 
   async getLearningLanguages(): Promise<string[]> {
-    const { data, error } = await supabase.from('profile_languages').select('lang, added_at').order('added_at', { ascending: true });
+    const { data, error } = await supabase.from('profile_languages').select('lang, added_at').is('archived_at', null).order('added_at', { ascending: true });
     bail(error);
     return ((data ?? []) as { lang: string }[]).map((r) => r.lang);
   },

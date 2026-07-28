@@ -251,7 +251,7 @@ export function SettingsScreen() {
           router.navigate('/');
         }}
       />
-      <LanguageSwitcherSheet visible={sheet === 'languages'} onClose={() => setSheet(null)} />
+      <LanguageSwitcherSheet visible={sheet === 'languages'} manage onClose={() => setSheet(null)} />
 
       <ConfirmDialog
         visible={sheet === 'signout'}
