@@ -1,10 +1,26 @@
 # Folder-run manifest — CI runs `maestro test .maestro/` and executes ONLY the
-# flows listed here. Flows run in list order; keep smoke.yaml (boot + tab
-# traversal) first so a boot-level failure reads as smoke, not as a flow bug.
-# word-capture.yaml added 2026-07-13 on the strength of the hardened
-# pipeline's verification dispatch (gate path proven; build queued). If its
-# first CI run goes red on the swipe/confirm steps, suspect the flow's gesture
-# selectors before suspecting the app — see notes in the flow header.
+# flows listed here.
+#
+# CORRECTION (2026-07-28, from the run-30261088531 maestro.log): `flows:` is an
+# INCLUSION list, not an execution order. The planner logged
+#   WorkspaceConfig(flows=[smoke.yaml, word-capture.yaml], executionOrder=null)
+#   → ExecutionPlan(flowsToRun=[word-capture.yaml, smoke.yaml])
+# and ran word-capture FIRST. The old comment here claimed list order was
+# honoured; it never was. Ordering is a separate `executionOrder.flowsOrder:`
+# key that takes flow names WITHOUT the extension (WorkspaceExecutionPlanner
+# .parseFileName) and moves those flows into a sequence with its own
+# continueOnFailure semantics.
+#
+# Not setting it today, deliberately: both flows start with
+# `launchApp: clearState: true`, so they are independent and order only affects
+# which flow a boot-level failure is reported under. Adding executionOrder would
+# swap a cosmetic issue for an unrehearsed config path (a name typo makes the
+# planner throw "Could not find flows needed for execution in order" and the
+# whole nightly dies before the first tap). If we ever want deterministic order,
+# rehearse it on a workflow_dispatch first.
+#
+# word-capture.yaml added 2026-07-13. If it alone is red, suspect the flow's
+# gesture/visibility assumptions before the app — see notes in the flow header.
 flows:
   - smoke.yaml
   - word-capture.yaml

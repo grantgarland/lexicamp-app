@@ -22,6 +22,10 @@ export type PosTag =
 /** i18n key for a posTag ('pos.NOUN' → "noun" / "sustantivo"). */
 export const posTagI18nKey = (tag: PosTag): string => `pos.${tag}`;
 
+export function senseDisplayWord(s: Pick<DictionarySense, 'prefixWord' | 'displayTarget'>): string {
+  return s.prefixWord ? `${s.prefixWord} ${s.displayTarget}` : s.displayTarget;
+}
+
 /** One sense from dictionary/lookup `translations[]`. */
 export interface DictionarySense {
   normalizedTarget: string;

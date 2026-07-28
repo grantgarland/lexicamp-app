@@ -1,7 +1,14 @@
 # CI-4b — search/capture flow smoke: the CRUD surfaces that exist today,
 # against the mock DataSource (`smoke` EAS profile / dev builds).
-# First-run caveat: the step most likely to need tuning on a real emulator is
-# the row `swipe` — if this flow alone is red, start there.
+#
+# EXECUTION STATUS (2026-07-28). Every CI run so far died at the second-sense
+# assert, so only the steps up to and including `- assertVisible: 'la mosca'`
+# have ever executed on a device. Everything below it — Save, the phrase card,
+# the three gates, the whole Word List delete section — is still first-run: it
+# type-checks against en.json + fixtures (src/test/maestroStrings.test.ts) but
+# has never been exercised. Treat a failure below that line as a NEW finding,
+# not a regression, and prefer the flow's gesture/visibility assumptions as the
+# first suspect over the app (the row `swipe` most of all).
 #
 # SELECTOR POLICY (2026-07-17): tap by testID, assert by TEXT.
 #   - Taps/gestures only need to FIND an element → ids are locale-proof, immune
@@ -15,14 +22,22 @@
 #   - Exception: the swipe anchors on text 'melancólico' — it doubles as a
 #     content check (fixture word rendered), and row testIDs would need unicode/
 #     index-based ids for no gain.
+#   - WHOLE-TEXT MATCH (2026-07-27, the hard one): a text selector must match the
+#     element's ENTIRE text. Maestro compiles it to a regex and calls
+#     Regex.matches() (maestro.Filters.textMatches), not find(); the docs' own
+#     "partial match" example is `.*Continue.*` for exactly this reason. So a
+#     selector must be the string the widget PRINTS — determiners, punctuation
+#     and all — or carry explicit `.*`. Assert what the screen says, not what
+#     the fixture field holds.
 #
 # What this verifies vs. what it CAN'T (mock-mode reality, 2026-07-13):
 #   CREATE — lookup renders + Save flips to "Saved!". Mock saveCard() is a
 #            no-op and getWords() serves fixtures, so the saved word does NOT
 #            appear in Word List. True create→read persistence needs the live
 #            (Supabase) path + a seeded account — CI-7, deferred.
-#   READ   — deterministic mock fixtures: 'fly' → volar + mosca (Azure docs
-#            example), phrase path fabricates '<phrase>·es'.
+#   READ   — deterministic mock fixtures: 'fly' → volar + "la mosca" (Azure docs
+#            example; the noun sense carries prefixWord 'la' and RENDERS with
+#            it), phrase path fabricates '<phrase>·es'.
 #   UPDATE — no update operation exists in DataSource; nothing to test yet.
 #   DELETE — swipe tray → confirm dialog → toast + count decrement. Client-
 #            optimistic only ("until the real delete mutation (03 write) lands").
@@ -52,37 +67,47 @@ tags:
     id: 'fab-search'
 - assertVisible: 'Type a word in .*' # placeholder = search sheet actually open
 
-# ── READ: happy path — mock fixture 'fly' → volar (verb) + mosca (noun) ──────
+# ── READ: happy path — mock fixture 'fly' → volar (verb) + "la mosca" (noun) ──
 - tapOn:
     id: 'search-input'
 - inputText: 'fly'
 - extendedWaitUntil:
     visible: 'volar'
     timeout: 10000
-# Dismiss the autofocus keyboard before touching the lower card: the primary
-# sense (volar) expands tall, pushing the SECOND sense row (mosca) and the Save
-# button into the bottom third — behind the IME. volar (near the top) reads as
-# visible with the keyboard up; mosca and result-save do not. Re-taps on
-# search-input further down re-open the keyboard on their own.
+# Dismiss the autofocus keyboard before touching the lower card. MEASURED, not
+# inferred (run 30261088531 artifact): with the IME up the app window is clipped
+# somewhere in y 1435–1517 of 2400, and Maestro's driver logs `result-save`
+# (y 1517–1660) and the second-sense row (y 1704–1844) as invisible children;
+# after this command both are present in the dumped hierarchy.
+#
+# ⚠️ hideKeyboard on Android is literally `input keyevent 4` — an UNCONDITIONAL
+# BACK press (AndroidDriver.hideKeyboard: shell "input keyevent 4"; sleep 300;
+# settle). It does not check whether an IME is showing. Only ever place it where
+# the keyboard is provably up — i.e. immediately after typing into the
+# autofocused search input. Anywhere else it is a back-navigation that would pop
+# this overlay, exactly like the 2026-07-16 system-Home-button collision.
 - hideKeyboard
-# mosca (2nd sense) + Save sit low: the expanded primary sense — now with the
-# Show-example affordance — pushes them down, and hideKeyboard alone still left
-# them off-screen on CI (2026-07-24). Scroll each into view before asserting /
-# tapping. scrollUntilVisible is a no-op when the element is already visible.
+# The second sense RENDERS its determiner: mock FLY_SENSES gives mosca
+# prefixWord 'la', and toCardResult composes "la mosca" via
+# domain/translation.senseDisplayWord. Maestro matches the WHOLE element text,
+# so the old `'mosca'` selector could never match this row — three red nightlies
+# (07-22/07-24/07-27), twice misdiagnosed as keyboard occlusion. The 07-27
+# artifact settles it: the failure hierarchy contains a visible TextView reading
+# exactly "la mosca" at [92,1741][264,1810], and no node whose text is "mosca".
+# scrollUntilVisible (no centerElement) stays as cheap insurance against future
+# card growth — it returns immediately when the element is already visible.
 - scrollUntilVisible:
     element:
-      text: 'mosca'
+      text: 'la mosca'
     direction: DOWN
-    centerElement: true
     timeout: 15000
-- assertVisible: 'mosca'
+- assertVisible: 'la mosca'
 
 # ── CREATE: save flips to optimistic saved state ─────────────────────────────
 - scrollUntilVisible:
     element:
       id: 'result-save'
     direction: DOWN
-    centerElement: true
     timeout: 15000
 - tapOn:
     id: 'result-save'
@@ -97,6 +122,15 @@ tags:
 - extendedWaitUntil:
     visible: 'buenos dias·es'
     timeout: 10000
+# The re-tap above raises the IME again, and this (shorter) card puts Save near
+# the clip line. A second `hideKeyboard` is NOT the fix — see the BACK-press
+# warning above; if the tap had not re-raised the IME it would pop the overlay.
+# scrollUntilVisible has no side effect either way.
+- scrollUntilVisible:
+    element:
+      text: 'Save word'
+    direction: DOWN
+    timeout: 15000
 - assertVisible: 'Save word'
 
 # ── Gate: not_found (MOCK_MISS reserved token) ───────────────────────────────
@@ -115,9 +149,15 @@ tags:
 - tapOn:
     id: 'search-input'
 - inputText: 'echoword'
-- extendedWaitUntil:
-    visible: "Can't save this"
-    timeout: 10000
+# Same reasoning as the phrase card: the unsaveable notice + locked action sit at
+# the bottom of the card with the IME up. scrollUntilVisible both WAITS (it polls
+# the hierarchy) and scrolls, so it replaces the extendedWaitUntil here.
+- scrollUntilVisible:
+    element:
+      text: "Can't save this"
+    direction: DOWN
+    timeout: 15000
+- assertVisible: "Can't save this"
 
 # ── Gate: Tier-0 not_a_word (digits only; instant, no debounce/API) ──────────
 - tapOn:

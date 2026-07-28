@@ -13,7 +13,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { captureReasonI18nKey, evaluateCaptureInput } from '@/domain/capture';
 import { tourTargets } from '@/tour/walkthrough';
 import { directionLangs } from '@/domain/derive';
-import { type LookupResult, posTagI18nKey, qualityReasonI18nKey, type UsageExample } from '@/domain/translation';
+import { type LookupResult, posTagI18nKey, qualityReasonI18nKey, senseDisplayWord, type UsageExample } from '@/domain/translation';
 import type { Profile, SearchDirection } from '@/domain/types';
 import { useTranslation } from '@/i18n';
 import { useDeleteCard, useExamples, useLookup, useProfile, useSaveCard, useWords } from '@/query/hooks';
@@ -34,7 +34,7 @@ import {
 } from '@/ui';
 
 /** Adapt a domain LookupResult (Azure dictionary shape) to the card's view model. */
-function toCardResult(
+export function toCardResult(
   r: LookupResult,
   t: (k: string, o?: Record<string, unknown>) => string,
   learningLang?: string,
@@ -58,7 +58,8 @@ function toCardResult(
     pos: r.senses[0] ? t(posTagI18nKey(r.senses[0].posTag)) : '',
     translations: r.senses.map((s, i) => ({
       id: `${r.normalizedSource}:${s.normalizedTarget}`,
-      word: s.prefixWord ? `${s.prefixWord} ${s.displayTarget}` : s.displayTarget,
+      // Determiner-included display form.
+      word: senseDisplayWord(s),
       pos: t(posTagI18nKey(s.posTag)),
       ...(exampleAt != null && exampleAt.index === i ? { example: buildExample(exampleAt.example) } : {}),
       ...(s.backTranslations.length > 1

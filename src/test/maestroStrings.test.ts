@@ -5,6 +5,11 @@
 // an en.json leaf (templates instantiated), a mock fixture (SMOKE_FIXTURES), or a
 // documented derived form (the `<phrase>·es` mock phrase path).
 //
+// RENDERED, not raw (2026-07-27): fixture-derived candidates must be built with
+// the same helpers the UI uses — `senseDisplayWord` for lookup senses. Feeding
+// this guard a raw field the screen never prints is how it green-lit
+// `assertVisible: 'mosca'` against a row that reads "la mosca".
+//
 // If this test fails, either (a) app copy / a mock fixture changed and the flow
 // in `.maestro/` must be updated in the SAME commit (the nightly builds HEAD), or
 // (b) a flow gained an assertion on text that doesn't exist — fix the flow.
@@ -22,6 +27,7 @@ import * as path from 'node:path';
 declare const __dirname: string;
 
 import { SMOKE_FIXTURES } from '@/data/mock';
+import { senseDisplayWord } from '@/domain/translation';
 
 import en from '../i18n/locales/en.json';
 
@@ -96,7 +102,7 @@ function buildCandidates(inputs: string[]): string[] {
   // Mock lookup fixtures (see SMOKE_FIXTURES export in data/mock.ts).
   for (const w of SMOKE_FIXTURES.WORD_BANK) out.push(w.native, w.target);
   for (const s of SMOKE_FIXTURES.FLY_SENSES) {
-    out.push(s.displayTarget);
+    out.push(senseDisplayWord(s));
     for (const b of s.backTranslations) out.push(b.displayText);
   }
   // Mock phrase path fabricates `<phrase>·es`; echo/miss render i18n copy (above).
@@ -119,6 +125,14 @@ describe('Maestro flow strings are backed by en.json / mock fixtures', () => {
   it('found flows and selectors (guard is actually guarding)', () => {
     expect(flows.map((f) => f.file)).toContain('smoke.yaml');
     expect(flows.flatMap((f) => f.selectors).length).toBeGreaterThan(5);
+  });
+
+  it('senses with a determiner are asserted in their rendered form, never bare', () => {
+    const bare = SMOKE_FIXTURES.FLY_SENSES.filter((s) => s.prefixWord).map((s) => s.displayTarget);
+    expect(bare.length).toBeGreaterThan(0); // fixture still exercises this case
+    for (const raw of flows.flatMap((f) => f.selectors)) {
+      expect(bare).not.toContain(raw.raw);
+    }
   });
 
   it('every flow listed in config.yaml exists', () => {
