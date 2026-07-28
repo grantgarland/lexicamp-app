@@ -43,6 +43,12 @@ export interface QuizCardFrontProps {
   onReveal: () => void;
   /** recall mode: focus the first cell on mount (opens the keyboard). Default true. */
   autoFocus?: boolean;
+  /** recall mode: every slot filled. Receives the typed answer so the screen can
+   *  grade it and pre-select a rating (auto-traversal, 2026-07-28). When
+   *  omitted, a completed type-out just reveals (the pre-2026-07-28 behavior).
+   *  The handler OWNS the flip — it is called INSTEAD of `onReveal`, not before
+   *  it, so it can set the revealed + graded state in one pass. */
+  onRecallComplete?: (typed: string) => void;
   /** Render the reveal CTA inside the card (default true). The quiz screen passes
    *  false and renders `QuizRevealButton` in the bottom gutter instead, so the
    *  reveal target sits where the rating buttons appear — one thumb position for
@@ -51,7 +57,7 @@ export interface QuizCardFrontProps {
   style?: ViewStyle;
 }
 
-export function QuizCardFront({ tier, card, mode = 'recognition', onReveal, autoFocus = true, revealCta = true, style }: QuizCardFrontProps) {
+export function QuizCardFront({ tier, card, mode = 'recognition', onReveal, onRecallComplete, autoFocus = true, revealCta = true, style }: QuizCardFrontProps) {
   const { t: translate } = useTranslation();
   const isDark = useColorScheme() === 'dark';
   const tr = tierView(toTier(tier), isDark);
@@ -74,7 +80,14 @@ export function QuizCardFront({ tier, card, mode = 'recognition', onReveal, auto
 
         {recall && (
           <>
-            <WordCharInput word={card.backWord} accentColor={tr.accent} borderColor={tr.border} backgroundColor={tr.bg} autoFocus={autoFocus} onComplete={onReveal} />
+            <WordCharInput
+              word={card.backWord}
+              accentColor={tr.accent}
+              borderColor={tr.border}
+              backgroundColor={tr.bg}
+              autoFocus={autoFocus}
+              onComplete={(typed) => (onRecallComplete != null ? onRecallComplete(typed) : onReveal())}
+            />
             <RNText style={styles.letterHint}>
               {translate('quizCard.letters', { count: card.backWord.replace(/ /g, '').length })}
             </RNText>

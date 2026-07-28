@@ -28,6 +28,10 @@ let mockUsernameChanges = 0;
 const MOCK_TAKEN = new Set(['alpine-elk', 'steady-ibex', 'quick-pika']);
 // E3: archived word ids (mock words rebuild per call; this overlays the flag).
 let mockArchived = new Set<string>();
+// Edit Translations (Premium, 2026-07-28): cardId → user-edited target text.
+// Same overlay shape as mockArchived — the fixtures rebuild per call, this
+// survives across them so an edit sticks for the length of the dev session.
+let mockTargetOverrides = new Map<string, string>();
 
 const PROFILE: Profile = {
   id: USER_ID,
@@ -195,12 +199,16 @@ function buildWords(userState: DevUserState): WordListItem[] {
         : g % 4 === 1 ? new Date(now - 3 * DAY)
         : g % 4 === 2 ? new Date(now + 6 * HOUR)
         : new Date(now + 5 * DAY);
+      const id = `w${tierIdx}_${j}`;
+      const override = mockTargetOverrides.get(id) ?? null;
       out.push({
-        id: `w${tierIdx}_${j}`,
+        id,
         translationId: `mock-t:${w.native}`,
         senseTarget: w.target.toLowerCase(),
         native: w.native,
-        target: w.target,
+        target: override ?? w.target,
+        targetOverride: override,
+        originalTarget: w.target,
         pos: POS_POOL[g % POS_POOL.length],
         example: EXAMPLE_FRAMES[g % EXAMPLE_FRAMES.length].source(w.native),
         exampleTranslation: EXAMPLE_FRAMES[g % EXAMPLE_FRAMES.length].target(w.target),
@@ -208,7 +216,7 @@ function buildWords(userState: DevUserState): WordListItem[] {
         reps: 2 + (g % 9),
         createdAt,
         dueAt,
-        suspended: mockArchived.has(`w${tierIdx}_${j}`),
+        suspended: mockArchived.has(id),
       });
     }
   });
@@ -424,6 +432,9 @@ export const mockDataSource: DataSource = {
     const dueCount = Math.ceil(QUIZ_SESSION.length / 2); // first half due, rest upcoming
     return QUIZ_SESSION.map((q, i) => ({
       ...q,
+      // Edit Translations: the user's text is the answer being studied, so it
+      // replaces backWord (and therefore the recall input's slot count too).
+      content: mockTargetOverrides.has(q.id) ? { ...q.content, backWord: mockTargetOverrides.get(q.id) as string } : q.content,
       fsrs: {
         cardId: q.id,
         userId: USER_ID,
@@ -511,6 +522,15 @@ export const mockDataSource: DataSource = {
   },
   async logEvent() {
     // 3.4: analytics are live-mode only; mock swallows emits.
+  },
+  async setCardTargetOverride(cardId, target) {
+    // Mock: same semantics as the RPC (trim, empty = clear) minus the premium
+    // gate — the dev plan knob already drives the UI-side gating.
+    const next = new Map(mockTargetOverrides);
+    const text = target?.trim() ?? '';
+    if (text === '') next.delete(cardId);
+    else next.set(cardId, text);
+    mockTargetOverrides = next;
   },
   async setCardSuspended(cardId, suspended) {
     const next = new Set(mockArchived);

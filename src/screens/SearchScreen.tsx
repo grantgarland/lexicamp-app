@@ -232,7 +232,11 @@ export function SearchView({ onClose }: { onClose: () => void }) {
       const tid = outcome.result.translationId;
       for (const w of words) {
         if (w.translationId !== tid) continue;
-        const sense = result.translations.find((tr) => tr.word === w.target) ?? result.translations[0];
+        // originalTarget, NOT target: a premium Edit-Translations override
+        // (2026-07-28) changes the RENDERED text, not which sense the card is —
+        // matching on the edited text would miss every chip and silently mark
+        // the primary sense saved instead of the one the user actually holds.
+        const sense = result.translations.find((tr) => tr.word === w.originalTarget) ?? result.translations[0];
         if (sense != null && !locallyRemoved.has(sense.id)) set.add(sense.id);
       }
     }

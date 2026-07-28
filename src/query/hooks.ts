@@ -387,6 +387,23 @@ export function useSetCardSuspended() {
   });
 }
 
+/** Edit Translations (Premium, 2026-07-28) — set or clear the user's own target
+ *  text for a card. Invalidates every read that renders a target: the Word List
+ *  ('words'), the study queue ('dueCards', whose recall input is sized from it)
+ *  and 'deckCards'. Rejects with Error('premium_required') when a free-tier user
+ *  tries to SET one (server-enforced; the UI gates first). */
+export function useSetCardTargetOverride() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { cardId: string; target: string | null }) => ds.setCardTargetOverride(input.cardId, input.target),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['deckCards'] });
+      qc.invalidateQueries({ queryKey: ['words'] });
+      qc.invalidateQueries({ queryKey: ['dueCards'] });
+    },
+  });
+}
+
 /** Delete a saved card (write → delete_card RPC; A12b). Destructive — the
  *  word's FSRS history cascades away with it. */
 export function useDeleteCard() {

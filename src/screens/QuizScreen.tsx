@@ -6,11 +6,12 @@
 import { useState } from 'react';
 import type { TFunction } from 'i18next';
 import { useRouter } from 'expo-router';
-import { ActivityIndicator, Image, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Image, Keyboard, Pressable, ScrollView, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { gradeTypedAnswer } from '@/domain/answer';
 import { applyReview, sessionPromotions, type PromotedWord } from '@/domain/fsrs';
 import type { BufferedRating, QuizCardItem, UiRating } from '@/domain/quiz';
 import { sessionStats, uiRatingToFsrs } from '@/domain/quiz';
@@ -101,6 +102,11 @@ export function QuizScreen() {
   const [phase, setPhase] = useState<Phase>('quiz');
   const [idx, setIdx] = useState(0);
   const [revealed, setRevealed] = useState(false);
+  // Auto-traversal (2026-07-28): the grade derived from a TYPED recall answer.
+  // Non-null ⇒ the matching rating button is highlighted and self-commits after
+  // RatingButtons' timer. Null on every manual reveal (a tap-to-reveal card has
+  // no answer to grade, so pre-selecting one would be a guess).
+  const [autoRating, setAutoRating] = useState<UiRating | null>(null);
   const [ratings, setRatings] = useState<BufferedRating[]>([]);
   const [showExit, setShowExit] = useState(false);
 
@@ -126,6 +132,7 @@ export function QuizScreen() {
     if (card == null) return; // queue emptied mid-session (e.g. a refetch) — nothing to rate
     const next = [...ratings, { cardId: card.id, rating: r }];
     setRatings(next);
+    setAutoRating(null);
     if (idx + 1 >= total) {
       commit.mutate({ ratings: next }); // session complete → batch write (03)
       setPhase('end');
@@ -147,6 +154,7 @@ export function QuizScreen() {
     setPhase('quiz');
     setIdx(0);
     setRevealed(false);
+    setAutoRating(null);
     setRatings([]);
     setSessionCards(null); // re-snapshot whatever is due now
   };
@@ -209,7 +217,27 @@ export function QuizScreen() {
         <View style={styles.cardArea}>
           <ScrollView contentContainerStyle={styles.cardScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             {!revealed ? (
-              <QuizCardFront key={card.id} tier={card.tierId} card={card.content} mode={card.mode} revealCta={false} onReveal={() => setRevealed(true)} />
+              <QuizCardFront
+                key={card.id}
+                tier={card.tierId}
+                card={card.content}
+                mode={card.mode}
+                revealCta={false}
+                onReveal={() => {
+                  setRevealed(true);
+                  setAutoRating(null);
+                }}
+                // Typed the last letter: grade it, flip, and let RatingButtons
+                // run the override window (AUTO_ADVANCE_MS). Dismissing the keyboard here is
+                // belt-and-braces — unmounting the char inputs already closes
+                // it, but an explicit dismiss keeps the gutter (and its timer)
+                // visible on the frame the ratings appear.
+                onRecallComplete={(typed) => {
+                  Keyboard.dismiss();
+                  setAutoRating(gradeTypedAnswer(typed, card.content.backWord).rating);
+                  setRevealed(true);
+                }}
+              />
             ) : (
               <Animated.View key={card.id} entering={FadeIn.duration(220)}>
                 <QuizCardBack tier={card.tierId} card={card.content} />
@@ -224,7 +252,8 @@ export function QuizScreen() {
           <View ref={(node) => { tourTargets.quizGutter.current = node; }} collapsable={false}>
             {revealed ? (
               <Animated.View entering={FadeIn.duration(220)} style={styles.ratingArea}>
-                <RatingButtons onRate={rate} />
+                {/* keyed per card so the auto-advance timer restarts cleanly */}
+                <RatingButtons key={card.id} onRate={rate} highlighted={autoRating} onAutoSelect={rate} />
               </Animated.View>
             ) : (
               <View style={styles.ratingArea}>

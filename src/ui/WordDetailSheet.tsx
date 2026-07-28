@@ -11,7 +11,7 @@ import { addedLabel, dueLabel } from '@/lib/relativeTime';
 import { useExamples } from '@/query/hooks';
 import { getTierByStability, tierView } from '@/theme/tiers';
 import { DetailStats } from './DetailStats';
-import { IconArchive, IconTrash } from './icons';
+import { IconArchive, IconMoreVertical, IconTrash } from './icons';
 import { Button } from './Button';
 import { Sheet } from './Sheet';
 import { RawText as Text } from './Text';
@@ -24,9 +24,13 @@ export interface WordDetailSheetProps {
   onDelete?: (w: WordListItem) => void;
   /** 18 §E3: archive / unarchive (label follows word.suspended). Omit to hide. */
   onToggleArchive?: (w: WordListItem) => void;
+  /** Edit Translations (Premium, 2026-07-28): shows the ⋮ overflow button in the
+   *  sheet's top-right corner. The caller decides what a free-tier tap does
+   *  (route to the paywall) — this component only surfaces the affordance. */
+  onEditTranslation?: (w: WordListItem) => void;
 }
 
-export function WordDetailSheet({ word, onClose, onDelete, onToggleArchive }: WordDetailSheetProps) {
+export function WordDetailSheet({ word, onClose, onDelete, onToggleArchive, onEditTranslation }: WordDetailSheetProps) {
   const { theme } = useUnistyles();
   const isDark = useColorScheme() === 'dark';
   const { t } = useTranslation();
@@ -54,13 +58,28 @@ export function WordDetailSheet({ word, onClose, onDelete, onToggleArchive }: Wo
   const exampleTranslation =
     word?.exampleTranslation || (fetched ? `${fetched.targetPrefix}${fetched.targetTerm}${fetched.targetSuffix}` : '');
   return (
-    <Sheet visible={word != null} onClose={onClose}>
+    <Sheet visible={word != null} onClose={onClose} scrollable>
       {word != null && tier != null && (
         <View>
           <View style={styles.head}>
             <Text style={styles.word}>{word.native}</Text>
             <Text style={styles.target}>{word.target}</Text>
           </View>
+          {onEditTranslation != null && (
+            <Pressable
+              onPress={() => onEditTranslation(word)}
+              accessibilityRole="button"
+              accessibilityLabel={t('editTranslation.openA11y')}
+              testID="word-detail-overflow"
+              // Top-right of the sheet body, clear of the drag handle above it.
+              // Hit slop rather than a bigger box so the ⋮ stays visually light
+              // while still meeting the 44pt touch minimum.
+              hitSlop={12}
+              style={({ pressed }) => [styles.overflow, pressed && { opacity: 0.6 }]}
+            >
+              <IconMoreVertical size={18} color={theme.color.textMuted} />
+            </Pressable>
+          )}
           <View style={styles.metaRow}>
             <View style={styles.posPill}>
               <Text style={styles.posPillText}>{word.pos}</Text>
@@ -132,7 +151,8 @@ export function WordDetailSheet({ word, onClose, onDelete, onToggleArchive }: Wo
 const styles = StyleSheet.create((theme) => {
   const { color, fonts } = theme;
   return {
-    head: { marginBottom: 14 },
+    head: { marginBottom: 14, paddingRight: 36 },
+    overflow: { position: 'absolute', top: -4, right: 0, width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
     word: { fontFamily: fonts.serif.bold, fontSize: 24, color: color.textStrong, letterSpacing: -0.3 },
     target: { fontFamily: fonts.sans.regular, fontSize: 16, color: color.textMuted, marginTop: 3 },
     metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },

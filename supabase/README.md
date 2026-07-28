@@ -10,8 +10,17 @@ that applies a migration through the Supabase connector ends by refreshing the
 mirror (`npx supabase migration fetch`) and committing it. Verify sync with
 `npx supabase migration list`.
 
-**Mirror status (2026-07-22, post-`leaderboard_dev_preview`):** all 35
-live migrations are mirrored. The 07-22 additions (`daily_free_save_allowance`,
+**Mirror status (2026-07-28, post-`card_target_overrides`):** all 36
+live migrations are mirrored. `card_target_overrides` (2026-07-28, Edit
+Translations / Premium) was hand-written from the exact applied SQL — the
+device sandbox running that session had no network, so `migration fetch` was
+not available; verify with `npx supabase migration list`. It adds the
+per-card `card_target_overrides` table (PK = card_id, own-row RLS on all four
+verbs, 1–120 char CHECK) plus the `set_card_target_override(uuid, text)` RPC:
+premium-gated on SET, ungated on CLEAR (a lapsed subscriber must still be able
+to undo their own edit), and additive — it never writes to `cards`,
+`card_fsrs_state`, `review_logs` or `translations_cache`. Prior: all 35
+live migrations were mirrored as of 2026-07-22. The 07-22 additions (`daily_free_save_allowance`,
 `username_identity` + `username_trigger_fn_lockdown`,
 `username_change_policy` — the R5 cycle/save redesign: `username_words`
 table, list-decomposition validation in `set_username` v2, free lifetime-1 +

@@ -26,6 +26,7 @@ export { Toast } from './Toast';
 export { DetailStats, type DetailStat } from './DetailStats';
 export { PremiumBadge, type PremiumBadgeProps } from './PremiumBadge';
 export { WordDetailSheet, type WordDetailSheetProps } from './WordDetailSheet';
+export { EditTranslationSheet, type EditTranslationSheetProps, TARGET_OVERRIDE_MAX } from './EditTranslationSheet';
 export {
   IconHome,
   IconList,
@@ -64,13 +65,15 @@ export {
   IconInfinity,
   IconRefresh,
   IconUser,
+  IconMoreVertical,
+  IconPencil,
   type IconProps,
 } from './icons';
 export { PRESS_OPACITY, pressableOpacity } from './pressable';
 export { ForgettingCurve, IntervalTrack, CardSorter, DailyPractice, SummitScene } from './illustrations';
 
 // ── P3 composed domain components ──
-export { RatingButtons, type RatingButtonsProps, type Rating } from './RatingButtons';
+export { RatingButtons, AUTO_ADVANCE_MS, type RatingButtonsProps, type Rating } from './RatingButtons';
 export { WordRow, type WordRowProps, type WordItem } from './WordRow';
 export { DeckRow, type DeckRowProps, type DeckItem } from './DeckRow';
 export {

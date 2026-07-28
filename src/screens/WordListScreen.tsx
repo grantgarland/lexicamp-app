@@ -13,7 +13,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
-import { useActiveLang, useDecks, useDeleteCard, useEntitlement, useSetCardSuspended, useWords } from '@/query/hooks';
+import { useActiveLang, useDecks, useDeleteCard, useEntitlement, useSetCardSuspended, useSetCardTargetOverride, useWords } from '@/query/hooks';
 import type { DeckSummary, WordListItem } from '@/data/DataSource';
 import { addedLabel } from '@/lib/relativeTime';
 import { useDeferredReady } from '@/lib/useDeferredReady';
@@ -30,6 +30,7 @@ import {
   ConfirmDialog,
   DeckRow,
   DetailStats,
+  EditTranslationSheet,
   EmptyState,
   IconList,
   IconLock,
@@ -80,6 +81,7 @@ export function WordListScreen() {
   const { words, isLoading: wordsLoading } = useWords();
   const deleteCard = useDeleteCard();
   const setSuspended = useSetCardSuspended();
+  const setTargetOverride = useSetCardTargetOverride();
   const { decks, isLoading: decksLoading } = useDecks();
   const { isPaid } = useEntitlement();
 
@@ -94,6 +96,11 @@ export function WordListScreen() {
   const [showArchived, setShowArchived] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [detailWord, setDetailWord] = useState<WordListItem | null>(null);
+  // Edit Translations (Premium, 2026-07-28). Free-tier taps route to the paywall
+  // instead of opening the sheet — the server rejects the write anyway, and a
+  // sheet that can only fail is worse than an honest upsell.
+  const [editWord, setEditWord] = useState<WordListItem | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<WordListItem | null>(null);
   // Optimistic removal until the real delete mutation (03 write) lands.
   const [removed, setRemoved] = useState<string[]>([]);
@@ -151,6 +158,17 @@ export function WordListScreen() {
       },
     );
     setDetailWord(null);
+  };
+
+  // Edit Translations entry point, shared by the row swipe tray and both
+  // word-detail sheets. Premium-gated HERE (the RPC re-checks server-side).
+  const openEditTranslation = (w: WordListItem) => {
+    setEditError(null);
+    if (!isPaid) {
+      router.push('/paywall');
+      return;
+    }
+    setEditWord(w);
   };
 
   const visible = useMemo(() => {
@@ -243,6 +261,7 @@ export function WordListScreen() {
                 onDelete={() => setPendingDelete(w)}
                 onAddToDeck={() => (isPaid ? setAddToDeckWord(w) : setSubTab('decks'))}
                 onToggleArchive={() => toggleArchive(w)}
+                onEditTranslation={() => openEditTranslation(w)}
               />
             )}
             keyboardShouldPersistTaps="handled"
@@ -314,9 +333,43 @@ export function WordListScreen() {
         word={detailWord}
         onClose={() => setDetailWord(null)}
         onToggleArchive={toggleArchive}
+        onEditTranslation={(w) => openEditTranslation(w)}
         onDelete={(w) => {
           setDetailWord(null);
           setPendingDelete(w);
+        }}
+      />
+
+      {/* Edit Translations (Premium) — stacks OVER the word-detail sheet (the
+          kit's Portal sheets stack; the detail sheet stays mounted behind). */}
+      <EditTranslationSheet
+        word={editWord}
+        isSaving={setTargetOverride.isPending}
+        error={editError}
+        onClose={() => {
+          setEditWord(null);
+          setEditError(null);
+        }}
+        onConfirm={(target) => {
+          const w = editWord;
+          if (w == null) return;
+          setEditError(null);
+          setTargetOverride.mutate(
+            { cardId: w.id, target },
+            {
+              onSuccess: () => {
+                setEditWord(null);
+                // The detail sheet behind holds a STALE snapshot of this word
+                // (it was captured before the edit); close it rather than let
+                // it repaint the old target after the sheet above dismisses.
+                setDetailWord(null);
+                setDeckWordDetail(null);
+                showToast({ variant: 'success', message: target == null ? t('editTranslation.toastReset') : t('editTranslation.toastSaved') });
+              },
+              onError: (e) =>
+                setEditError((e as Error).message === 'premium_required' ? t('editTranslation.premiumRequired') : t('editTranslation.saveFailed')),
+            },
+          );
         }}
       />
 
@@ -409,6 +462,7 @@ export function WordListScreen() {
       <WordDetailSheet
         word={deckWordDetail}
         onClose={() => setDeckWordDetail(null)}
+        onEditTranslation={(w) => openEditTranslation(w)}
         onDelete={(w) => {
           setDeckWordDetail(null);
           setPendingDelete(w);

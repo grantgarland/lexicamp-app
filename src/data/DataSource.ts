@@ -45,6 +45,14 @@ export interface WordListItem {
   dueAt: Date;
   /** Archived (cards.suspended, 18 §E3): kept forever, excluded from reviews. */
   suspended: boolean;
+  /** Edit Translations (Premium, 2026-07-28): the user's own rendering of the
+   *  target text (`card_target_overrides.target_text`), or null when untouched.
+   *  `target` above is ALREADY resolved (override ?? original) — this exists so
+   *  the edit sheet can show "edited" state and offer a reset. */
+  targetOverride: string | null;
+  /** The target text BEFORE any user override — the sense/cache value that
+   *  "Reset to original" restores. Equals `target` when there is no override. */
+  originalTarget: string;
 }
 
 /** A custom deck summary for the Word List → Decks tab (Premium). */
@@ -196,4 +204,13 @@ export interface DataSource {
   /** Archive / unarchive a card (18 §E3). Suspended cards keep everything but
    *  leave the review queue; unarchive restores them untouched. */
   setCardSuspended(cardId: string, suspended: boolean): Promise<void>;
+  /** Edit Translations (Premium, 2026-07-28) — set (or, with null, CLEAR) the
+   *  user's own target-language text for one card, via the
+   *  `set_card_target_override` RPC. Additive and reversible: it writes only to
+   *  `card_target_overrides` and never touches the card, its FSRS state, its
+   *  review history, or the shared `translations_cache` row.
+   *  Setting rejects with Error('premium_required') for free-tier users
+   *  (server-enforced); CLEARING is always allowed, so a lapsed subscription
+   *  can still undo its own edits. */
+  setCardTargetOverride(cardId: string, target: string | null): Promise<void>;
 }

@@ -14,7 +14,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useTranslation } from '@/i18n';
 import { dueLabelShort, wordHealth } from '@/lib/relativeTime';
 import { getTierByStability } from '@/theme/tiers';
-import { IconArchive, IconFolderPlus, IconLock, IconMinus, IconTrash } from './icons';
+import { IconArchive, IconFolderPlus, IconLock, IconMinus, IconPencil, IconTrash } from './icons';
 import { ListItem } from './List';
 import { Text } from './Text';
 import { TierBadge } from './TierBadge';
@@ -41,19 +41,28 @@ export interface WordRowProps {
   onToggleArchive?: () => void;
   /** Deck context: replaces the Add/Delete tray with a single "Remove from deck". */
   onRemoveFromDeck?: () => void;
+  /** Edit Translations (Premium, 2026-07-28) — the tray's "Edit" action. Locks
+   *  on the free tier the same way Add-to-Deck does. */
+  onEditTranslation?: () => void;
   /** Free tier shows a lock on Add-to-Deck. */
   isPremium?: boolean;
   /** Static row (no swipe, no date). */
   compact?: boolean;
 }
 
-const ACTION_W = 76;
+// Tray actions shrink as they multiply so a 4-action tray still leaves the row
+// face readable on a 375pt screen (4 × 76 = 304 of 375 was too greedy).
+const ACTION_W_BASE = 76;
+const ACTION_W_DENSE = 66;
 
-export function WordRow({ word, onPress, onDelete, onAddToDeck, onToggleArchive, onRemoveFromDeck, isPremium = false, compact = false }: WordRowProps) {
+export function WordRow({ word, onPress, onDelete, onAddToDeck, onToggleArchive, onRemoveFromDeck, onEditTranslation, isPremium = false, compact = false }: WordRowProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const ref = useRef<SwipeableMethods>(null);
   const tier = getTierByStability(word.stability);
+
+  const actionCount = 1 + (onToggleArchive != null ? 1 : 0) + (onEditTranslation != null ? 1 : 0) + 1;
+  const actionW = actionCount >= 4 ? ACTION_W_DENSE : ACTION_W_BASE;
 
   const renderRightActions = () =>
     onRemoveFromDeck != null ? (
@@ -62,7 +71,7 @@ export function WordRow({ word, onPress, onDelete, onAddToDeck, onToggleArchive,
           accessibilityRole="button"
           accessibilityLabel={t('wordRow.removeA11y')}
           testID="word-row-remove-deck"
-          style={[styles.action, { backgroundColor: theme.color.brand }]}
+          style={[styles.action, { width: ACTION_W_BASE, backgroundColor: theme.color.brand }]}
           onPress={() => {
             ref.current?.close();
             onRemoveFromDeck();
@@ -81,7 +90,7 @@ export function WordRow({ word, onPress, onDelete, onAddToDeck, onToggleArchive,
             accessibilityRole="button"
             accessibilityLabel={word.suspended ? t('wordRow.unarchiveA11y') : t('wordRow.archiveA11y')}
             testID="word-row-archive"
-            style={[styles.action, { backgroundColor: theme.palette.slate[500] }]}
+            style={[styles.action, { width: actionW, backgroundColor: theme.palette.slate[500] }]}
             onPress={() => {
               ref.current?.close();
               onToggleArchive();
@@ -93,11 +102,28 @@ export function WordRow({ word, onPress, onDelete, onAddToDeck, onToggleArchive,
             </Text>
           </Pressable>
         )}
+        {onEditTranslation != null && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('editTranslation.openA11y')}
+            testID="word-row-edit-translation"
+            style={[styles.action, { width: actionW, backgroundColor: isPremium ? theme.palette.blue[500] : theme.palette.slate[400] }]}
+            onPress={() => {
+              ref.current?.close();
+              onEditTranslation();
+            }}
+          >
+            {isPremium ? <IconPencil size={18} color="#fff" /> : <IconLock size={18} color="#fff" />}
+            <Text variant="label" style={styles.actionLabel}>
+              {t('editTranslation.trayLabel')}
+            </Text>
+          </Pressable>
+        )}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('wordRow.addToDeckA11y')}
           testID="word-row-add-deck"
-          style={[styles.action, { backgroundColor: isPremium ? theme.color.brand : theme.palette.slate[400] }]}
+          style={[styles.action, { width: actionW, backgroundColor: isPremium ? theme.color.brand : theme.palette.slate[400] }]}
           onPress={() => {
             ref.current?.close();
             onAddToDeck?.();
@@ -114,7 +140,7 @@ export function WordRow({ word, onPress, onDelete, onAddToDeck, onToggleArchive,
           // Maestro tap target — trays only mount while swiped open, so at most
           // one row's actions exist at a time and the ids stay unique.
           testID="word-row-delete"
-          style={[styles.action, { backgroundColor: theme.color.danger }]}
+          style={[styles.action, { width: actionW, backgroundColor: theme.color.danger }]}
           onPress={() => {
             ref.current?.close();
             onDelete?.();
@@ -200,6 +226,6 @@ const styles = StyleSheet.create((theme) => ({
   trailing: { alignItems: 'flex-end', gap: 2 },
   due: { fontFamily: theme.fonts.sans.semibold },
   tray: { flexDirection: 'row' },
-  action: { width: ACTION_W, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  action: { alignItems: 'center', justifyContent: 'center', gap: 4 },
   actionLabel: { color: '#fff', fontSize: 9, letterSpacing: 0.3 },
 }));

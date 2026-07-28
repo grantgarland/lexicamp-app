@@ -19,10 +19,12 @@ import {
   mapProfile,
   mapQuizItem,
   mapWordListItem,
+  overrideText,
   toCommitRow,
   type CardRow,
   type DeckRowDb,
   type FsrsRow,
+  type OverrideRow,
   type ProfileRow,
   type SubscriptionRow,
   type TranslationJoin,
@@ -55,6 +57,7 @@ function bailUsername(error: { message: string; details?: string | null } | null
 const CARD_JOIN =
   'id, deck_id, user_id, translation_id, user_note, custom_front, custom_back, suspended, created_at, ' +
   'decks!inner ( target_lang ), ' +
+  'card_target_overrides ( target_text ), ' +
   'translations_cache ( id, display_source, translation, pos_tag, prefix_word, examples, alt_translations, back_translations ), ' +
   'card_fsrs_state ( card_id, user_id, stability, difficulty, due_at, last_review_at, state, reps, lapses, learning_steps )';
 
@@ -65,6 +68,8 @@ const DUE_JOIN = CARD_JOIN.replace('card_fsrs_state (', 'card_fsrs_state!inner (
 interface JoinedCardRow extends CardRow {
   translations_cache: TranslationJoin;
   card_fsrs_state: FsrsRow;
+  /** Edit Translations (Premium, 2026-07-28) — absent on untouched cards. */
+  card_target_overrides?: OverrideRow | OverrideRow[] | null;
 }
 
 export const supabaseDataSource: DataSource = {
@@ -114,6 +119,19 @@ export const supabaseDataSource: DataSource = {
   async setCardSuspended(cardId: string, suspended: boolean): Promise<void> {
     // 18 §E3: archival — the RPC logs the analytics event alongside the flag.
     const { error } = await supabase.rpc('set_card_suspended', { p_card_id: cardId, p_suspended: suspended });
+    bail(error);
+  },
+
+  async setCardTargetOverride(cardId: string, target: string | null): Promise<void> {
+    // Edit Translations (Premium, 2026-07-28). The RPC owns ownership, the
+    // premium gate (set only — clearing is always allowed), trimming, the
+    // 120-char cap, and the analytics event. Nothing else is written: the card,
+    // its FSRS state, its review history and the shared translations_cache row
+    // are all untouched, which is exactly what the sheet's info tooltip promises.
+    const { error } = await supabase.rpc('set_card_target_override', {
+      p_card_id: cardId,
+      p_target: target == null || target.trim() === '' ? null : target.trim(),
+    });
     bail(error);
   },
 
@@ -310,7 +328,7 @@ export const supabaseDataSource: DataSource = {
       .order('created_at', { ascending: false });
     bail(error);
     const rows = (data ?? []) as unknown as JoinedCardRow[];
-    return rows.map((r) => mapWordListItem(r, r.translations_cache, r.card_fsrs_state));
+    return rows.map((r) => mapWordListItem(r, r.translations_cache, r.card_fsrs_state, overrideText(r.card_target_overrides)));
   },
 
   async getDueCards(limit: number, lang?: string): Promise<QuizCardItem[]> {
@@ -345,7 +363,7 @@ export const supabaseDataSource: DataSource = {
       bail(nextErr);
       rows.push(...((nextData ?? []) as unknown as JoinedCardRow[]).filter((r) => r.card_fsrs_state != null));
     }
-    return rows.map((r) => mapQuizItem(r, r.translations_cache, r.card_fsrs_state, target));
+    return rows.map((r) => mapQuizItem(r, r.translations_cache, r.card_fsrs_state, target, overrideText(r.card_target_overrides)));
   },
 
   async getNotificationPrefs(): Promise<NotificationPrefs> {

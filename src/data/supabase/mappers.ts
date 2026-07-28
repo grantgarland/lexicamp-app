@@ -183,15 +183,35 @@ export const mapFsrsState = (r: FsrsRow): CardFsrsState => ({
   learningSteps: r.learning_steps,
 });
 
-/** cards ⋈ translations_cache ⋈ card_fsrs_state → Word List row. */
-export function mapWordListItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow): WordListItem {
+/** Edit Translations (2026-07-28): the embedded `card_target_overrides` row.
+ *  PostgREST returns a 1-1 embed as an object, but a to-many-shaped one as an
+ *  array — accept both so a projection change can't silently drop the override. */
+export interface OverrideRow {
+  target_text: string;
+}
+export function overrideText(o: OverrideRow | OverrideRow[] | null | undefined): string | null {
+  if (o == null) return null;
+  const row = Array.isArray(o) ? o[0] : o;
+  const text = row?.target_text?.trim();
+  return text != null && text !== '' ? text : null;
+}
+
+/** cards ⋈ translations_cache ⋈ card_fsrs_state → Word List row.
+ *  `override` = the user's Edit-Translations text (Premium) — it replaces the
+ *  RENDERED target only. Sense resolution (cardSenseKey / senseExample) stays on
+ *  custom_back on purpose: the override is display text, not a sense choice, and
+ *  routing it through cardSenseKey would break per-sense example lookup. */
+export function mapWordListItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow, override?: string | null): WordListItem {
   const ex = senseExample(card, tr);
+  const originalTarget = card.custom_back ?? tr.translation ?? '';
   return {
     id: card.id,
     translationId: tr.id,
     senseTarget: cardSenseKey(card, tr),
     native: card.custom_front ?? tr.display_source,
-    target: card.custom_back ?? tr.translation ?? '',
+    target: override ?? originalTarget,
+    targetOverride: override ?? null,
+    originalTarget,
     pos: tr.pos_tag ? i18n.t(`pos.${tr.pos_tag}`, { defaultValue: tr.pos_tag.toLowerCase() }) : '',
     example: ex ? `${ex.sourcePrefix}${ex.sourceTerm}${ex.sourceSuffix}` : '',
     exampleTranslation: ex ? `${ex.targetPrefix}${ex.targetTerm}${ex.targetSuffix}` : '',
@@ -234,7 +254,7 @@ function senseHint(card: CardRow, tr: TranslationJoin): string | undefined {
 }
 
 /** Due card → quiz view-model (mode mirrors the mock: lower tiers = recognition). */
-export function mapQuizItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow, targetLang: string): QuizCardItem {
+export function mapQuizItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow, targetLang: string, override?: string | null): QuizCardItem {
   const tier = getTierByStability(fsrs.stability);
   const mode: QuizMode = tier.id === 'bc' || tier.id === 'abc' ? 'recognition' : 'recall';
   const hint = senseHint(card, tr);
@@ -253,7 +273,9 @@ export function mapQuizItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow, t
         mode === 'recognition'
           ? i18n.t('quiz.promptRecognition')
           : i18n.t('quiz.promptRecall', { lang: languageName(targetLang) }),
-      backWord: card.custom_back ?? tr.translation ?? '',
+      // Edit Translations: the user's own text IS the answer they're studying,
+      // so it drives both the revealed back and the recall input's slot count.
+      backWord: override ?? card.custom_back ?? tr.translation ?? '',
       ...(tr.pos_tag ? { backPos: i18n.t(`pos.${tr.pos_tag}`, { defaultValue: tr.pos_tag.toLowerCase() }) } : {}),
       ...(ex != null ? { backExample: `${ex.targetPrefix}${ex.targetTerm}${ex.targetSuffix}` } : {}),
     },

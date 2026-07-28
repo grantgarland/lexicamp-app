@@ -262,6 +262,27 @@ export function IconInfo({ size = 13, color = STROKE }: IconProps) {
   );
 }
 
+export function IconMoreVertical({ size = 18, color = STROKE }: IconProps) {
+  // Kebab / overflow menu — the "more actions here" affordance on a sheet head.
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke="none">
+      <Circle cx="12" cy="5" r="1.9" />
+      <Circle cx="12" cy="12" r="1.9" />
+      <Circle cx="12" cy="19" r="1.9" />
+    </Svg>
+  );
+}
+
+export function IconPencil({ size = 18, color = STROKE }: IconProps) {
+  // Edit — pencil over a baseline (the swipe-tray "Edit" action).
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M15.5 4.5l4 4L8 20H4v-4z" />
+      <Path d="M13.5 6.5l4 4" />
+    </Svg>
+  );
+}
+
 export function IconWifi({ size = 14, color = STROKE }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round">

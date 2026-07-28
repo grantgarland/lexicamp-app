@@ -194,7 +194,8 @@
     "almost": "Casi",
     "almostSub": "Recuerdo parcial",
     "gotIt": "La sé",
-    "gotItSub": "Recuerdo claro"
+    "gotItSub": "Recuerdo claro",
+    "autoHint": "Se seleccionará sola en un momento; toca cualquier opción para elegirla tú"
   },
   "quiz": {
     "closeQuiz": "Cerrar cuestionario",
@@ -263,6 +264,25 @@
     "unarchive": "Restaurar",
     "archiveA11y": "Archivar esta palabra",
     "unarchiveA11y": "Devolver esta palabra a los repasos"
+  },
+  "editTranslation": {
+    "openA11y": "Editar esta traducción",
+    "trayLabel": "Editar",
+    "title": "Editar traducción",
+    "originalLabel": "Original:",
+    "editedBadge": "Editada",
+    "inputLabel": "Tu traducción",
+    "confirm": "Confirmar",
+    "reset": "Restaurar «{{original}}»",
+    "infoHint": "Esto solo cambia el texto que estudias.",
+    "infoTitle": "No se borra nada",
+    "infoBody": "Editar la traducción cambia únicamente el texto en el idioma de destino que aparece en la tarjeta de esta palabra. Tu historial de repasos, la fuerza de memoria, la fecha del próximo repaso y todo lo demás se mantienen igual. Puedes restaurar el original cuando quieras.",
+    "infoA11y": "Qué hace editar una traducción",
+    "tooLong": "Usa menos de {{max}} caracteres.",
+    "premiumRequired": "Editar traducciones es una función Premium.",
+    "saveFailed": "No se pudo guardar el cambio. Inténtalo de nuevo.",
+    "toastSaved": "Traducción actualizada",
+    "toastReset": "Traducción restaurada"
   },
   "wordList": {
     "title": "Mis palabras",

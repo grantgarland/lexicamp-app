@@ -230,6 +230,34 @@ export function describeDataSourceContract(name: string, source: DataSource): vo
       for (const e of scoped) expect(e.langCode).toBe(lang);
     });
 
+    it('setCardTargetOverride: the edit shows up as target, is reversible, and never touches FSRS state', async () => {
+      const [w] = await source.getWords();
+      if (w == null) return; // empty scenario — nothing to edit
+      const before = await source.getDeckCards();
+
+      await source.setCardTargetOverride(w.id, '  вода  ');
+      const edited = (await source.getWords()).find((x) => x.id === w.id);
+      expect(edited?.target).toBe('вода'); // trimmed, and it IS the rendered target
+      expect(edited?.targetOverride).toBe('вода');
+      expect(edited?.originalTarget).toBe(w.originalTarget); // the source of truth is untouched
+      // Additive: no card is added/removed and no scheduling state moves.
+      const during = await source.getDeckCards();
+      expect(during.cards.length).toBe(before.cards.length);
+      expect(during.states.find((s) => s.cardId === w.id)?.stability).toBe(before.states.find((s) => s.cardId === w.id)?.stability);
+
+      // Clearing restores the original exactly.
+      await source.setCardTargetOverride(w.id, null);
+      const reset = (await source.getWords()).find((x) => x.id === w.id);
+      expect(reset?.targetOverride).toBeNull();
+      expect(reset?.target).toBe(w.originalTarget);
+    });
+
+    it('every word resolves target = targetOverride ?? originalTarget', async () => {
+      for (const w of await source.getWords()) {
+        expect(w.target).toBe(w.targetOverride ?? w.originalTarget);
+      }
+    });
+
     it('getAccountIdentity returns an email + a known provider', async () => {
       const id = await source.getAccountIdentity();
       expect(['apple', 'email']).toContain(id.provider);

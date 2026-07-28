@@ -194,7 +194,8 @@
     "almost": "Almost",
     "almostSub": "Partial recall",
     "gotIt": "Got it",
-    "gotItSub": "Clean recall"
+    "gotItSub": "Clean recall",
+    "autoHint": "Selected automatically in a moment. Tap any option to choose it yourself"
   },
   "quiz": {
     "closeQuiz": "Close quiz",
@@ -263,6 +264,25 @@
     "unarchive": "Restore",
     "archiveA11y": "Archive this word",
     "unarchiveA11y": "Restore this word to reviews"
+  },
+  "editTranslation": {
+    "openA11y": "Edit this translation",
+    "trayLabel": "Edit",
+    "title": "Edit translation",
+    "originalLabel": "Original:",
+    "editedBadge": "Edited",
+    "inputLabel": "Your translation",
+    "confirm": "Confirm",
+    "reset": "Reset to “{{original}}”",
+    "infoHint": "This only changes the text you study.",
+    "infoTitle": "Nothing is deleted",
+    "infoBody": "Editing the translation changes only the target-language text shown on this word's card. Your review history, memory strength, next review date and everything else about the word stay exactly as they are. You can reset to the original at any time.",
+    "infoA11y": "What editing a translation does",
+    "tooLong": "Keep it under {{max}} characters.",
+    "premiumRequired": "Editing translations is a Premium feature.",
+    "saveFailed": "Couldn't save that change. Try again.",
+    "toastSaved": "Translation updated",
+    "toastReset": "Translation reset"
   },
   "wordList": {
     "title": "My Words",

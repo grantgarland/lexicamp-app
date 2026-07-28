@@ -9,6 +9,7 @@ import {
   mapProfile,
   mapQuizItem,
   mapWordListItem,
+  overrideText,
   toCommitRow,
   type CardRow,
   type FsrsRow,
@@ -139,6 +140,30 @@ describe('mapWordListItem', () => {
     expect(w.exampleTranslation).toBe('');
   });
 
+  it('Edit Translations: the override replaces the rendered target only', () => {
+    const w = mapWordListItem(CARD, TR, FSRS, 'вода');
+    expect(w.target).toBe('вода');
+    expect(w.targetOverride).toBe('вода');
+    // originalTarget is the cache/sense value — what "Reset to original" restores.
+    expect(w.originalTarget).toBe(mapWordListItem(CARD, TR, FSRS).target);
+    // The sense key (→ per-sense example lookup) must NOT follow the override.
+    expect(w.senseTarget).toBe(mapWordListItem(CARD, TR, FSRS).senseTarget);
+    expect(w.example).toBe(mapWordListItem(CARD, TR, FSRS).example);
+  });
+
+  it('Edit Translations: no override leaves target === originalTarget', () => {
+    const w = mapWordListItem(CARD, TR, FSRS);
+    expect(w.targetOverride).toBeNull();
+    expect(w.target).toBe(w.originalTarget);
+  });
+
+  it('Edit Translations: the override drives the quiz answer (and so the recall slot count)', () => {
+    const q = mapQuizItem(CARD, TR, FSRS, 'es', 'вода');
+    expect(q.content.backWord).toBe('вода');
+    // ...even over an A12c sense pick, which the user is explicitly re-wording.
+    expect(mapQuizItem({ ...CARD, custom_back: 'housefly' }, TR, FSRS, 'es', 'house fly').content.backWord).toBe('house fly');
+  });
+
   it('prefers user overrides (custom_front/back)', () => {
     const w = mapWordListItem({ ...CARD, custom_front: 'la mosca', custom_back: 'housefly' }, TR, FSRS);
     expect(w.native).toBe('la mosca');
@@ -230,5 +255,19 @@ describe('toCommitRow', () => {
       scheduled_days: 13,
       state_before: 2,
     });
+  });
+});
+
+describe('overrideText (PostgREST embed shapes)', () => {
+  it('accepts the 1-1 object form, the array form, and absence', () => {
+    expect(overrideText({ target_text: 'вода' })).toBe('вода');
+    expect(overrideText([{ target_text: 'вода' }])).toBe('вода');
+    expect(overrideText([])).toBeNull();
+    expect(overrideText(null)).toBeNull();
+    expect(overrideText(undefined)).toBeNull();
+  });
+  it('treats whitespace-only text as no override (the RPC never writes one, but rows predate rules)', () => {
+    expect(overrideText({ target_text: '   ' })).toBeNull();
+    expect(overrideText({ target_text: '  вода ' })).toBe('вода');
   });
 });

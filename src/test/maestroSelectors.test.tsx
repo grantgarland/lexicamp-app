@@ -70,6 +70,9 @@ jest.mock('react-native-reanimated', () => {
     useAnimatedStyle: (fn) => (typeof fn === 'function' ? fn() : {}),
     useDerivedValue: (fn) => ({ value: typeof fn === 'function' ? fn() : undefined }),
     withTiming: (v) => v,
+    // Sheet lifts itself off the keyboard with useAnimatedKeyboard (2026-07-28);
+    // a closed-keyboard stand-in keeps the mounted tree identical to before.
+    useAnimatedKeyboard: () => ({ height: { value: 0 }, state: { value: 0 } }),
     withSpring: (v) => v,
     withDelay: (_, v) => v,
     runOnJS: (fn) => fn,

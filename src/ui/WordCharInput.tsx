@@ -30,7 +30,10 @@ export interface WordCharInputProps {
   /** Background the input sits on — the edge fades blend to this. */
   backgroundColor?: string;
   autoFocus?: boolean;
-  onComplete?: () => void;
+  /** Fired when every slot is filled. Receives the typed answer with the word's
+   *  own space structure restored, so the caller can grade it (quiz
+   *  auto-traversal, 2026-07-28) without re-deriving the gaps. */
+  onComplete?: (typed: string) => void;
 }
 
 const CELL_W = 30;
@@ -115,6 +118,12 @@ export function WordCharInput({ word, accentColor, borderColor, backgroundColor,
     });
   };
 
+  /** Slot values → the typed string, re-inserting the answer's word gaps. */
+  const typedFrom = (vals: string[]): string => {
+    let slot = 0;
+    return letters.map((ch) => (ch === ' ' ? ' ' : (vals[slot++] ?? ''))).join('');
+  };
+
   const handleChange = (i: number, text: string) => {
     if (text === '') {
       setAt(i, '');
@@ -130,7 +139,7 @@ export function WordCharInput({ word, accentColor, borderColor, backgroundColor,
       refs.current[i + 1]?.focus();
       scrollToSlot(i + 1);
     } else if (next.every((v) => v)) {
-      onComplete?.();
+      onComplete?.(typedFrom(next));
     }
   };
 
