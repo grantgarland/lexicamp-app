@@ -1,9 +1,9 @@
 // Auth session — thin wrappers over supabase.auth + a session hook. Email
 // confirmation is OFF (00 infra decision, 2026-07-05), so signUp returns a live
-// session directly. Social sign-in (Apple/Google) is a follow-up: it needs
-// native OAuth config (expo-apple-authentication / google-signin) — buttons stay
-// decorative until then. Errors surface as thrown Error with a message the
-// screen can show inline.
+// session directly. Social sign-in (Apple) is a follow-up: it needs native OAuth
+// config (expo-apple-authentication) — the button stays decorative until then.
+// Google sign-in will not be supported (product decision 2026-07-27). Errors
+// surface as thrown Error with a message the screen can show inline.
 import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 

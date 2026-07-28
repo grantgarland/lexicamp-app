@@ -68,10 +68,12 @@ export interface ProgressStats {
 }
 
 /** 20 §3.1: the read-only Account block in Edit Profile. `provider` is the
- *  auth path the account was created with — immutable, honest-UI displayed. */
+ *  auth path the account was created with — immutable, honest-UI displayed.
+ *  No 'google' variant: Google sign-in will not be supported (product
+ *  decision 2026-07-27). */
 export interface AccountIdentity {
   email: string | null;
-  provider: 'apple' | 'google' | 'email';
+  provider: 'apple' | 'email';
 }
 
 /** 20 §3.3 v2 (R5): tokens `setUsername` rejects with (Error.message).

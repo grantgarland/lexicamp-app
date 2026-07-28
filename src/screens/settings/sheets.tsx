@@ -180,7 +180,7 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
         <FieldLabel>{t('settings.accountField')}</FieldLabel>
         <ReadOnlyField
           value={identity?.email ?? '…'}
-          note={t(identity?.provider === 'apple' ? 'settings.providerApple' : identity?.provider === 'google' ? 'settings.providerGoogle' : 'settings.providerEmail')}
+          note={t(identity?.provider === 'apple' ? 'settings.providerApple' : 'settings.providerEmail')}
         />
 
         <FieldLabel>{t('settings.username')}</FieldLabel>

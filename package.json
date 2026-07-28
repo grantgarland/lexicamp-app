@@ -8,6 +8,7 @@
     "@expo-google-fonts/spectral": "^0.4.1",
     "@expo/ui": "~56.0.22",
     "@gorhom/bottom-sheet": "^5.2.14",
+    "@invertase/react-native-apple-authentication": "^2.5.1",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "^9.1.0",
     "@sentry/react-native": "~7.11.0",

@@ -1,9 +1,10 @@
 // AuthScreen (O-10 / O-11) — account creation + sign-in, assembled against the auth
 // beats in onboarding/Onboarding.html. One screen with a sign-up ↔ sign-in toggle:
-// social continue buttons, email/password, and the mode switch. Email auth is REAL
+// an Apple continue button, email/password, and the mode switch. Email auth is REAL
 // when the Supabase source is active (USE_SUPABASE); mock mode keeps the old
-// route-straight-in behavior so dev flows need no network. Social buttons stay
-// decorative until native OAuth config lands (see src/auth/session.ts).
+// route-straight-in behavior so dev flows need no network. The Apple button stays
+// decorative until native OAuth config lands (see src/auth/session.ts). Google
+// sign-in will not be supported (product decision 2026-07-27).
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
@@ -77,8 +78,8 @@ export function AuthScreen() {
         targetLang: ob.targetLang ?? 'es', // O-05 default if the buffer is cold (direct sign-in path)
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC',
         notificationsEnabled: ob.notificationsEnabled,
-        // 18 §A7 (D1): seed a default name so profiles are never blank — Apple/
-        // Google provider names slot in here when those auth flows land.
+        // 18 §A7 (D1): seed a default name so profiles are never blank — Apple
+        // provider names slot in here when that auth flow lands.
         displayName: defaultDisplayName(email.trim()),
       });
       // O-06 opt-in → OS permission prompt + device token registration (2.5).
@@ -112,7 +113,6 @@ export function AuthScreen() {
           <>
             <View style={styles.social}>
               <Button title={t('auth.continueApple')} variant="secondary" onPress={enter} />
-              <Button title={t('auth.continueGoogle')} variant="secondary" onPress={enter} />
             </View>
 
             <View style={styles.divider}>

@@ -75,7 +75,7 @@ export interface DirectionLangs {
 }
 
 /** Seed a default display name from the auth identity (18 §A7 / D1): prefer the
- *  provider-supplied name (Apple/Google, when those flows land); else prettify the
+ *  provider-supplied name (Apple, when that flow lands); else prettify the
  *  email local-part — "grant.persona+tag@x.com" → "Grant Persona". Never empty:
  *  falls back to "Learner" for degenerate inputs. */
 export function defaultDisplayName(email: string, providerName?: string | null): string {

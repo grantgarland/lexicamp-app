@@ -164,7 +164,9 @@ export const supabaseDataSource: DataSource = {
     // (identities[] lists all linked); that's the "associated with" answer the
     // Account block promises (20 §3.1).
     const raw = (user.app_metadata?.provider ?? user.identities?.[0]?.provider ?? 'email') as string;
-    const provider: AccountIdentity['provider'] = raw === 'apple' || raw === 'google' ? raw : 'email';
+    // Google is intentionally excluded (product decision 2026-07-27: no Google
+    // sign-in) — any non-Apple provider reads as 'email'.
+    const provider: AccountIdentity['provider'] = raw === 'apple' ? raw : 'email';
     return { email: user.email ?? null, provider };
   },
 

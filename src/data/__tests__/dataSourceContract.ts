@@ -232,7 +232,7 @@ export function describeDataSourceContract(name: string, source: DataSource): vo
 
     it('getAccountIdentity returns an email + a known provider', async () => {
       const id = await source.getAccountIdentity();
-      expect(['apple', 'google', 'email']).toContain(id.provider);
+      expect(['apple', 'email']).toContain(id.provider);
       expect(id.email == null || id.email.includes('@')).toBe(true);
     });
 
