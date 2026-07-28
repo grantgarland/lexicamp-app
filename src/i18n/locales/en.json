@@ -267,7 +267,6 @@
   },
   "editTranslation": {
     "openA11y": "Edit this translation",
-    "trayLabel": "Edit",
     "title": "Edit translation",
     "originalLabel": "Original:",
     "editedBadge": "Edited",

@@ -160,8 +160,10 @@ export function WordListScreen() {
     setDetailWord(null);
   };
 
-  // Edit Translations entry point, shared by the row swipe tray and both
-  // word-detail sheets. Premium-gated HERE (the RPC re-checks server-side).
+  // Edit Translations entry point, shared by both word-detail sheets (the ⋮).
+  // Deliberately NOT in the row's swipe tray — Casey, 2026-07-28: a 4th action
+  // made the tray read as clutter. Premium-gated HERE (the RPC re-checks
+  // server-side).
   const openEditTranslation = (w: WordListItem) => {
     setEditError(null);
     if (!isPaid) {
@@ -261,7 +263,6 @@ export function WordListScreen() {
                 onDelete={() => setPendingDelete(w)}
                 onAddToDeck={() => (isPaid ? setAddToDeckWord(w) : setSubTab('decks'))}
                 onToggleArchive={() => toggleArchive(w)}
-                onEditTranslation={() => openEditTranslation(w)}
               />
             )}
             keyboardShouldPersistTaps="handled"

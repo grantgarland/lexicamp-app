@@ -273,15 +273,6 @@ export function IconMoreVertical({ size = 18, color = STROKE }: IconProps) {
   );
 }
 
-export function IconPencil({ size = 18, color = STROKE }: IconProps) {
-  // Edit — pencil over a baseline (the swipe-tray "Edit" action).
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M15.5 4.5l4 4L8 20H4v-4z" />
-      <Path d="M13.5 6.5l4 4" />
-    </Svg>
-  );
-}
 
 export function IconWifi({ size = 14, color = STROKE }: IconProps) {
   return (

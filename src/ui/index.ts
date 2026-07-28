@@ -66,7 +66,6 @@ export {
   IconRefresh,
   IconUser,
   IconMoreVertical,
-  IconPencil,
   type IconProps,
 } from './icons';
 export { PRESS_OPACITY, pressableOpacity } from './pressable';
