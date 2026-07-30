@@ -83,7 +83,16 @@ function rowOutcome(t: TFunction, card: QuizCardItem, rating: UiRating, now: Dat
 /** Whole days for copy; sub-day strength reads as "<1". */
 const fmtDays = (d: number) => (d < 1 ? '<1' : String(Math.round(d)));
 
-export function QuizScreen() {
+export interface QuizScreenProps {
+  /** Scope the session to ONE custom deck's membership (2026-07-30). Omitted =
+   *  the whole active language, which is Home's "Study now". */
+  deckId?: string;
+  /** Display-only: titles the empty state so a deck session that yields nothing
+   *  says which deck. The session itself is composed from `deckId`. */
+  deckName?: string;
+}
+
+export function QuizScreen({ deckId, deckName }: QuizScreenProps = {}) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
@@ -95,7 +104,7 @@ export function QuizScreen() {
   const { isPaid } = useEntitlement();
   const quizLength = usePrefsStore((s) => s.quizLength);
   const sessionCap = isPaid ? quizLength : QUIZ_LENGTH_FREE;
-  const { cards, isLoading } = useDueCards(sessionCap);
+  const { cards, isLoading } = useDueCards(sessionCap, deckId);
   const { streakDays } = useHomeData();
   const commit = useCommitQuizSession();
 
@@ -115,7 +124,15 @@ export function QuizScreen() {
   // different (ratings re-scheduled everything), so the end/stats/promo phases
   // must render from this frozen list, never the live query.
   const [sessionCards, setSessionCards] = useState<QuizCardItem[] | null>(null);
+  // Session clock. The SERVER cannot measure this: commit_quiz_session writes
+  // review_logs without reviewed_at, so the whole batch shares one commit-time
+  // default and per-answer timing never reaches the database. Started when the
+  // first card is actually on screen (not at mount, which would bill the user
+  // for the queue fetch), and sent with the commit so `get_session_pace` has
+  // something real to take a median of.
+  const [startedAt, setStartedAt] = useState<number | null>(null);
   if (sessionCards == null && cards.length > 0) setSessionCards(cards);
+  if (startedAt == null && cards.length > 0) setStartedAt(Date.now());
   const sc = sessionCards ?? cards;
 
   const total = sc.length;
@@ -134,7 +151,8 @@ export function QuizScreen() {
     setRatings(next);
     setAutoRating(null);
     if (idx + 1 >= total) {
-      commit.mutate({ ratings: next }); // session complete → batch write (03)
+      // Session complete → batch write (03), with the measured duration.
+      commit.mutate({ ratings: next, durationMs: startedAt == null ? undefined : Date.now() - startedAt });
       setPhase('end');
     } else {
       setIdx(idx + 1);
@@ -195,8 +213,11 @@ export function QuizScreen() {
             <EmptyState
               style={styles.emptyFill}
               illustration={<IconMountain size={44} color={theme.color.evergreen} />}
-              title={t('quiz.caughtUpTitle')}
-              body={t('quiz.caughtUpBody')}
+              // A deck session that yields nothing means the DECK is empty (or
+              // fully archived) — "All caught up!" would be a different, and
+              // wrong, claim about the user's whole library.
+              title={deckId != null ? t('quiz.deckEmptyTitle') : t('quiz.caughtUpTitle')}
+              body={deckId != null ? t('quiz.deckEmptyBody', { deck: deckName ?? '' }) : t('quiz.caughtUpBody')}
               cta={t('quiz.backToHome')}
               onCta={() => router.back()}
             />

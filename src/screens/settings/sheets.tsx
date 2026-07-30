@@ -4,8 +4,9 @@
 // stays a thin hub.
 import DateTimePicker, { type DateTimePickerChangeEvent } from '@react-native-community/datetimepicker';
 import { type ReactNode, useEffect, useState } from 'react';
-import { Linking, Platform, Pressable, View } from 'react-native';
+import { Linking, Platform, Pressable, useColorScheme, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import { SvgXml } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { languageName } from '@/domain/derive';
@@ -13,7 +14,9 @@ import type { LanguageCode, NotificationPrefs, Profile } from '@/domain/types';
 import { formatUsername, generateUsernameCandidate } from '@/domain/username';
 import { useTranslation } from '@/i18n';
 import { registerForPush } from '@/notifications/push';
-import { LEGAL_URLS } from '@/constants/legal';
+import { LEGAL_URLS, SUPPORT_EMAIL, SUPPORT_URLS } from '@/constants/legal';
+import { appVersionLabel } from '@/constants/appInfo';
+import { BRAND_MARK_KNOCKOUT_XML, BRAND_MARK_XML } from '@/ui/brandMark';
 import { useAccountIdentity, useNotificationPrefs, useSetUsername, useUpdateNotificationPrefs, useUpdateProfile } from '@/query/hooks';
 import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
 import { useUiStore } from '@/store/uiStore';
@@ -27,7 +30,6 @@ import {
   IconLock,
   IconMail,
   IconRefresh,
-  IconStar,
   ListItem,
   RawText,
   Sheet,
@@ -539,25 +541,54 @@ export function HowItWorksSheet({ visible, onClose, onStartTour }: { visible: bo
 }
 
 // ── SE-07 Support ──────────────────────────────────────────────────────────────
+// Rows are PRESSABLE (2026-07-30): they used to be inert text showing an address
+// the user had to retype. Email opens a pre-addressed mail composer; Help centre
+// opens lexicamp.com/support — the FAQ + contact page that is also the required
+// App Store Connect support URL. The old copy pointed at `lexicamp.app/help`,
+// which never existed on the live site.
 export function SupportSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const rows = [
-    { icon: <IconMail size={20} color={theme.color.brand} />, label: t('settings.emailSupport'), addr: t('settings.emailSupportAddr'), desc: t('settings.emailSupportDesc') },
-    { icon: <IconInfo size={20} color={theme.color.brand} />, label: t('settings.helpCenter'), addr: t('settings.helpCenterAddr'), desc: t('settings.helpCenterDesc') },
+    {
+      key: 'email',
+      icon: <IconMail size={20} color={theme.color.brand} />,
+      label: t('settings.emailSupport'),
+      addr: SUPPORT_EMAIL,
+      desc: t('settings.emailSupportDesc'),
+      // Subject pre-filled so support mail arrives already triaged, and the
+      // version rides along without the user having to go find it.
+      url: `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(t('settings.emailSupportSubject', { version: appVersionLabel() }))}`,
+      a11y: t('settings.emailSupportA11y'),
+    },
+    {
+      key: 'help',
+      icon: <IconInfo size={20} color={theme.color.brand} />,
+      label: t('settings.helpCenter'),
+      addr: SUPPORT_URLS.help.replace(/^https:\/\//, ''),
+      desc: t('settings.helpCenterDesc'),
+      url: SUPPORT_URLS.help,
+      a11y: t('settings.helpCenterA11y'),
+    },
   ];
   return (
     <Sheet visible={visible} onClose={onClose} title={t('settings.supportTitle')}>
       <View style={styles.supportList}>
         {rows.map((r) => (
-          <View key={r.label} style={styles.supportRow}>
+          <Pressable
+            key={r.key}
+            onPress={() => void Linking.openURL(r.url)}
+            accessibilityRole="link"
+            accessibilityLabel={r.a11y}
+            style={({ pressed }) => [styles.supportRow, pressed && styles.supportRowPressed]}
+          >
             <View style={styles.supportIcon}>{r.icon}</View>
             <View style={styles.flex1}>
               <RawText style={styles.supportLabel}>{r.label}</RawText>
               <RawText style={styles.supportAddr}>{r.addr}</RawText>
               <RawText style={styles.supportDesc}>{r.desc}</RawText>
             </View>
-          </View>
+          </Pressable>
         ))}
         <View style={styles.supportNote}>
           <RawText style={styles.supportNoteText}>{t('settings.billingNote')}</RawText>
@@ -568,20 +599,29 @@ export function SupportSheet({ visible, onClose }: { visible: boolean; onClose: 
 }
 
 // ── SE-08 About ────────────────────────────────────────────────────────────────
+// Rebuilt 2026-07-30. It previously led with `IconStar` in amber — which is the
+// SUMMIT TIER glyph, not the app mark — and hardcoded "Version 1.0.0 (build 1)".
+// Now: the real line-art mark (knockout on dark, per the DS convention), the
+// two-tone wordmark set in the brand serif, and a version read off the actual
+// binary. "Made with ♥" is gone; the tagline already carries the warmth.
 export function AboutSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const { theme } = useUnistyles();
   const { t } = useTranslation();
+  const isDark = useColorScheme() === 'dark';
   return (
     <Sheet visible={visible} onClose={onClose} title={t('settings.aboutTitle')}>
       <View style={styles.aboutHead}>
-        <IconStar size={40} color={theme.color.accentStrong} />
-        <RawText style={styles.aboutName}>Lexicamp</RawText>
+        <SvgXml xml={isDark ? BRAND_MARK_KNOCKOUT_XML : BRAND_MARK_XML} width={60} height={60} />
+        {/* Two-tone wordmark: "Lexi" in brand ink, "camp" in the accent — the
+            design system's wordmark, set in real text rather than SVG <text>,
+            so it uses the loaded Spectral face and scales with Dynamic Type. */}
+        <RawText style={styles.aboutName} accessibilityLabel="Lexicamp">
+          Lexi<RawText style={styles.aboutNameAccent}>camp</RawText>
+        </RawText>
         <RawText style={styles.aboutTagline}>{t('settings.aboutTagline')}</RawText>
-        <RawText style={styles.aboutVersion}>{t('settings.aboutVersion', { version: '1.0.0', build: 1 })}</RawText>
+        <RawText style={styles.aboutVersion}>{t('settings.aboutVersion', { version: appVersionLabel() })}</RawText>
       </View>
       <View style={styles.aboutLinks}>
-        {/* UX-17c: real links (constants/legal.ts — single edit point when the
-            domain lands; URLs must be live before store submission, 4.1). */}
+        {/* Real, live links — constants/legal.ts is the single edit point. */}
         {(
           [
             [t('settings.terms'), LEGAL_URLS.terms],
@@ -592,7 +632,7 @@ export function AboutSheet({ visible, onClose }: { visible: boolean; onClose: ()
           <ListItem key={label} title={label} onPress={() => void Linking.openURL(url)} last={i === arr.length - 1} />
         ))}
       </View>
-      <RawText style={styles.aboutCopyright}>{t('settings.aboutCopyright')}{'\n'}{t('settings.aboutMadeWith')}</RawText>
+      <RawText style={styles.aboutCopyright}>{t('settings.aboutCopyright')}</RawText>
     </Sheet>
   );
 }
@@ -681,6 +721,7 @@ const styles = StyleSheet.create((theme) => {
     // support
     supportList: { gap: 10 },
     supportRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, paddingHorizontal: 16, borderRadius: radius.md, borderWidth: 1.5, borderColor: color.border, backgroundColor: color.surfaceSunken },
+    supportRowPressed: { opacity: 0.65 },
     supportIcon: { width: 40, height: 40, borderRadius: 10, backgroundColor: color.brandSoft, alignItems: 'center', justifyContent: 'center' },
     supportLabel: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.textStrong },
     supportAddr: { fontFamily: fonts.sans.medium, fontSize: 13, color: color.brand, marginTop: 2 },
@@ -689,11 +730,17 @@ const styles = StyleSheet.create((theme) => {
     supportNoteText: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 19, color: color.textMuted },
 
     // about
-    aboutHead: { alignItems: 'center', paddingBottom: 18 },
-    aboutName: { fontFamily: fonts.sans.extra, fontSize: 20, letterSpacing: -0.4, color: color.textStrong, marginTop: 8 },
-    aboutTagline: { fontFamily: fonts.serif.semibold, fontSize: 14, color: color.textMuted, textAlign: 'center', marginTop: 4 },
-    aboutVersion: { fontFamily: fonts.mono.regular, fontSize: 12, color: color.textMuted, marginTop: 6 },
+    // Brand moment: mark, wordmark, tagline, version — tightened so the block
+    // reads as one unit instead of four loosely stacked lines.
+    aboutHead: { alignItems: 'center', paddingTop: 4, paddingBottom: 22 },
+    // The wordmark is set in the brand SERIF (Spectral), matching the design
+    // system's logo lockup — the old sans-extra treatment was a different face
+    // from the logo it sat under.
+    aboutName: { fontFamily: fonts.serif.semibold, fontSize: 30, letterSpacing: -0.6, color: color.textStrong, marginTop: 10 },
+    aboutNameAccent: { color: color.accent },
+    aboutTagline: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 19, color: color.textMuted, textAlign: 'center', marginTop: 8, maxWidth: 260 },
+    aboutVersion: { fontFamily: fonts.mono.regular, fontSize: 11, color: color.textFaint, marginTop: 12 },
     aboutLinks: {},
-    aboutCopyright: { fontFamily: fonts.sans.regular, fontSize: 12, lineHeight: 18, color: color.textFaint, textAlign: 'center', marginTop: 14 },
+    aboutCopyright: { fontFamily: fonts.sans.regular, fontSize: 11, lineHeight: 17, color: color.textFaint, textAlign: 'center', marginTop: 18 },
   };
 });

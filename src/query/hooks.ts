@@ -11,7 +11,7 @@ import { commitWithOutbox } from '@/data/outbox';
 import { type HomeSnapshot, homeSnapshot } from '@/domain/derive';
 import type { BufferedRating } from '@/domain/quiz';
 import type { LookupOutcome } from '@/domain/translation';
-import { type Entitlement, isPaid, type NotificationPrefs, type SearchDirection } from '@/domain/types';
+import { type Card, type CardFsrsState, type Entitlement, isPaid, type NotificationPrefs, type SearchDirection } from '@/domain/types';
 import { useSession } from '@/auth/session';
 import { usePrefsStore } from '@/store/prefsStore';
 import { useDevStore } from '@/store/devStore';
@@ -235,13 +235,26 @@ export function useHomeData(): HomeData {
 
 /** The study-session queue (read) — due-now plus next-due fill to `limit`
  *  (18 §2c). The limit keys the query so a quiz-length change refetches. */
-export function useDueCards(limit: number) {
+export function useDueCards(limit: number, deckId?: string) {
   const userState = useDevStore((s) => s.userState);
   const activeLang = useActiveLang();
   const uid = useUserKey();
-  const q = useQuery({ queryKey: ['dueCards', userState, limit, activeLang, uid], queryFn: () => ds.getDueCards(limit, activeLang) });
+  // deckId is IN the key: a deck session and the all-language session are
+  // different queues and must not share a cache entry (they'd overwrite each
+  // other and "Study Deck" would serve whatever Home fetched last).
+  const q = useQuery({
+    queryKey: ['dueCards', userState, limit, activeLang, uid, deckId ?? null],
+    queryFn: () => ds.getDueCards(limit, activeLang, deckId),
+  });
   return { cards: q.data ?? [], isLoading: q.isLoading };
 }
+
+// Stable empty fallbacks. `?? []` inline would allocate a fresh array on every
+// render, which silently breaks the `useMemo` in ProjectionCard that keys on
+// these — it would re-run the whole FSRS simulation on every render while the
+// deck query is still loading.
+const NO_CARDS: Card[] = [];
+const NO_STATES: CardFsrsState[] = [];
 
 export interface ProgressData {
   tierCounts: number[]; // words per tier [bc..summit]
@@ -252,6 +265,12 @@ export interface ProgressData {
   avgAccuracy: number;
   bestStreak: number;
   daysActive: number;
+  /** Raw cards + FSRS rows behind the aggregates above. The Progress
+   *  projection (domain/projection.ts) forward-simulates these per card, which
+   *  the aggregates cannot support. Already fetched for `homeSnapshot` — this
+   *  just stops throwing them away, so there is no extra request or payload. */
+  cards: Card[];
+  states: CardFsrsState[];
   isLoading: boolean;
 }
 /** Aggregated Progress-screen read (tier distribution + all-time study stats). */
@@ -264,6 +283,8 @@ export function useProgressData(): ProgressData {
   const stats = useQuery({ queryKey: ['progressStats', userState, uid], queryFn: () => ds.getProgressStats() });
   const snap = deck.data != null ? homeSnapshot(deck.data.cards, deck.data.states) : null;
   return {
+    cards: deck.data?.cards ?? NO_CARDS,
+    states: deck.data?.states ?? NO_STATES,
     tierCounts: snap?.tierCounts ?? [0, 0, 0, 0, 0],
     totalSaved: snap?.wordsSaved ?? 0,
     totalMastered: snap?.masteredCount ?? 0,
@@ -292,6 +313,93 @@ export function useDecks() {
   const uid = useUserKey();
   const q = useQuery({ queryKey: ['decks', userState, activeLang, uid], queryFn: () => ds.getDecks(activeLang) });
   return { decks: q.data ?? [], isLoading: q.isLoading };
+}
+
+/** Words in ONE custom deck (2026-07-30). Disabled while `deckId` is null so the
+ *  Deck detail sheet can mount before a deck is chosen. This REPLACES the
+ *  positional `words.slice(0, deck.wordCount)` stand-in that shipped as deck
+ *  contents — membership is now a server read like any other. */
+export function useDeckWords(deckId: string | null) {
+  const userState = useDevStore((s) => s.userState);
+  const activeLang = useActiveLang();
+  const uid = useUserKey();
+  const q = useQuery({
+    queryKey: ['deckWords', userState, activeLang, uid, deckId],
+    queryFn: () => ds.getDeckWords(deckId as string, activeLang),
+    enabled: deckId != null,
+  });
+  return { words: q.data ?? [], isLoading: deckId != null && q.isLoading };
+}
+
+/** Which custom decks a card is in — the honest source for Add-to-Deck's
+ *  "Already added" (it used to be component state that survived nothing). */
+export function useCardDeckIds(cardId: string | null) {
+  const userState = useDevStore((s) => s.userState);
+  const activeLang = useActiveLang();
+  const uid = useUserKey();
+  const q = useQuery({
+    queryKey: ['cardDecks', userState, activeLang, uid, cardId],
+    queryFn: () => ds.getCardDeckIds(cardId as string),
+    enabled: cardId != null,
+  });
+  return { deckIds: q.data ?? [], isLoading: cardId != null && q.isLoading };
+}
+
+/** Every deck-membership write invalidates the same set: the deck LIST (its
+ *  wordCount is derived from membership), the per-deck contents, the per-card
+ *  membership behind "Already added", and — since deck-scoped study landed —
+ *  the due QUEUE. Keyed loosely (prefix only) so one write refreshes every
+ *  deck's cached contents and queue: a word can be in many decks.
+ *
+ *  'dueCards' is not optional. With staleTime 30s and a 7-day persisted cache,
+ *  omitting it lets Study Deck render the PREVIOUS queue synchronously, and
+ *  QuizScreen latches that into `sessionCards` before the background refetch
+ *  lands — so a word you just removed from the deck still gets studied and
+ *  rescheduled. */
+function invalidateDeckReads(qc: ReturnType<typeof useQueryClient>): void {
+  qc.invalidateQueries({ queryKey: ['decks'] });
+  qc.invalidateQueries({ queryKey: ['deckWords'] });
+  qc.invalidateQueries({ queryKey: ['cardDecks'] });
+  qc.invalidateQueries({ queryKey: ['dueCards'] });
+}
+
+/** Create a custom deck, optionally seeded with words (Premium). Rejects with
+ *  Error(DeckWriteError) — the sheet surfaces `deck_name_taken` inline. */
+export function useCreateDeck() {
+  const qc = useQueryClient();
+  const activeLang = useActiveLang();
+  return useMutation({
+    mutationFn: (input: { name: string; cardIds: string[] }) => ds.createDeck(input.name, input.cardIds, activeLang),
+    onSuccess: () => invalidateDeckReads(qc),
+  });
+}
+
+/** Delete a custom deck. The words survive — they live in the language's main
+ *  deck — so 'words' deliberately is NOT invalidated here. */
+export function useDeleteDeck() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (deckId: string) => ds.deleteDeck(deckId),
+    onSuccess: () => invalidateDeckReads(qc),
+  });
+}
+
+/** Add a saved word to a custom deck (Premium; idempotent server-side). */
+export function useAddCardToDeck() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { deckId: string; cardId: string }) => ds.addCardToDeck(input.deckId, input.cardId),
+    onSuccess: () => invalidateDeckReads(qc),
+  });
+}
+
+/** Remove a word from a custom deck (never premium-gated). */
+export function useRemoveCardFromDeck() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { deckId: string; cardId: string }) => ds.removeCardFromDeck(input.deckId, input.cardId),
+    onSuccess: () => invalidateDeckReads(qc),
+  });
 }
 
 export interface LookupData {
@@ -332,7 +440,19 @@ export function useExamples(translationId: string | null, targetTerm?: string) {
     staleTime: Infinity,
     retry: false, // examples are decorative — never retry into a rate limit
   });
-  return { examples: q.data ?? null, isLoading: translationId != null && q.isPending };
+  return {
+    examples: q.data ?? null,
+    isLoading: translationId != null && q.isPending,
+    /** Fetch RESOLVED — the result is authoritative, so an empty array means this
+     *  sense genuinely has no example sentences. That's terminal, not a retry
+     *  prompt: nothing in the lookup response can predict it (see BackTranslation
+     *  .numExamples), so the only way to learn it is to have asked. */
+    isSettled: translationId != null && q.isSuccess,
+    /** Fetch FAILED (503/429). `retry: false` above, so this is final until the
+     *  user explicitly asks again — that's what `refetch` is for. */
+    isError: translationId != null && q.isError,
+    refetch: q.refetch,
+  };
 }
 
 /** Notification prefs (2.5) — read. Keys on the dev scenario so DevBadge
@@ -383,6 +503,7 @@ export function useSetCardSuspended() {
       qc.invalidateQueries({ queryKey: ['deckCards'] });
       qc.invalidateQueries({ queryKey: ['words'] });
       qc.invalidateQueries({ queryKey: ['dueCards'] });
+      qc.invalidateQueries({ queryKey: ['deckWords'] }); // archived rows render in deck lists
     },
   });
 }
@@ -400,6 +521,9 @@ export function useSetCardTargetOverride() {
       qc.invalidateQueries({ queryKey: ['deckCards'] });
       qc.invalidateQueries({ queryKey: ['words'] });
       qc.invalidateQueries({ queryKey: ['dueCards'] });
+      // The edited text is rendered inside deck lists too (this is the read
+      // path Casey's сахара → сахар report surfaced).
+      qc.invalidateQueries({ queryKey: ['deckWords'] });
     },
   });
 }
@@ -414,6 +538,9 @@ export function useDeleteCard() {
       qc.invalidateQueries({ queryKey: ['deckCards'] });
       qc.invalidateQueries({ queryKey: ['words'] });
       qc.invalidateQueries({ queryKey: ['dueCards'] });
+      // deck_cards cascades on the card — every deck that held it must refetch,
+      // list AND count.
+      invalidateDeckReads(qc);
     },
   });
 }
@@ -426,10 +553,19 @@ export function useDeleteCard() {
  *  old tier until an unrelated refetch (Casey bug, 2026-07-16).
  *  Offline-resilient: transport failures queue in the outbox and replay on
  *  reconnect (2.4); server errors still surface. */
+/** Median seconds-per-card, or null when the server has too few timed sessions.
+ *  Null MUST hide the estimate rather than render as 0 — see get_session_pace. */
+export function useSessionPace(): number | null {
+  const userState = useDevStore((s) => s.userState);
+  const uid = useUserKey();
+  const q = useQuery({ queryKey: ['sessionPace', userState, uid], queryFn: () => ds.getSessionPace() });
+  return q.data ?? null;
+}
+
 export function useCommitQuizSession() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { ratings: BufferedRating[] }) =>
+    mutationFn: (payload: { ratings: BufferedRating[]; durationMs?: number }) =>
       commitWithOutbox((p) => ds.commitQuizSession(p), payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['deckCards'] });
@@ -437,6 +573,11 @@ export function useCommitQuizSession() {
       qc.invalidateQueries({ queryKey: ['words'] });
       qc.invalidateQueries({ queryKey: ['progressStats'] });
       qc.invalidateQueries({ queryKey: ['engagement'] });
+      qc.invalidateQueries({ queryKey: ['sessionPace'] });
+      // Deck lists render stability/dueAt/reps AND sort by dueAt ascending, so
+      // without this the words you just answered sit at the top as most-due for
+      // the whole stale window.
+      qc.invalidateQueries({ queryKey: ['deckWords'] });
     },
   });
 }

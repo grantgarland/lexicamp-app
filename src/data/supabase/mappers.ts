@@ -98,6 +98,8 @@ export interface TranslationJoin {
    *  sibling sense cards were sharing the primary sense's examples). A legacy
    *  ARRAY (pre-migration rows) = the primary sense's examples. */
   examples: Record<string, ExampleRow[]> | ExampleRow[] | null;
+  /** 'azure_dictionary' | 'azure_mt' — gates the example affordance (16 §3). */
+  provider?: string | null;
 }
 
 /** The examples-map key for THIS card's sense: primary unless custom_back says
@@ -215,6 +217,9 @@ export function mapWordListItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRo
     pos: tr.pos_tag ? i18n.t(`pos.${tr.pos_tag}`, { defaultValue: tr.pos_tag.toLowerCase() }) : '',
     example: ex ? `${ex.sourcePrefix}${ex.sourceTerm}${ex.sourceSuffix}` : '',
     exampleTranslation: ex ? `${ex.targetPrefix}${ex.targetTerm}${ex.targetSuffix}` : '',
+    // Anything not explicitly azure_mt is treated as dictionary-backed, so legacy
+    // rows with a null provider keep the affordance (optimistic, then terminal).
+    provider: tr.provider === 'azure_mt' ? 'azure_mt' : 'azure_dictionary',
     stability: fsrs.stability,
     reps: fsrs.reps,
     createdAt: new Date(card.created_at),

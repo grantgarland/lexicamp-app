@@ -6,21 +6,22 @@
 // (FSRS word distribution). Reads the state layer via `useProgressData()`. The
 // bottom nav is the persistent tab layout, not this screen.
 import type { TFunction } from 'i18next';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, useColorScheme, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { findLanguage } from '@/constants/languages';
-import type { LeaderboardEntry, WordListItem } from '@/data/DataSource';
+import type { LeaderboardEntry } from '@/data/DataSource';
 import { MOUNTAIN_TIERS, mountainTier } from '@/domain/derive';
+import { forecast, horizon, nextCampTarget, projectionBase, resolve, SUMMIT_TARGET, type Projection, type ProjectionBase } from '@/domain/projection';
 import { formatUsername } from '@/domain/username';
 import { useTranslation } from '@/i18n';
-import { useActiveLang, useLeaderboard, useProgressData, useWords } from '@/query/hooks';
-import { getTierByStability, TIERS, tierView } from '@/theme/tiers';
-import { EmptyState, IconBook, IconChart, IconCheck, IconFire, IconInfo, IconLock, IconMountain, IconStar, RawText, Screen, SegmentedTabs, Sheet, SkeletonRows, Tooltip, WordDetailSheet, WordRow } from '@/ui';
+import { useActiveLang, useLeaderboard, useProgressData } from '@/query/hooks';
+import { TIERS, tierView } from '@/theme/tiers';
+import { EmptyState, IconBook, IconChart, IconCheck, IconFire, IconInfo, IconLock, IconMountain, IconStar, RawText, Screen, ForecastChart, SegmentedPills, SegmentedTabs, Sheet, SkeletonRows, Tooltip } from '@/ui';
 
-type SubTab = 'route' | 'inventory' | 'leaders';
-type InfoKey = 'cefr' | 'fsrs';
+type SubTab = 'route' | 'projection' | 'leaders';
+type InfoKey = 'cefr';
 type LeaderScope = 'global' | 'language';
 
 // ── Mountain-tier thresholds — SOURCE OF TRUTH is domain/derive.ts MOUNTAIN_TIERS
@@ -35,11 +36,7 @@ export function ProgressScreen() {
   const { t } = useTranslation();
   const [tab, setTab] = useState<SubTab>('route');
   const [info, setInfo] = useState<InfoKey | null>(null);
-  const [tierDrawer, setTierDrawer] = useState<number | null>(null);
-  // 18 §A6: tier-drawer rows open the shared word-detail sheet (read-only here).
-  const [detailWord, setDetailWord] = useState<WordListItem | null>(null);
   const data = useProgressData();
-  const { words } = useWords();
 
   return (
     <Screen edges={['top']}>
@@ -50,20 +47,18 @@ export function ProgressScreen() {
           onChange={(id) => setTab(id as SubTab)}
           tabs={[
             { id: 'route', label: t('progress.tabRoute') },
-            { id: 'inventory', label: t('progress.tabInventory') },
+            { id: 'projection', label: t('progress.tabProjection') },
             { id: 'leaders', label: t('progress.tabLeaders') },
           ]}
         />
       </View>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {tab === 'route' && <RouteTab data={data} t={t} onInfo={setInfo} />}
-        {tab === 'inventory' && <InventoryTab data={data} t={t} onInfo={setInfo} onOpenTier={setTierDrawer} />}
+        {tab === 'projection' && <ProjectionTab data={data} t={t} />}
         {tab === 'leaders' && <LeadersTab t={t} />}
       </ScrollView>
 
       <InfoSheet infoKey={info} t={t} onClose={() => setInfo(null)} />
-      <TierWordsSheet tierIdx={tierDrawer} words={words} t={t} onClose={() => setTierDrawer(null)} onWordPress={setDetailWord} />
-      <WordDetailSheet word={detailWord} onClose={() => setDetailWord(null)} />
     </Screen>
   );
 }
@@ -72,10 +67,15 @@ type TabProps = {
   data: ReturnType<typeof useProgressData>;
   t: TFunction;
   onInfo?: (key: InfoKey) => void;
-  onOpenTier?: (tierIdx: number) => void;
 };
 
 // ── Route ────────────────────────────────────────────────────────────────────
+// 2026-07-30 redesign (Casey): the separate "You are here" hero card is GONE.
+// It restated everything the ladder's current row already carried — tier name,
+// CEFR, mastered count, distance to next — plus a progress bar, so the screen
+// opened with the same information twice. The current row now absorbs the bar,
+// the counts and the CEFR affordance, and Route is two blocks: the ladder and
+// All-Time. The projection moved to its own tab.
 function RouteTab({ data, t, onInfo }: TabProps) {
   const { theme } = useUnistyles();
   const isDark = useColorScheme() === 'dark';
@@ -90,51 +90,11 @@ function RouteTab({ data, t, onInfo }: TabProps) {
   const mastered = data.totalMastered;
   const curTierId = mountainTier(mastered).id;
   const cur = MOUNTAIN_TIERS.findIndex((x) => x.id === curTierId);
-  const curReg = tierView(tierRegistry(cur), isDark);
   const next = MOUNTAIN_TIERS[cur + 1];
-  const min = masteredMinAt(cur);
-  const max = masteredMaxAt(cur);
-  const pctInTier = Number.isFinite(max) ? Math.max(0, Math.min(100, Math.round(((mastered - min) / (max - min)) * 100))) : 100;
+  const curMax = masteredMaxAt(cur);
 
   return (
     <View style={styles.pad}>
-      {/* You are here */}
-      <View style={[styles.hereCard, { backgroundColor: curReg.bg, borderColor: curReg.border }]}>
-        <View style={styles.hereTop}>
-          <View style={styles.hereTopText}>
-            <RawText style={styles.hereLabel}>{t('progress.youAreHere')}</RawText>
-            <RawText style={styles.hereTier}>{t(`tier.${curReg.id}.name`)}</RawText>
-            <RawText style={[styles.hereCefr, { color: curReg.color }]}>{t('progress.cefr', { level: curReg.cefr })}</RawText>
-          </View>
-          <Pressable onPress={() => onInfo?.('cefr')} accessibilityRole="button" accessibilityLabel={t('progress.aboutCefr')} hitSlop={8} style={({ pressed }) => [styles.hereInfo, isDark && styles.hereInfoDark, { borderColor: curReg.border }, pressed && { opacity: 0.6 }]}>
-            <IconInfo size={13} color={curReg.color} />
-          </Pressable>
-        </View>
-        <View style={styles.hereRow}>
-          <RawText style={styles.hereMastered}>
-            {mastered.toLocaleString()}
-            <RawText style={styles.hereMasteredSuffix}> {t('progress.wordsSuffix')}</RawText>
-          </RawText>
-          <RawText style={styles.hereToNext}>{next ? t('progress.toNext', { count: Math.max(0, max - mastered), tier: t(`tier.${next.id}.name`) }) : t('progress.summitReached')}</RawText>
-        </View>
-        <View style={[styles.hereTrack, isDark && styles.hereTrackDark]}>
-          <View style={[styles.hereFill, { width: `${pctInTier}%`, backgroundColor: curReg.color }]} />
-        </View>
-        <RawText style={styles.herePct}>{t('progress.pctThrough', { pct: pctInTier, tier: t(`tier.${curReg.id}.name`) })}</RawText>
-
-        {/* 0-mastered hint — the climb hasn't registered a mastered word yet */}
-        {mastered === 0 && (
-          <View style={[styles.hereHint, isDark && styles.hereHintDark, { borderColor: curReg.border }]}>
-            <RawText style={styles.hereHintText}>{t('progress.masteredZeroHint')}</RawText>
-          </View>
-        )}
-      </View>
-
-      {/* Projection — "at this pace" (17 §P1: moved from the former Pace tab to sit
-          directly under the position it projects from). */}
-      <ProjectionCard data={data} t={t} />
-
-      {/* Full route ladder (Summit at top) */}
       <RawText style={styles.sectionTitle}>{t('progress.fullRoute')}</RawText>
       <RawText style={styles.sectionSub}>{t('progress.fullRouteSub')}</RawText>
       <View style={styles.ladder}>
@@ -150,8 +110,15 @@ function RouteTab({ data, t, onInfo }: TabProps) {
             const node = completed
               ? { backgroundColor: theme.palette.green[500], borderColor: theme.palette.green[400] }
               : current
-                ? { backgroundColor: theme.color.brand, borderColor: theme.color.brand }
+                ? { backgroundColor: tier.color, borderColor: tier.color }
                 : { backgroundColor: theme.color.surfaceCard, borderColor: theme.color.border };
+            // In-tier progress, previously the hero card's job. Summit has no
+            // upper bound, so it reads as complete rather than dividing by ∞.
+            const pctInTier = current
+              ? Number.isFinite(curMax)
+                ? Math.max(0, Math.min(100, Math.round(((mastered - masteredMinAt(cur)) / (curMax - masteredMinAt(cur))) * 100)))
+                : 100
+              : 0;
             return (
               <View key={tier.id} style={styles.ladderRow}>
                 {/* Node stays fully opaque so the route line never bleeds through a locked tier;
@@ -169,8 +136,19 @@ function RouteTab({ data, t, onInfo }: TabProps) {
                     {tier.id === 'summit' && <IconStar size={13} color={theme.palette.amber[400]} />}
                     {current && <RawText style={styles.badgeCurrent}>{t('progress.current')}</RawText>}
                     {completed && <RawText style={styles.badgeDone}>{t('progress.done')}</RawText>}
+                    {current && (
+                      <Pressable
+                        onPress={() => onInfo?.('cefr')}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('progress.aboutCefr')}
+                        hitSlop={10}
+                        style={({ pressed }) => [styles.ladderInfo, pressed && { opacity: 0.6 }]}
+                      >
+                        <IconInfo size={13} color={tier.color} />
+                      </Pressable>
+                    )}
                   </View>
-                  <RawText style={[styles.ladderCefr, { color: current ? theme.color.brand : completed ? theme.palette.green[600] : theme.color.borderStrong }]}>
+                  <RawText style={[styles.ladderCefr, { color: current ? tier.color : completed ? theme.palette.green[600] : theme.color.borderStrong }]}>
                     {t('progress.cefr', { level: tier.cefr })}
                   </RawText>
                   <RawText style={styles.ladderStatus}>
@@ -178,17 +156,34 @@ function RouteTab({ data, t, onInfo }: TabProps) {
                     {completed && t('progress.masteredPlus', { count: masteredMinAt(origIdx).toLocaleString() })}
                     {current && (finiteMax ? t('progress.ofWords', { count: mastered.toLocaleString(), max: masteredMaxAt(origIdx).toLocaleString() }) : t('progress.atSummitWords', { count: mastered.toLocaleString() }))}
                   </RawText>
-                  {/* 17 §P2: no in-ladder progress bar — the you-are-here card above is
-                      the single surface for in-tier progress rendering. */}
+
+                  {/* The current row is the ONLY one that renders progress — the
+                      former hero card's bar, folded in where it belongs. */}
+                  {current && (
+                    <>
+                      <View style={[styles.ladderTrack, isDark && styles.ladderTrackDark]}>
+                        <View style={[styles.ladderFill, { width: `${pctInTier}%`, backgroundColor: tier.color }]} />
+                      </View>
+                      <RawText style={styles.ladderPct}>
+                        {next
+                          ? t('progress.toNext', { count: Math.max(0, curMax - mastered), tier: t(`tier.${next.id}.name`) })
+                          : t('progress.summitReached')}
+                      </RawText>
+                      {mastered === 0 && (
+                        <View style={[styles.ladderHint, isDark && styles.ladderHintDark, { borderColor: tier.border }]}>
+                          <RawText style={styles.ladderHintText}>{t('progress.masteredZeroHint')}</RawText>
+                        </View>
+                      )}
+                    </>
+                  )}
                 </View>
               </View>
             );
           })}
       </View>
 
-      {/* All-time (17 §P1) — moved from the former Pace tab. Four honest numbers:
-          sessions, accuracy, current + best streak. (Total saved lives in Inventory;
-          reviews/day was fabricated and cut per §X3.) */}
+      {/* All-time (17 §P1). Four honest numbers: sessions, accuracy, current +
+          best streak. */}
       <View style={styles.divider} />
       <RawText style={styles.sectionTitle}>{t('progress.allTime')}</RawText>
       <AllTimeGrid data={data} t={t} />
@@ -196,46 +191,218 @@ function RouteTab({ data, t, onInfo }: TabProps) {
   );
 }
 
-// ── Projection ("at this pace") — lives on Route under the you-are-here card ──
-function ProjectionCard({ data, t }: TabProps) {
+// ── Projection tab (replaces Inventory, 2026-07-30) ──────────────────────────
+// Inventory's word-by-tier counts already existed on Home's Word Mastery card,
+// and browsing words by tier is covered by Word List's multi-select tier
+// filter — so the tab was a third copy of both.
+//
+// The next-camp ⇄ Summit toggle lives HERE, not inside the projection card:
+// it governs the card AND the forecast curve, and nesting it in one of the two
+// things it controls read as if it only controlled that one. Owning the state
+// at the tab also means the FSRS simulation runs ONCE for both children
+// instead of each building its own base.
+function ProjectionTab({ data, t }: TabProps) {
   const { theme } = useUnistyles();
-  const mastered = data.totalMastered;
-  const curId = mountainTier(mastered).id;
-  const cur = MOUNTAIN_TIERS.findIndex((x) => x.id === curId);
-  const next = MOUNTAIN_TIERS[cur + 1];
-  const masteryRate = data.daysActive > 0 ? mastered / data.daysActive : 0;
-  const canProject = mastered > 0 && data.daysActive > 0 && next != null;
-  const wordsToNext = canProject ? Math.max(0, masteredMaxAt(cur) - mastered) : 0;
-  const daysToNext = canProject && masteryRate > 0 ? Math.ceil(wordsToNext / masteryRate) : null;
+  const [view, setView] = useState<'next' | 'summit'>('next');
 
-  if (data.totalSaved === 0) return null; // RouteTab already renders its empty state
+  const model = useMemo(() => {
+    const base = projectionBase({
+      cards: data.cards,
+      states: data.states,
+      avgAccuracy: data.avgAccuracy,
+      daysActive: data.daysActive,
+      now: new Date(),
+    });
+    const next = nextCampTarget(base.mastered);
+    return {
+      base,
+      nextCamp: next == null ? null : { ...resolve(base, next.target), tierId: next.id, cefr: next.cefr, target: next.target },
+      summit: { ...resolve(base, SUMMIT_TARGET), tierId: TIERS[TIERS.length - 1]!.id, cefr: MOUNTAIN_TIERS[MOUNTAIN_TIERS.length - 1]!.cefr, target: SUMMIT_TARGET },
+    };
+  }, [data.cards, data.states, data.avgAccuracy, data.daysActive]);
 
-  if (!canProject || daysToNext == null || next == null) {
+  if (data.totalSaved === 0) {
+    return <EmptyState style={styles.empty} illustration={<IconChart size={48} color={theme.color.textMuted} />} title={t('progress.emptyProjectionTitle')} body={t('progress.emptyProjectionBody')} />;
+  }
+
+  // At Summit tier there is no next camp, so the toggle has nothing to switch
+  // between — show the Summit view alone rather than a one-option control.
+  const atSummit = model.nextCamp == null;
+  const active = atSummit || view === 'summit' ? model.summit : model.nextCamp!;
+
+  return (
+    <View style={styles.pad}>
+      {!atSummit && (
+        <SegmentedPills
+          style={styles.projToggle}
+          active={view}
+          onChange={(id) => setView(id as 'next' | 'summit')}
+          pills={[
+            { id: 'next', label: t('progress.proj.viewNext'), a11yLabel: t('progress.proj.viewNextA11y') },
+            { id: 'summit', label: t('progress.proj.viewSummit'), a11yLabel: t('progress.proj.viewSummitA11y') },
+          ]}
+        />
+      )}
+      <ProjectionCard projection={active} t={t} />
+      <ForecastSection base={model.base} target={active.target} t={t} />
+    </View>
+  );
+}
+
+// ── Projection card — "when do I get there?" (rebuilt 2026-07-30) ────────────
+// Presentational now: the tab owns the view state and hands down ONE
+// already-resolved projection. The numbers come from domain/projection.ts,
+// which forward-simulates the real FSRS scheduler over the user's actual cards
+// and extrapolates the words they have not saved yet from their capture rate.
+//
+// This replaced a backwards-looking `mastered / daysActive` average that could
+// not produce a number until the user had already mastered a word — i.e. it
+// stayed locked for the first ~3 weeks of use, precisely when someone most
+// needs to see that the thing is working.
+type ResolvedProjection = Projection & { tierId: string; cefr: string; target: number };
+
+function ProjectionCard({ projection, t }: { projection: ResolvedProjection; t: TFunction }) {
+  const { theme } = useUnistyles();
+  const isDark = useColorScheme() === 'dark';
+
+  // Per-tier theming (Casey 2026-07-30): the card wears the colours of the tier
+  // it projects TOWARD, resolved through the registry — Summit is amber, not the
+  // brand blue this card used to hardcode. `tierView` supplies the dark
+  // variants, so this matches how the Route ladder tints itself.
+  const idx = Math.max(0, TIERS.findIndex((x) => x.id === projection.tierId));
+  const tier = tierView(tierRegistry(idx), isDark);
+  const heading = t(`tier.${tier.id}.name`);
+
+  // Non-'ok' states each get their own honest message. They are deliberately
+  // NOT collapsed into one "unavailable" branch: "you haven't reviewed yet",
+  // "your recall is still settling" and "you've stopped saving words" have
+  // completely different fixes, and telling the user the wrong one is worse
+  // than telling them nothing.
+  if (projection.status !== 'ok') {
+    const body =
+      projection.status === 'reached'
+        ? t('progress.proj.reachedBody', { tier: heading })
+        : projection.status === 'low_recall'
+          ? t('progress.proj.lowRecallBody')
+          : projection.status === 'unreachable'
+            ? t('progress.proj.unreachableBody', { tier: heading })
+            : t('progress.projectionLockedBody');
+    const title =
+      projection.status === 'reached'
+        ? t('progress.proj.reachedTitle')
+        : projection.status === 'low_recall'
+          ? t('progress.proj.lowRecallTitle')
+          : projection.status === 'unreachable'
+            ? t('progress.proj.unreachableTitle')
+            : t('progress.projectionLocked');
     return (
-      <View style={styles.projLocked}>
-        <IconMountain size={32} color={theme.color.borderStrong} />
-        <RawText style={styles.projLockedTitle}>{t('progress.projectionLocked')}</RawText>
-        <RawText style={styles.projLockedBody}>{t('progress.projectionLockedBody')}</RawText>
+      <View style={[styles.projCard, { backgroundColor: tier.bg, borderColor: tier.border }]}>
+        <View style={styles.projLockedInner}>
+          <IconMountain size={32} color={theme.color.borderStrong} />
+          <RawText style={styles.projLockedTitle}>{title}</RawText>
+          <RawText style={styles.projLockedBody}>{body}</RawText>
+        </View>
       </View>
     );
   }
 
+  const span = horizon(projection.days!, projection.range!, projection.confidence);
+  const unit = t(`progress.proj.${span.unitKey}`, { count: span.count });
+  const a11y = span.showRange
+    ? t('progress.proj.a11yRange', { low: span.low, high: span.high, unit })
+    : t('progress.proj.a11yPoint', { count: span.count, unit });
+
   return (
-    <View style={styles.projCard}>
+    <View style={[styles.projCard, { backgroundColor: tier.bg, borderColor: tier.border }]}>
       <View style={styles.projHead}>
-        <IconMountain size={26} color={theme.color.brand} />
-        <View>
-          <RawText style={styles.projSmall}>{t('progress.estDaysToReach')}</RawText>
-          <RawText style={styles.projTier}>
-            {t(`tier.${next.id}.name`)} <RawText style={styles.projCefr}>{t('progress.cefr', { level: next.cefr })}</RawText>
-          </RawText>
+        <IconMountain size={26} color={tier.color} />
+        <View style={styles.projHeadBody}>
+          <RawText style={[styles.projSmall, { color: tier.labelColor }]}>{t('progress.proj.heading')}</RawText>
+          {/* Tier name and CEFR chip are SIBLINGS, not a blended string: nesting
+              them made the heading one opaque text node ("Summit CEFR C2"),
+              which reads worse to a screen reader and can't be asserted on. */}
+          <View style={styles.projTierRow}>
+            <RawText testID="projectionTargetTier" style={[styles.projTier, { color: tier.text }]}>{heading}</RawText>
+            <RawText style={[styles.projCefr, { color: tier.color }]}>{t('progress.cefr', { level: projection.cefr })}</RawText>
+          </View>
         </View>
       </View>
+
       <View style={styles.projBig}>
-        <RawText style={styles.projDays}>{daysToNext}</RawText>
-        <RawText style={styles.projDaysLabel}>{t('progress.days')}</RawText>
+        <RawText style={[styles.projDays, { color: tier.color }]} accessibilityLabel={a11y}>
+          {span.value}
+        </RawText>
+        <RawText style={styles.projDaysLabel}>{unit}</RawText>
       </View>
-      <RawText style={styles.projDetail}>{t('progress.paceDetail', { words: wordsToNext, rate: masteryRate.toFixed(1) })}</RawText>
+
+      {projection.confidence !== 'high' && <RawText style={styles.projRough}>{t('progress.proj.rough')}</RawText>}
+
+      <RawText style={styles.projDetail}>
+        {projection.fromFutureWords > 0
+          ? t('progress.proj.detailWithCapture', {
+              words: projection.wordsToGo.toLocaleString(),
+              rate: projection.capturePerDay.toFixed(1),
+            })
+          : t('progress.proj.detailSaved', { words: projection.wordsToGo.toLocaleString() })}
+      </RawText>
+    </View>
+  );
+}
+
+// ── Forecast curve (Progress → Projection) ───────────────────────────────────
+// The same model as the card above, sampled over time rather than solved for a
+// single target — and aimed at the SAME target the toggle selected, so
+// switching to Summit re-scales the curve instead of just relabelling it.
+// One series, so no legend: the section title names it.
+function ForecastSection({ base, target, t }: { base: ProjectionBase; target: number; t: TFunction }) {
+  const isDark = useColorScheme() === 'dark';
+  const f = useMemo(() => forecast(base, { target }), [base, target]);
+
+  // Nothing to plot before the first review, or when the curve is flat.
+  if (base.reviewsLogged === 0 || f.peak <= base.mastered) return null;
+
+  const camp = f.camps.find((c) => c.target === target) ?? null;
+  const tierIdx = camp == null ? TIERS.length - 1 : TIERS.findIndex((x) => x.id === camp.id);
+  const tier = tierView(tierRegistry(Math.max(0, tierIdx)), isDark);
+
+  const fmt = (days: number) => {
+    const h = horizon(days, [days, days], 'high');
+    return `${h.value} ${t(`progress.proj.${h.unitKey}`, { count: h.count })}`;
+  };
+  const endLabel = fmt(f.horizonDays);
+
+  return (
+    <View style={styles.forecastBlock}>
+      <RawText style={styles.sectionTitle}>{t('progress.forecast.title')}</RawText>
+      <RawText style={styles.sectionSub}>{t('progress.forecast.sub')}</RawText>
+      <View style={styles.forecastCard}>
+        <ForecastChart
+          points={f.points}
+          horizonDays={f.horizonDays}
+          color={tier.color}
+          threshold={
+            camp == null
+              ? null
+              : {
+                  value: camp.target,
+                  day: camp.day,
+                  axisLabel: t('progress.forecast.axisWords', { count: camp.target.toLocaleString() }),
+                  caption:
+                    camp.day != null
+                      ? t('progress.forecast.campEta', { tier: t(`tier.${camp.id}.name`), span: fmt(camp.day) })
+                      : t('progress.forecast.campLine', { tier: t(`tier.${camp.id}.name`), count: camp.target.toLocaleString() }),
+                }
+          }
+          startLabel={t('progress.forecast.today')}
+          endLabel={endLabel}
+          accessibilityLabel={t('progress.forecast.a11y', {
+            from: Math.round(base.mastered).toLocaleString(),
+            to: Math.round(f.peak).toLocaleString(),
+            span: endLabel,
+          })}
+        />
+      </View>
+      <RawText style={styles.forecastNote}>{t('progress.forecast.note')}</RawText>
     </View>
   );
 }
@@ -286,66 +453,6 @@ function AllTimeGrid({ data, t }: TabProps) {
           </View>
         </Tooltip>
       ))}
-    </View>
-  );
-}
-
-// ── Inventory ─────────────────────────────────────────────────────────────────
-function InventoryTab({ data, t, onInfo, onOpenTier }: TabProps) {
-  const { theme } = useUnistyles();
-  if (data.totalSaved === 0) {
-    return <EmptyState style={styles.empty} illustration={<IconBook size={48} color={theme.color.textMuted} />} title={t('progress.emptyInventoryTitle')} body={t('progress.emptyInventoryBody')} />;
-  }
-  const total = data.tierCounts.reduce((a, b) => a + b, 0);
-  return (
-    <View style={styles.pad}>
-      <View style={styles.invHead}>
-        <View style={styles.invHeadText}>
-          <RawText style={styles.sectionTitle}>{t('progress.wordsByTier')}</RawText>
-          <RawText style={styles.sectionSub}>{t('progress.wordsByTierSub', { count: total })}</RawText>
-        </View>
-        <Pressable onPress={() => onInfo?.('fsrs')} accessibilityRole="button" accessibilityLabel={t('progress.aboutFsrs')} hitSlop={8} style={({ pressed }) => [styles.headInfo, pressed && { opacity: 0.6 }]}>
-          <IconInfo size={14} color={theme.color.textMuted} />
-        </Pressable>
-      </View>
-      {/* Segmented bar */}
-      <View style={styles.invBar}>
-        {TIERS.map((tier, i) => {
-          const c = data.tierCounts[i] ?? 0;
-          if (c === 0) return null;
-          return <View key={tier.id} style={{ flex: c, backgroundColor: tier.color }} />;
-        })}
-      </View>
-      {/* Per-tier rows — pressable when the tier holds words */}
-      <View style={styles.invRows}>
-        {TIERS.map((tier, i) => {
-          const c = data.tierCounts[i] ?? 0;
-          const pct = total > 0 ? Math.round((c / total) * 100) : 0;
-          const empty = c === 0;
-          return (
-            <Pressable
-              key={tier.id}
-              disabled={empty}
-              onPress={() => onOpenTier?.(i)}
-              accessibilityRole={empty ? undefined : 'button'}
-              accessibilityLabel={empty ? undefined : t('progress.viewTierWords', { tier: t(`tier.${tier.id}.name`) })}
-              style={({ pressed }) => [styles.invRow, empty && styles.invRowEmpty, pressed && !empty && { opacity: 0.7 }]}
-            >
-              <View style={[styles.invDot, { backgroundColor: tier.color }]} />
-              <View style={styles.invRowBody}>
-                <View style={styles.invRowTop}>
-                  <RawText style={styles.invTier}>{t(`tier.${tier.id}.name`)}</RawText>
-                  <RawText style={styles.invCount}>{c}</RawText>
-                </View>
-                <View style={styles.invRowBottom}>
-                  <RawText style={styles.invRange} numberOfLines={1}>{t(`tier.${tier.id}.shortDesc`)} · {t(`tier.${tier.id}.stabilityRange`)}</RawText>
-                  <RawText style={styles.invPct}>{pct}%</RawText>
-                </View>
-              </View>
-            </Pressable>
-          );
-        })}
-      </View>
     </View>
   );
 }
@@ -478,54 +585,28 @@ function LeaderRow({ entry, prevRank, t }: { entry: LeaderboardEntry; prevRank?:
 
 // ── Info sheets (CEFR ladder / FSRS stability) ────────────────────────────────
 function InfoSheet({ infoKey, t, onClose }: { infoKey: InfoKey | null; t: TFunction; onClose: () => void }) {
-  const { theme } = useUnistyles();
   const isDark = useColorScheme() === 'dark';
-  const isCefr = infoKey === 'cefr';
+  // Only the CEFR ladder remains: the FSRS stability explainer was retired with
+  // the Inventory tab (Casey 2026-07-30).
   return (
-    <Sheet visible={infoKey != null} onClose={onClose} title={t(isCefr ? 'progress.cefrTitle' : 'progress.fsrsTitle')}>
-      <RawText style={styles.infoIntro}>{t(isCefr ? 'progress.cefrIntro' : 'progress.fsrsIntro')}</RawText>
+    <Sheet visible={infoKey != null} onClose={onClose} title={t('progress.cefrTitle')}>
+      <RawText style={styles.infoIntro}>{t('progress.cefrIntro')}</RawText>
       <View style={styles.infoList}>
-        {TIERS.map((tier, i) => (
-          <View key={tier.id} style={[styles.infoRow, { backgroundColor: isCefr ? tierView(tier, isDark).bg : theme.color.surfaceSunken, borderColor: isCefr ? tierView(tier, isDark).border : theme.color.border }]}>
-            <View style={[isCefr ? styles.infoDotRound : styles.infoDotSquare, { backgroundColor: tierView(tier, isDark).color }]} />
-            <View style={styles.infoRowBody}>
-              <RawText style={styles.infoTier}>{t(`tier.${tier.id}.name`)}</RawText>
-              <RawText style={styles.infoDesc}>{isCefr ? t('progress.masteredThreshold', { count: masteredMinAt(i).toLocaleString() }) : t(`tier.${tier.id}.desc`)}</RawText>
+        {TIERS.map((tier, i) => {
+          const tv = tierView(tier, isDark);
+          return (
+            <View key={tier.id} style={[styles.infoRow, { backgroundColor: tv.bg, borderColor: tv.border }]}>
+              <View style={[styles.infoDotRound, { backgroundColor: tv.color }]} />
+              <View style={styles.infoRowBody}>
+                <RawText style={styles.infoTier}>{t(`tier.${tier.id}.name`)}</RawText>
+                <RawText style={styles.infoDesc}>{t('progress.masteredThreshold', { count: masteredMinAt(i).toLocaleString() })}</RawText>
+              </View>
+              <RawText style={styles.infoMeta}>{t('progress.cefr', { level: MOUNTAIN_TIERS[i].cefr })}</RawText>
             </View>
-            <RawText style={styles.infoMeta}>{isCefr ? t('progress.cefr', { level: MOUNTAIN_TIERS[i].cefr }) : t(`tier.${tier.id}.stabilityRange`)}</RawText>
-          </View>
-        ))}
+          );
+        })}
       </View>
-      <RawText style={styles.infoNote}>{t(isCefr ? 'progress.cefrNote' : 'progress.fsrsNote')}</RawText>
-    </Sheet>
-  );
-}
-
-// ── Tier word drawer (P3) — lists the saved words at one stability tier ───────────
-// Rows are the shared kit WordRow (18-session item 1.3 — the drawer's one-off row
-// was the consolidation template: due label + review count live in the component now).
-function TierWordsSheet({ tierIdx, words, t, onClose, onWordPress }: { tierIdx: number | null; words: WordListItem[]; t: TFunction; onClose: () => void; onWordPress: (w: WordListItem) => void }) {
-  const tier = tierIdx != null ? TIERS[tierIdx] : null;
-  // 18 §A4: implicit lists order by next due date — needs-review words surface first.
-  const rows =
-    tier != null
-      ? words.filter((w) => getTierByStability(w.stability).id === tier.id).sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime())
-      : [];
-  return (
-    <Sheet visible={tierIdx != null} onClose={onClose} title={tier != null ? t(`tier.${tier.id}.name`) : ''}>
-      {tier != null && (
-        <RawText style={styles.drawerSub}>{t('progress.tierWordsSub', { count: rows.length, range: t(`tier.${tier.id}.stabilityRange`) })}</RawText>
-      )}
-      <ScrollView style={styles.drawerScroll} showsVerticalScrollIndicator={false}>
-        {rows.map((w) => (
-          <WordRow
-            key={w.id}
-            compact
-            word={{ native: w.native, target: w.target, stability: w.stability, dueAt: w.dueAt, reps: w.reps }}
-            onPress={() => onWordPress(w)}
-          />
-        ))}
-      </ScrollView>
+      <RawText style={styles.infoNote}>{t('progress.cefrNote')}</RawText>
     </Sheet>
   );
 }
@@ -544,27 +625,8 @@ const styles = StyleSheet.create((theme) => {
     divider: { height: 1, backgroundColor: color.border, marginVertical: 20 },
 
     // Route — you are here
-    hereCard: { borderWidth: 1.5, borderRadius: radius.lg, paddingHorizontal: 18, paddingVertical: 16, marginBottom: 24 },
-    hereTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-    hereTopText: { flex: 1 },
-    hereInfo: { width: 26, height: 26, borderRadius: 13, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.5)' },
-    hereLabel: { fontFamily: fonts.sans.bold, fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', color: color.textMuted, marginBottom: 4 },
-    hereTier: { fontFamily: fonts.serif.bold, fontSize: 20, color: color.textStrong },
-    hereCefr: { fontFamily: fonts.sans.semibold, fontSize: 12, marginTop: 3 },
-    hereRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 12, marginBottom: 8 },
-    hereMastered: { fontFamily: fonts.serif.bold, fontSize: 28, color: color.textStrong },
-    hereMasteredSuffix: { fontFamily: fonts.sans.medium, fontSize: 14, color: color.textMuted },
-    hereToNext: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted, paddingBottom: 3 },
-    hereTrack: { height: 8, backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 6, overflow: 'hidden' },
-    hereFill: { height: '100%', borderRadius: 6 },
-    herePct: { fontFamily: fonts.sans.regular, fontSize: 11, color: color.textMuted, marginTop: 5, textAlign: 'right' },
-    hereHint: { marginTop: 12, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: theme.borderWidth.thin, backgroundColor: 'rgba(255,255,255,0.55)' },
     // Dark-only: the light rgba-white overlays become a light box that hides the
     // (now light) muted text on the dark tier card — flip them to faint light-on-dark.
-    hereInfoDark: { backgroundColor: 'rgba(255,255,255,0.08)' },
-    hereTrackDark: { backgroundColor: 'rgba(255,255,255,0.15)' },
-    hereHintDark: { backgroundColor: 'rgba(255,255,255,0.06)' },
-    hereHintText: { fontFamily: fonts.sans.regular, fontSize: 12, lineHeight: 18, color: color.textMuted, textAlign: 'center' },
 
     // Route — ladder
     ladder: { marginTop: 12, gap: 20, position: 'relative' },
@@ -585,21 +647,6 @@ const styles = StyleSheet.create((theme) => {
     ladderStatus: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted },
 
     // Inventory
-    invHead: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 },
-    invHeadText: { flex: 1 },
-    headInfo: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: color.surfaceSunken, marginLeft: 8 },
-    invBar: { flexDirection: 'row', height: 20, borderRadius: 10, overflow: 'hidden', backgroundColor: color.surfaceSunken, marginBottom: 20 },
-    invRows: { gap: 10 },
-    invRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: color.surfaceCard, borderWidth: theme.borderWidth.thin, borderColor: color.border, borderRadius: radius.md, paddingVertical: 12, paddingHorizontal: 14 },
-    invRowEmpty: { opacity: 0.5 },
-    invDot: { width: 10, height: 10, borderRadius: 3 },
-    invRowBody: { flex: 1 },
-    invRowTop: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-    invTier: { fontFamily: fonts.sans.bold, fontSize: 13, color: color.textStrong },
-    invCount: { fontFamily: fonts.mono.bold, fontSize: 17, color: color.textStrong },
-    invRowBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 },
-    invRange: { flex: 1, fontFamily: fonts.sans.regular, fontSize: 11, color: color.textMuted },
-    invPct: { fontFamily: fonts.sans.regular, fontSize: 11, color: color.textMuted, marginLeft: 8 },
 
     // Projection (on Route) + all-time
     projCard: { backgroundColor: color.brandTint, borderWidth: 1.5, borderColor: color.brandSoft, borderRadius: radius.lg, padding: 18, marginBottom: 24 },
@@ -611,7 +658,26 @@ const styles = StyleSheet.create((theme) => {
     projDays: { fontFamily: fonts.serif.bold, fontSize: 44, color: color.brand },
     projDaysLabel: { fontFamily: fonts.sans.semibold, fontSize: 18, color: color.textMuted, paddingBottom: 5 },
     projDetail: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted },
-    projLocked: { backgroundColor: color.surfaceSunken, borderWidth: theme.borderWidth.base, borderColor: color.border, borderStyle: 'dashed', borderRadius: radius.lg, padding: 20, alignItems: 'center', marginBottom: 24 },
+    projToggle: { marginBottom: 16 },
+    ladderInfo: { marginLeft: 2, padding: 2 },
+    // In-tier progress, folded out of the retired "You are here" card. The old
+    // track was translucent WHITE because it sat on a tinted hero surface; on
+    // the ladder's page background that would be invisible in light mode, so
+    // these are re-tokened against the page instead of carried over verbatim.
+    ladderTrack: { height: 8, backgroundColor: color.surfaceSunken, borderWidth: theme.borderWidth.thin, borderColor: color.border, borderRadius: 6, overflow: 'hidden', marginTop: 8 },
+    ladderTrackDark: { backgroundColor: color.divider },
+    ladderFill: { height: '100%', borderRadius: 6 },
+    ladderPct: { fontFamily: fonts.sans.regular, fontSize: 11, color: color.textMuted, marginTop: 5 },
+    ladderHint: { marginTop: 10, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: theme.borderWidth.thin, backgroundColor: color.surfaceSunken },
+    ladderHintDark: { backgroundColor: color.divider },
+    ladderHintText: { fontFamily: fonts.sans.regular, fontSize: 12, lineHeight: 18, color: color.textMuted },
+    forecastBlock: { marginTop: 4 },
+    forecastCard: { backgroundColor: color.surfaceCard, borderWidth: theme.borderWidth.thin, borderColor: color.border, borderRadius: radius.lg, paddingHorizontal: 14, paddingTop: 14, paddingBottom: 12, marginTop: 12 },
+    forecastNote: { fontFamily: fonts.sans.regular, fontSize: 11, lineHeight: 16, fontStyle: 'italic', color: color.textMuted, marginTop: 10 },
+    projHeadBody: { flex: 1 },
+    projTierRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' },
+    projRough: { fontFamily: fonts.sans.regular, fontSize: 11, fontStyle: 'italic', color: color.textMuted, marginBottom: 6 },
+    projLockedInner: { alignItems: 'center', paddingVertical: 8 },
     projLockedTitle: { fontFamily: fonts.sans.semibold, fontSize: 14, color: color.textMuted, marginTop: 10, marginBottom: 6 },
     projLockedBody: { fontFamily: fonts.sans.regular, fontSize: 12, lineHeight: 18, color: color.textMuted, textAlign: 'center', maxWidth: 220 },
     tileGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 },
@@ -626,16 +692,12 @@ const styles = StyleSheet.create((theme) => {
     infoList: { gap: 8 },
     infoRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: theme.borderWidth.thin, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 12 },
     infoDotRound: { width: 8, height: 8, borderRadius: 4 },
-    infoDotSquare: { width: 10, height: 10, borderRadius: 3 },
     infoRowBody: { flex: 1 },
     infoTier: { fontFamily: fonts.sans.bold, fontSize: 13, color: color.textStrong },
     infoDesc: { fontFamily: fonts.sans.regular, fontSize: 11, lineHeight: 15, color: color.textMuted, marginTop: 1 },
     infoMeta: { fontFamily: fonts.mono.regular, fontSize: 11, color: color.textMuted, textAlign: 'right' },
     infoNote: { fontFamily: fonts.sans.regular, fontSize: 11, lineHeight: 16, fontStyle: 'italic', color: color.textMuted, marginTop: 12 },
 
-    // Tier word drawer (rows are the shared WordRow — see TierWordsSheet)
-    drawerSub: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted, marginBottom: 12 },
-    drawerScroll: { maxHeight: 360 },
 
     // Leaders (20 §4)
     leaderToggle: { flexDirection: 'row', gap: 8, marginBottom: 16 },

@@ -136,6 +136,33 @@ export function findLanguage(code: LanguageCode): Language | undefined {
   return BY_CODE[code.toLowerCase()];
 }
 
+/** Explicit short-label overrides, keyed by lowercased code. EMPTY today: the
+ *  derived rule below is already unique across all 50 registry languages. Add an
+ *  entry here only when `languageShortLabel.test.ts` fails — it exists so a
+ *  collision is a loud test failure with an obvious fix, not two identical chips
+ *  shipped to users. */
+const SHORT_OVERRIDES: Record<string, string> = {};
+
+/** Compact chip label for a language code: 'en' → 'EN', 'tlh-Latn' → 'TLH',
+ *  'zh-Hans' → 'ZH', 'sr-Latn' → 'SR'.
+ *
+ *  Why this exists (2026-07-30): chips live in width-constrained furniture — the
+ *  search direction toggle renders TWO codes plus an arrow, beside a language
+ *  pill and a close button. Raw BCP-47 tags run to 8 characters ('TLH-LATN'),
+ *  which overflowed the header and drew the toggle straight over the picker.
+ *  The primary subtag is ≤3 chars for every language Azure supports and is
+ *  currently unique, so it is derived rather than hand-maintained: adding a
+ *  language to ROWS above needs no second edit here, and the guard test catches
+ *  the one case that would break it (e.g. a future 'zh-Hant' colliding with
+ *  'zh-Hans' — both would want 'ZH', so one gets an override).
+ *
+ *  This is a DISPLAY label only. Never send it to the API or use it as a key;
+ *  `code` remains the identity everywhere else. */
+export function languageShortLabel(code: LanguageCode): string {
+  const key = code.toLowerCase();
+  return SHORT_OVERRIDES[key] ?? (key.split('-')[0] || key).toUpperCase();
+}
+
 /** English display name for a code, falling back to the uppercased code. */
 export function languageDisplayName(code: LanguageCode): string {
   return findLanguage(code)?.name ?? code.toUpperCase();

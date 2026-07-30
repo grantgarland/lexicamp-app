@@ -46,12 +46,18 @@ export function WordDetailSheet({ word, onClose, onDelete, onToggleArchive, onEd
     setLastWordId(word?.id);
     setExampleReqId(null);
   }
-  const needsFetch = word != null && word.example === '';
+  // `azure_mt` (phrase_mt) cards can never have examples — the examples fn
+  // returns [] for them by contract (16 §3) — so don't offer the button at all.
+  const examplesSupported = word != null && word.provider !== 'azure_mt';
+  const needsFetch = word != null && word.example === '' && examplesSupported;
   const exampleRequested = word != null && exampleReqId === word.id;
-  const { examples, isLoading: exampleLoading } = useExamples(
-    needsFetch && exampleRequested ? word.translationId : null,
-    word?.senseTarget,
-  );
+  const {
+    examples,
+    isLoading: exampleLoading,
+    isSettled: exampleSettled,
+    isError: exampleFailed,
+    refetch: refetchExample,
+  } = useExamples(needsFetch && exampleRequested ? word.translationId : null, word?.senseTarget);
   const fetched = examples?.[0];
   const example = word?.example || (fetched ? `${fetched.sourcePrefix}${fetched.sourceTerm}${fetched.sourceSuffix}` : '');
   // Target-side line, mirroring the search card's example pair.
@@ -106,13 +112,19 @@ export function WordDetailSheet({ word, onClose, onDelete, onToggleArchive, onEd
               <Text style={styles.sectionLabel}>{t('wordList.example')}</Text>
               {exampleLoading ? (
                 <Text style={styles.exampleReqLoading}>{t('wordList.loadingExample')}</Text>
+              ) : exampleRequested && exampleSettled && (examples?.length ?? 0) === 0 ? (
+                /* Terminal — the dictionary has no sentence for this sense. The
+                   server cached the empty result, so there is nothing to retry. */
+                <Text style={styles.exampleReqLoading}>{t('wordList.noExample')}</Text>
               ) : (
                 <Pressable
-                  onPress={() => setExampleReqId(word.id)}
+                  onPress={() => (exampleRequested && exampleFailed ? void refetchExample() : setExampleReqId(word.id))}
                   accessibilityRole="button"
                   style={({ pressed }) => [styles.exampleReqBtn, pressed && { opacity: 0.6 }]}
                 >
-                  <Text style={styles.exampleReqText}>{t('wordList.showExample')}</Text>
+                  <Text style={styles.exampleReqText}>
+                    {t(exampleRequested && exampleFailed ? 'wordList.exampleError' : 'wordList.showExample')}
+                  </Text>
                 </Pressable>
               )}
             </View>

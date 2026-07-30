@@ -53,17 +53,38 @@ function bailUsername(error: { message: string; details?: string | null } | null
 
 /** cards joined to translation + fsrs — the projection words/due-cards share.
  *  Phase D: `decks!inner(target_lang)` scopes every card read to the ACTIVE
- *  learning language (filtered per query via .eq('decks.target_lang', …)). */
+ *  learning language (filtered per query via .eq('decks.target_lang', …)).
+ *
+ *  The `!cards_deck_id_fkey` hint is LOAD-BEARING as of 2026-07-30. `deck_cards`
+ *  has FKs to both `cards` and `decks` and a primary key of exactly
+ *  (deck_id, card_id) — the shape PostgREST auto-detects as a many-to-many
+ *  junction. That gives `cards → decks` two candidate relationships (direct via
+ *  cards.deck_id, or M2M through deck_cards) and PostgREST refuses to guess:
+ *  PGRST201, on EVERY read that uses this projection — the Word List, the home
+ *  snapshot, Progress and the quiz queue. Naming the FK pins the direct one. */
 const CARD_JOIN =
   'id, deck_id, user_id, translation_id, user_note, custom_front, custom_back, suspended, created_at, ' +
-  'decks!inner ( target_lang ), ' +
+  'decks!cards_deck_id_fkey!inner ( target_lang ), ' +
   'card_target_overrides ( target_text ), ' +
-  'translations_cache ( id, display_source, translation, pos_tag, prefix_word, examples, alt_translations, back_translations ), ' +
+  'translations_cache ( id, display_source, translation, pos_tag, prefix_word, examples, alt_translations, back_translations, provider ), ' +
   'card_fsrs_state ( card_id, user_id, stability, difficulty, due_at, last_review_at, state, reps, lapses, learning_steps )';
 
 /** Due-queue variant: `!inner` makes the embedded filter actually EXCLUDE parent
  *  rows (a plain embed filter only nulls the embed — the cards would all return). */
 const DUE_JOIN = CARD_JOIN.replace('card_fsrs_state (', 'card_fsrs_state!inner (');
+
+/** Custom-deck-membership variant (2026-07-30): the same card projection, inner-
+ *  joined through `deck_cards` so only the deck's members come back. `!inner` is
+ *  load-bearing here for the same reason it is on DUE_JOIN — a plain embed filter
+ *  nulls the embed instead of excluding the parent row, which would return the
+ *  ENTIRE library as the deck's contents (i.e. exactly the prototype bug this
+ *  replaces, just sourced from the server instead of a slice). */
+const DECK_MEMBER_JOIN = CARD_JOIN + ', deck_cards!inner ( deck_id )';
+
+/** Deck-scoped DUE variant — both `!inner`s matter, for different reasons:
+ *  card_fsrs_state to exclude cards with no schedule, deck_cards to exclude
+ *  non-members. */
+const DECK_DUE_JOIN = DUE_JOIN + ', deck_cards!inner ( deck_id )';
 
 interface JoinedCardRow extends CardRow {
   translations_cache: TranslationJoin;
@@ -254,6 +275,7 @@ export const supabaseDataSource: DataSource = {
       .select('*')
       .eq('target_lang', target)
       .order('created_at', { ascending: true })
+      .order('id', { ascending: true }) // tie-break, matching SQL is_main_deck
       .limit(1)
       .single();
     bail(error);
@@ -301,22 +323,77 @@ export const supabaseDataSource: DataSource = {
     const target = lang ?? (await this.getProfile()).targetLang;
     const { data, error } = await supabase
       .from('decks')
-      .select('id, name, created_at, cards(count)')
+      // 2026-07-30: count MEMBERSHIP rows, not cards.deck_id. Every card in a
+      // language points at that language's MAIN deck, so `cards(count)` reported
+      // the whole library for one deck and 0 for the rest.
+      .select('id, name, created_at, deck_cards(count)')
       .eq('target_lang', target)
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true }); // tie-break, so .slice(1) is deterministic
     bail(error);
-    type Row = { id: string; name: string; created_at: string; cards: { count: number }[] };
+    type Row = { id: string; name: string; created_at: string; deck_cards?: { count: number }[] };
     // 18 §E1: the OLDEST deck per language is the hidden main deck (same rule
     // getActiveDeck uses) — reachable only via Home "Study now". Custom Decks
     // lists user-created decks only.
     return ((data ?? []) as Row[]).slice(1).map((d) => ({
       id: d.id,
       name: d.name,
-      wordCount: d.cards[0]?.count ?? 0,
+      wordCount: d.deck_cards?.[0]?.count ?? 0,
       reviews: 0, // TODO(analytics): per-deck study counts
       createdAt: new Date(d.created_at),
       lastReviewedAt: null,
     }));
+  },
+
+  async getDeckWords(deckId: string, lang?: string): Promise<WordListItem[]> {
+    // Membership read (2026-07-30). Language-scoped as well as deck-scoped: the
+    // deck already belongs to one language, but a stale deck id from a previous
+    // language must resolve to empty rather than to another language's words.
+    const target = lang ?? (await this.getProfile()).targetLang;
+    const { data, error } = await supabase
+      .from('cards')
+      .select(DECK_MEMBER_JOIN)
+      .eq('decks.target_lang', target)
+      .eq('deck_cards.deck_id', deckId)
+      .order('created_at', { ascending: false });
+    bail(error);
+    const rows = (data ?? []) as unknown as JoinedCardRow[];
+    return rows.map((r) => mapWordListItem(r, r.translations_cache, r.card_fsrs_state, overrideText(r.card_target_overrides)));
+  },
+
+  async getCardDeckIds(cardId: string): Promise<string[]> {
+    const { data, error } = await supabase.from('deck_cards').select('deck_id').eq('card_id', cardId);
+    bail(error);
+    return ((data ?? []) as { deck_id: string }[]).map((r) => r.deck_id);
+  },
+
+  async createDeck(name: string, cardIds: string[], lang?: string): Promise<string> {
+    const target = lang ?? (await this.getProfile()).targetLang;
+    // The RPC owns normalisation, the premium gate, per-language name uniqueness,
+    // the deck cap, and filtering the seed ids down to this user's cards in this
+    // language — so a stale client can't stitch another language's word in.
+    const { data, error } = await supabase.rpc('create_deck', {
+      p_name: name,
+      p_target_lang: target,
+      p_card_ids: cardIds,
+    });
+    bail(error);
+    return data as string;
+  },
+
+  async deleteDeck(deckId: string): Promise<void> {
+    const { error } = await supabase.rpc('delete_deck', { p_deck_id: deckId });
+    bail(error);
+  },
+
+  async addCardToDeck(deckId: string, cardId: string): Promise<void> {
+    const { error } = await supabase.rpc('add_card_to_deck', { p_deck_id: deckId, p_card_id: cardId });
+    bail(error);
+  },
+
+  async removeCardFromDeck(deckId: string, cardId: string): Promise<void> {
+    const { error } = await supabase.rpc('remove_card_from_deck', { p_deck_id: deckId, p_card_id: cardId });
+    bail(error);
   },
 
   async getWords(lang?: string): Promise<WordListItem[]> {
@@ -331,7 +408,16 @@ export const supabaseDataSource: DataSource = {
     return rows.map((r) => mapWordListItem(r, r.translations_cache, r.card_fsrs_state, overrideText(r.card_target_overrides)));
   },
 
-  async getDueCards(limit: number, lang?: string): Promise<QuizCardItem[]> {
+  async getDueCards(limit: number, lang?: string, deckId?: string): Promise<QuizCardItem[]> {
+    // ⚠️ Ordering uses `card_fsrs_state(due_at)`, NOT
+    // `{ referencedTable: 'card_fsrs_state' }`. The latter emits
+    // `card_fsrs_state.order=…`, which orders WITHIN the embed — and since
+    // card_fsrs_state is to-ONE (card_id is its primary key) that sorts a
+    // one-element embed, i.e. does nothing. The parent rows came back unordered
+    // and `.limit()` sliced an arbitrary subset, so a badly overdue card could
+    // be skipped in favour of one due an hour ago. Only visible when the due (or
+    // upcoming) count exceeds the session cap. Fixed 2026-07-30.
+    //
     // 18 §2c fill composition — two ordered pulls: (1) everything due now,
     // oldest overdue first; (2) if the due count is under the session cap,
     // top up with the NEXT-due upcoming cards (dueAt asc). Reviewing ahead is
@@ -339,26 +425,34 @@ export const supabaseDataSource: DataSource = {
     // ordering guarantees the fill is always the highest-priority words.
     const target = lang ?? (await this.getProfile()).targetLang;
     const nowIso = new Date().toISOString();
-    const { data: dueData, error: dueErr } = await supabase
+    // 2026-07-30: `deckId` narrows the same two pulls to one custom deck's
+    // membership. The fill semantics are unchanged — they just fill from the
+    // deck instead of the language, which is what makes a 7-word deck produce a
+    // 7-word session instead of quietly borrowing the rest of the library.
+    const dueQuery = supabase
       .from('cards')
-      .select(DUE_JOIN)
+      .select(deckId != null ? DECK_DUE_JOIN : DUE_JOIN)
       .eq('suspended', false)
       .eq('decks.target_lang', target)
-      .lte('card_fsrs_state.due_at', nowIso)
-      .order('due_at', { referencedTable: 'card_fsrs_state', ascending: true })
+      .lte('card_fsrs_state.due_at', nowIso);
+    if (deckId != null) dueQuery.eq('deck_cards.deck_id', deckId);
+    const { data: dueData, error: dueErr } = await dueQuery
+      .order('card_fsrs_state(due_at)', { ascending: true })
       .limit(limit);
     bail(dueErr);
     const rows = ((dueData ?? []) as unknown as JoinedCardRow[]).filter((r) => r.card_fsrs_state != null);
 
     const remaining = limit - rows.length;
     if (remaining > 0) {
-      const { data: nextData, error: nextErr } = await supabase
+      const nextQuery = supabase
         .from('cards')
-        .select(DUE_JOIN)
+        .select(deckId != null ? DECK_DUE_JOIN : DUE_JOIN)
         .eq('suspended', false)
         .eq('decks.target_lang', target)
-        .gt('card_fsrs_state.due_at', nowIso)
-        .order('due_at', { referencedTable: 'card_fsrs_state', ascending: true })
+        .gt('card_fsrs_state.due_at', nowIso);
+      if (deckId != null) nextQuery.eq('deck_cards.deck_id', deckId);
+      const { data: nextData, error: nextErr } = await nextQuery
+        .order('card_fsrs_state(due_at)', { ascending: true })
         .limit(remaining);
       bail(nextErr);
       rows.push(...((nextData ?? []) as unknown as JoinedCardRow[]).filter((r) => r.card_fsrs_state != null));
@@ -399,7 +493,14 @@ export const supabaseDataSource: DataSource = {
     bail(error);
   },
 
-  async commitQuizSession({ ratings }: { ratings: BufferedRating[] }): Promise<void> {
+  async getSessionPace(): Promise<number | null> {
+    const { data, error } = await supabase.rpc('get_session_pace');
+    bail(error);
+    const secs = (data as { seconds_per_card: number | null } | null)?.seconds_per_card;
+    return typeof secs === 'number' && secs > 0 ? secs : null;
+  },
+
+  async commitQuizSession({ ratings, durationMs }: { ratings: BufferedRating[]; durationMs?: number }): Promise<void> {
     if (ratings.length === 0) return;
     // FSRS recompute is CLIENT-SIDE (02 locked decision; math in domain/fsrs).
     // Re-read the current states here (not trusted from the screen) so a stale
@@ -418,7 +519,12 @@ export const supabaseDataSource: DataSource = {
     if (commits.length === 0) return;
 
     // Atomic persist: states + logs + event in one transaction (RPC).
-    const { error } = await supabase.rpc('commit_quiz_session', { p_reviews: commits });
+    // p_duration_ms is optional server-side and bounds-checked there, so a wild
+    // client value is dropped rather than poisoning the pace median.
+    const { error } = await supabase.rpc('commit_quiz_session', {
+      p_reviews: commits,
+      p_duration_ms: durationMs != null && Number.isFinite(durationMs) ? Math.round(durationMs) : null,
+    });
     bail(error);
   },
 };

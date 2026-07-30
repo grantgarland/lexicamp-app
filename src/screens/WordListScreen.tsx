@@ -13,7 +13,21 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
-import { useActiveLang, useDecks, useDeleteCard, useEntitlement, useSetCardSuspended, useSetCardTargetOverride, useWords } from '@/query/hooks';
+import {
+  useActiveLang,
+  useAddCardToDeck,
+  useCardDeckIds,
+  useCreateDeck,
+  useDeckWords,
+  useDecks,
+  useDeleteCard,
+  useDeleteDeck,
+  useEntitlement,
+  useRemoveCardFromDeck,
+  useSetCardSuspended,
+  useSetCardTargetOverride,
+  useWords,
+} from '@/query/hooks';
 import type { DeckSummary, WordListItem } from '@/data/DataSource';
 import { addedLabel } from '@/lib/relativeTime';
 import { useDeferredReady } from '@/lib/useDeferredReady';
@@ -48,6 +62,29 @@ import {
   WordDetailSheet,
   WordRow,
 } from '@/ui';
+
+/** Deck-write rejections (DeckWriteError) → user-facing copy. Anything
+ *  unrecognised falls back to the generic failure line rather than leaking a
+ *  Postgres message into the sheet. */
+function deckErrorMessage(e: unknown, t: (k: string) => string): string {
+  const token = e instanceof Error ? e.message : '';
+  switch (token) {
+    case 'deck_name_taken':
+      return t('wordList.deckNameTaken');
+    case 'deck_name_invalid':
+      return t('wordList.deckNameInvalid');
+    case 'deck_cap_reached':
+      return t('wordList.deckCapReached');
+    case 'premium_required':
+      return t('wordList.deckPremiumRequired');
+    case 'main_deck_undeletable':
+      return t('wordList.deckMainUndeletable');
+    case 'language_not_enrolled':
+      return t('wordList.deckLanguageMissing');
+    default:
+      return t('wordList.deckActionFailed');
+  }
+}
 
 // 18-session sort model (Casey): three DIMENSIONS, each with a direction toggle.
 // The old flat radio list (incl. the tier sort) is gone — "memory strength"
@@ -104,8 +141,11 @@ export function WordListScreen() {
   const [pendingDelete, setPendingDelete] = useState<WordListItem | null>(null);
   // Optimistic removal until the real delete mutation (03 write) lands.
   const [removed, setRemoved] = useState<string[]>([]);
-  // Decks (W-04…W-08). `extraDecks` holds optimistically-created decks.
-  const [extraDecks, setExtraDecks] = useState<DeckSummary[]>([]);
+  // Decks (W-04…W-08). Membership is SERVER state as of 2026-07-30 — the
+  // optimistic overlays that used to live here (`extraDecks`, `added`,
+  // `removedFromDeck`, `removedDecks`) were the entire feature: decks created
+  // in-session vanished on reload, "Already added" was a Set no write ever
+  // populated, and deck contents were a positional slice of the library.
   const [createOpen, setCreateOpen] = useState(false);
   const [createInitialWord, setCreateInitialWord] = useState<WordListItem | null>(null);
   const [detailDeck, setDetailDeck] = useState<DeckSummary | null>(null);
@@ -113,36 +153,38 @@ export function WordListScreen() {
   const [pendingDeckDelete, setPendingDeckDelete] = useState<DeckSummary | null>(null);
   const [deckWordDetail, setDeckWordDetail] = useState<WordListItem | null>(null);
   const [pendingRemove, setPendingRemove] = useState<{ deck: DeckSummary; word: WordListItem } | null>(null);
-  const [removedFromDeck, setRemovedFromDeck] = useState<Set<string>>(new Set());
-  // Local deck membership (deckId|wordId) — optimistic until the real write lands.
-  const [added, setAdded] = useState<Set<string>>(new Set());
-  const [removedDecks, setRemovedDecks] = useState<string[]>([]);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const createDeck = useCreateDeck();
+  const deleteDeck = useDeleteDeck();
+  const addCardToDeck = useAddCardToDeck();
+  const removeCardFromDeck = useRemoveCardFromDeck();
 
-  // Language switch: every optimistic overlay above references card/deck ids of
-  // the PREVIOUS language — carrying them over corrupts counts (the "-3 words"
-  // bug) and filters. Render-adjust reset on activeLang change.
+  // Language switch: the optimistic overlays below reference card ids of the
+  // PREVIOUS language — carrying them over corrupts counts (the "-3 words" bug)
+  // and filters. Render-adjust reset on activeLang change. Deck state is no
+  // longer in this list: those queries are keyed by activeLang and refetch.
   const activeLang = useActiveLang();
   const [prevLang, setPrevLang] = useState(activeLang);
   if (prevLang !== activeLang) {
     setPrevLang(activeLang);
     setRemoved([]);
-    setExtraDecks([]);
-    setRemovedFromDeck(new Set());
-    setAdded(new Set());
-    setRemovedDecks([]);
+    // These five hold card/deck ids from the PREVIOUS language and now drive real
+    // server writes: a "Delete Food?" dialog left open across a switch would
+    // delete the OTHER language's deck on confirm, with nothing visibly wrong.
+    setPendingDeckDelete(null);
+    setDetailDeck(null);
+    setAddToDeckWord(null);
+    setPendingRemove(null);
+    setDeckWordDetail(null);
     setQuery('');
     setShowArchived(false);
   }
 
-  const allDecks = [...decks, ...extraDecks].filter((d) => !removedDecks.includes(d.id));
+  const allDecks = decks;
 
   const openCreate = (initialWord: WordListItem | null = null) => {
     setCreateInitialWord(initialWord);
     setCreateOpen(true);
-  };
-  const deleteDeck = (d: DeckSummary) => {
-    setRemovedDecks((r) => [...r, d.id]);
-    setExtraDecks((e) => e.filter((x) => x.id !== d.id));
   };
 
   const filterActive = !sameSort(sortBy, DEFAULT_SORT) || filterTiers.size > 0 || showArchived;
@@ -299,7 +341,10 @@ export function WordListScreen() {
                     deck={{ name: d.name }}
                     wordCount={d.wordCount}
                     onPress={() => setDetailDeck(d)}
-                    onStudy={() => router.push('/quiz')}
+                    // Same deck-scoped push as the detail sheet's Study button —
+                    // this swipe action was the OTHER entry point and studied the
+                    // whole language queue.
+                    onStudy={() => router.push({ pathname: '/quiz', params: { deckId: d.id, deckName: d.name } })}
                     onDelete={() => setPendingDeckDelete(d)}
                   />
                 ))}
@@ -417,11 +462,13 @@ export function WordListScreen() {
         onConfirm={() => {
           const d = pendingDeckDelete;
           if (d) {
-            deleteDeck(d);
-            showToast({
-              variant: 'destructive',
-              message: t('wordList.deckDeleted', { name: d.name }),
-              action: { label: t('common.undo'), onPress: () => setRemovedDecks((r) => r.filter((id) => id !== d.id)) },
+            // No Undo action any more: the deck row and its membership are gone
+            // server-side, and a toast that silently fails to restore them is
+            // worse than no toast. The confirm dialog is the guard. (The WORDS
+            // are untouched — that is what the dialog body promises.)
+            deleteDeck.mutate(d.id, {
+              onSuccess: () => showToast({ variant: 'destructive', message: t('wordList.deckDeleted', { name: d.name }) }),
+              onError: () => showToast({ variant: 'destructive', message: t('wordList.deckActionFailed') }),
             });
           }
           setPendingDeckDelete(null);
@@ -435,24 +482,41 @@ export function WordListScreen() {
         visible={createOpen}
         words={words}
         initialWord={createInitialWord}
-        onClose={() => setCreateOpen(false)}
-        onCreate={(name, ids) => {
-          setExtraDecks((e) => [...e, { id: `d_${Date.now()}`, name, wordCount: ids.length, reviews: 0, createdAt: new Date(), lastReviewedAt: null }]);
+        error={createError}
+        pending={createDeck.isPending}
+        onClose={() => {
+          setCreateError(null);
           setCreateOpen(false);
-          showToast({ variant: 'success', message: t('wordList.deckCreated', { name }) });
+        }}
+        onCreate={(name, ids) => {
+          // The picked ids are now PERSISTED as membership. They used to be
+          // discarded — only `ids.length` survived, as the deck's word count.
+          setCreateError(null);
+          createDeck.mutate(
+            { name, cardIds: ids },
+            {
+              onSuccess: () => {
+                setCreateOpen(false);
+                showToast({ variant: 'success', message: t('wordList.deckCreated', { name }) });
+              },
+              onError: (e) => setCreateError(deckErrorMessage(e, t)),
+            },
+          );
         }}
       />
 
       {/* W-06 — Deck detail */}
       <DeckDetailSheet
         deck={detailDeck}
-        words={words}
         removed={removed}
-        removedFromDeck={removedFromDeck}
         onClose={() => setDetailDeck(null)}
         onStudy={() => {
+          const d = detailDeck;
           setDetailDeck(null);
-          router.push('/quiz');
+          // 2026-07-30: actually studies THIS deck. It used to push a bare
+          // /quiz, i.e. the whole language queue — invisible while deck
+          // contents were fake, a visible lie now that they aren't.
+          if (d != null) router.push({ pathname: '/quiz', params: { deckId: d.id, deckName: d.name } });
         }}
         onDelete={(d) => setPendingDeckDelete(d)}
         onWordPress={(w) => setDeckWordDetail(w)}
@@ -479,7 +543,22 @@ export function WordListScreen() {
         confirmLabel={t('wordList.removeConfirm')}
         destructive
         onConfirm={() => {
-          if (pendingRemove) setRemovedFromDeck((s) => new Set(s).add(`${pendingRemove.deck.id}|${pendingRemove.word.id}`));
+          const pr = pendingRemove;
+          if (pr) {
+            removeCardFromDeck.mutate(
+              { deckId: pr.deck.id, cardId: pr.word.id },
+              {
+                onSuccess: () =>
+                  showToast({
+                    variant: 'destructive',
+                    message: t('wordList.removedFromDeck', { word: pr.word.native, deck: pr.deck.name }),
+                    // Undo is honest here — re-adding is a real, idempotent write.
+                    action: { label: t('common.undo'), onPress: () => addCardToDeck.mutate({ deckId: pr.deck.id, cardId: pr.word.id }) },
+                  }),
+                onError: () => showToast({ variant: 'destructive', message: t('wordList.deckActionFailed') }),
+              },
+            );
+          }
           setPendingRemove(null);
         }}
         onClose={() => setPendingRemove(null)}
@@ -489,11 +568,15 @@ export function WordListScreen() {
       <AddToDeckSheet
         word={addToDeckWord}
         decks={allDecks}
-        added={added}
         onAdd={(w, d) => {
-          setAdded((s) => new Set(s).add(`${d.id}|${w.id}`));
+          addCardToDeck.mutate(
+            { deckId: d.id, cardId: w.id },
+            {
+              onSuccess: () => showToast({ variant: 'success', message: t('wordList.addedToDeck', { deck: d.name }) }),
+              onError: () => showToast({ variant: 'destructive', message: t('wordList.deckActionFailed') }),
+            },
+          );
           setAddToDeckWord(null);
-          showToast({ variant: 'success', message: t('wordList.addedToDeck', { deck: d.name }) });
         }}
         onCreateNew={() => {
           const w = addToDeckWord;
@@ -753,7 +836,24 @@ function WordPicker({
 }
 
 // W-05 — Create custom deck: name + word selection (initialWord pre-selects + pins).
-function CreateDeckSheet({ visible, words, initialWord, onClose, onCreate }: { visible: boolean; words: WordListItem[]; initialWord: WordListItem | null; onClose: () => void; onCreate: (name: string, ids: string[]) => void }) {
+function CreateDeckSheet({
+  visible,
+  words,
+  initialWord,
+  error,
+  pending,
+  onClose,
+  onCreate,
+}: {
+  visible: boolean;
+  words: WordListItem[];
+  initialWord: WordListItem | null;
+  /** Server rejection, already localised (deck_name_taken / cap / premium). */
+  error: string | null;
+  pending: boolean;
+  onClose: () => void;
+  onCreate: (name: string, ids: string[]) => void;
+}) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const [name, setName] = useState('');
@@ -773,7 +873,7 @@ function CreateDeckSheet({ visible, words, initialWord, onClose, onCreate }: { v
       else next.add(id);
       return next;
     });
-  const canCreate = name.trim() !== '' && selected.size > 0;
+  const canCreate = name.trim() !== '' && selected.size > 0 && !pending;
   return (
     <Sheet visible={visible} onClose={onClose} title={t('wordList.createDeckTitle')}>
       <TextInput
@@ -784,6 +884,7 @@ function CreateDeckSheet({ visible, words, initialWord, onClose, onCreate }: { v
         accessibilityLabel={t('wordList.deckNamePlaceholder')}
         style={[styles.deckNameInput, { fontFamily: theme.fonts.sans.medium, color: theme.color.textStrong }]}
       />
+      {error != null && <RawText style={styles.deckNameError}>{error}</RawText>}
       <RawText style={styles.pickerLabel}>{t('wordList.selectWords', { count: selected.size })}</RawText>
       <WordPicker words={words} selected={selected} onToggle={toggle} />
       <View style={styles.pickerCta}>
@@ -793,14 +894,17 @@ function CreateDeckSheet({ visible, words, initialWord, onClose, onCreate }: { v
   );
 }
 
-// W-06 — Deck detail: stats (Words · Reviews · Created) + tier-ordered word list (press →
-// word detail, swipe → remove) + Delete/Study footer. Membership isn't modeled in the mock,
-// so it shows a tier-sorted slice of the library as stand-in contents.
+// W-06 — Deck detail: stats (Words · Reviews · Created) + word list (press →
+// word detail, swipe → remove) + Delete/Study footer.
+//
+// 2026-07-30: contents are REAL membership (`deck_cards` via useDeckWords).
+// They used to be `words.slice(0, deck.wordCount)` — a positional prefix of the
+// entire library — which is how a "Food" deck came to display взять / шутка /
+// принять, and why editing an unrelated word appeared to make it "vanish" from
+// its deck: the edit invalidated ['words'], the refetch reshuffled the prefix.
 function DeckDetailSheet({
   deck,
-  words,
   removed,
-  removedFromDeck,
   onClose,
   onStudy,
   onDelete,
@@ -808,9 +912,8 @@ function DeckDetailSheet({
   onRemoveWord,
 }: {
   deck: DeckSummary | null;
-  words: WordListItem[];
+  /** Locally-deleted card ids (optimistic) — a deleted word leaves its decks too. */
   removed: string[];
-  removedFromDeck: Set<string>;
   onClose: () => void;
   onStudy: () => void;
   onDelete: (d: DeckSummary) => void;
@@ -818,15 +921,19 @@ function DeckDetailSheet({
   onRemoveWord: (deck: DeckSummary, w: WordListItem) => void;
 }) {
   const { t } = useTranslation();
-  const deckWords = useMemo(() => {
-    if (deck == null) return [];
-    return words
-      .slice(0, deck.wordCount)
-      .filter((w) => !removed.includes(w.id)) // globally deleted words drop from the deck too
-      .filter((w) => !removedFromDeck.has(`${deck.id}|${w.id}`))
-      // 18 §A4: implicit lists default to due-soonest — surface what needs review.
-      .sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
-  }, [deck, words, removed, removedFromDeck]);
+  const { words: members, isLoading } = useDeckWords(deck?.id ?? null);
+  const deckWords = useMemo(
+    () =>
+      members
+        .filter((w) => !removed.includes(w.id)) // globally deleted words drop from the deck too
+        // 18 §A4: implicit lists default to due-soonest — surface what needs review.
+        .sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime()),
+    [members, removed],
+  );
+  // Archived words are IN the deck (18 §E3 keeps them in list contexts) but not
+  // in the review queue, so a deck whose words are all archived would offer a
+  // session that resolves to nothing. Gate Study on what's actually studyable.
+  const studyableCount = useMemo(() => deckWords.filter((w) => !w.suspended).length, [deckWords]);
   return (
     <Sheet visible={deck != null} onClose={onClose} title={deck?.name}>
       {deck != null && (
@@ -834,12 +941,14 @@ function DeckDetailSheet({
           <DetailStats
             style={styles.deckStats}
             items={[
-              { label: t('wordList.deckWordsLabel'), value: String(deck.wordCount) },
+              // Read from the LIST, not the summary: one number, one source, so
+              // the tile and the rows below it can never disagree again.
+              { label: t('wordList.deckWordsLabel'), value: isLoading ? '—' : String(deckWords.length) },
               { label: t('wordList.deckReviewsLabel'), value: String(deck.reviews) },
               { label: t('wordList.deckLastReviewedLabel'), value: deck.lastReviewedAt != null ? addedLabel(deck.lastReviewedAt, t) : t('wordList.lastReviewedNever') },
             ]}
           />
-          <List scroll style={styles.deckWordScroll} isEmpty={deckWords.length === 0} emptyTitle={t('wordList.deckEmptyTitle')} emptyBody={t('wordList.deckEmptyBody')}>
+          <List scroll style={styles.deckWordScroll} isEmpty={!isLoading && deckWords.length === 0} emptyTitle={t('wordList.deckEmptyTitle')} emptyBody={t('wordList.deckEmptyBody')}>
             {deckWords.map((w) => (
               <WordRow key={w.id} word={{ native: w.native, target: w.target, stability: w.stability, dueAt: w.dueAt, reps: w.reps }} onPress={() => onWordPress(w)} onRemoveFromDeck={() => onRemoveWord(deck, w)} />
             ))}
@@ -847,7 +956,10 @@ function DeckDetailSheet({
           <ButtonRow
             style={styles.pickerCta}
             left={{ title: t('wordList.deleteDeck'), variant: 'destructive', onPress: () => onDelete(deck) }}
-            right={{ title: t('wordList.studyDeck'), variant: 'primary', onPress: onStudy }}
+            // Don't offer a session for a deck that has none — pushing into the
+            // quiz just to show an empty state is a worse answer than a button
+            // that plainly isn't available yet.
+            right={{ title: t('wordList.studyDeck'), variant: 'primary', disabled: isLoading || studyableCount === 0, onPress: onStudy }}
           />
         </>
       )}
@@ -860,20 +972,22 @@ function DeckDetailSheet({
 function AddToDeckSheet({
   word,
   decks,
-  added,
   onAdd,
   onCreateNew,
   onClose,
 }: {
   word: WordListItem | null;
   decks: DeckSummary[];
-  added: Set<string>;
   onAdd: (w: WordListItem, d: DeckSummary) => void;
   onCreateNew: () => void;
   onClose: () => void;
 }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
+  // Server truth. This was a local Set that only the current session's taps ever
+  // wrote — so "Already added" was right until you reloaded, and wrong after.
+  const { deckIds, isLoading: membershipLoading } = useCardDeckIds(word?.id ?? null);
+  const inDeckIds = useMemo(() => new Set(deckIds), [deckIds]);
   return (
     <Sheet visible={word != null} onClose={onClose} title={t('wordList.addToDeckTitle')}>
       {word != null && (
@@ -884,7 +998,12 @@ function AddToDeckSheet({
           ) : (
             <List>
               {decks.map((d) => {
-                const inDeck = added.has(`${d.id}|${word.id}`);
+                // While membership is in flight every row would read as
+                // tappable, and tapping a deck the word is ALREADY in would fire
+                // "Added to X" for a no-op (the RPC is on-conflict-do-nothing).
+                // Disable until we know.
+                const inDeck = inDeckIds.has(d.id);
+                const pending = membershipLoading;
                 return (
                   <ListItem
                     key={d.id}
@@ -895,7 +1014,7 @@ function AddToDeckSheet({
                     }
                     title={d.name}
                     subtitle={t('deckRow.words', { count: d.wordCount })}
-                    disabled={inDeck}
+                    disabled={inDeck || pending}
                     onPress={() => onAdd(word, d)}
                     trailing={inDeck ? <RawText style={styles.alreadyAdded}>{t('wordList.alreadyAdded')}</RawText> : undefined}
                   />
@@ -947,6 +1066,7 @@ const styles = StyleSheet.create((theme) => {
 
     // create / detail / add-to-deck
     deckNameInput: { borderWidth: theme.borderWidth.base, borderColor: color.border, borderRadius: theme.radius.md, paddingHorizontal: 14, height: 48, fontSize: 16, marginBottom: 14 },
+    deckNameError: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.danger, marginTop: -8, marginBottom: 12 },
     pickerLabel: { fontFamily: fonts.sans.bold, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase', color: color.textMuted, marginBottom: 8 },
     pickerSearch: { marginBottom: 8 },
     pickerList: { maxHeight: 320 },

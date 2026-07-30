@@ -18,7 +18,7 @@ import { Pressable, View } from 'react-native';
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
-import { findLanguage, TRANSLATABLE_LANGUAGES } from '@/constants';
+import { findLanguage, languageShortLabel, TRANSLATABLE_LANGUAGES } from '@/constants';
 import { languageName } from '@/domain/derive';
 import type { LanguageCode } from '@/domain/types';
 import { useTranslation } from '@/i18n';
@@ -44,7 +44,9 @@ export function LanguageIndicator({ compact = false }: { compact?: boolean }) {
         style={({ pressed }) => [styles.pill, compact && styles.pillCompact, pressed && { opacity: 0.7 }]}
       >
         <IconGlobe size={compact ? 11 : 12} color={theme.color.brand} />
-        <RawText style={[styles.pillText, compact && styles.pillTextCompact]}>{activeLang.toUpperCase()}</RawText>
+        <RawText numberOfLines={1} style={[styles.pillText, compact && styles.pillTextCompact]}>
+          {languageShortLabel(activeLang as LanguageCode)}
+        </RawText>
         <IconChevronDown size={compact ? 9 : 10} color={theme.color.brand} />
       </Pressable>
       <LanguageSwitcherSheet visible={open} onClose={() => setOpen(false)} />
@@ -216,7 +218,11 @@ function EnrolledLanguageRow({
     <ListItem
       leading={
         <View style={[styles.codeBadge, active && { backgroundColor: theme.color.brand }]}>
-          <RawText style={[styles.codeBadgeText, active && { color: '#fff' }]}>{lang.toUpperCase()}</RawText>
+          {/* Short label keeps every badge the same width, so the list's titles
+              stay on one left edge instead of stepping in for long codes. */}
+          <RawText numberOfLines={1} style={[styles.codeBadgeText, active && { color: '#fff' }]}>
+            {languageShortLabel(lang as LanguageCode)}
+          </RawText>
         </View>
       }
       title={info?.nativeName ?? languageName(lang as LanguageCode)}

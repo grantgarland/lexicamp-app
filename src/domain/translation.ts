@@ -48,7 +48,13 @@ export interface DictionarySense {
 export interface BackTranslation {
   normalizedText: string;
   displayText: string;
-  /** >0 ⇒ dictionary/examples has sentences for this pair. */
+  /** ⚠️ UNRELIABLE — never gate the example-sentence UI on this. Azure
+   *  UNDER-reports it: measured 2026-07-30, en→de `tree`→`baum` reports 0 while
+   *  dictionary/examples returns 15 real sentences (same for several it/ta
+   *  pairs). It IS accurate for es/tlh-Latn and most others, which is exactly
+   *  what makes it look trustworthy on a small sample. The only reliable oracle
+   *  is calling dictionary/examples itself — hence the optimistic button plus a
+   *  terminal empty state, rather than a predictive gate. */
   numExamples: number;
   /** Corpus frequency — sort key (most frequent first). */
   frequencyCount: number;

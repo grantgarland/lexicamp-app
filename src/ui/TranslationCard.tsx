@@ -60,6 +60,18 @@ export interface TranslationCardProps {
   onRequestExample?: (index: number) => void;
   /** True while the example fetch is in flight (drives the button's loading label). */
   exampleLoading?: boolean;
+  /** False when this result's provider can NEVER yield example sentences —
+   *  `azure_mt` / phrase_mt entries, for which supabase/functions/examples
+   *  returns [] unconditionally (16 §3 forbids MT-generated examples). The
+   *  affordance is hidden outright: a button that is guaranteed to resolve to
+   *  nothing is worse than no button. Deterministic, costs no API call. */
+  examplesSupported?: boolean;
+  /** Outcome of the last example fetch for the EXPANDED sense. Azure cannot tell
+   *  us up front whether a given (term, sense) has sentences — numExamples
+   *  under-reports (see BackTranslation) — so the button is optimistic and this
+   *  carries the answer back. 'empty' is terminal for that sense; re-rendering
+   *  the same button instead reads as "the tap did nothing". */
+  exampleStatus?: 'idle' | 'empty' | 'error';
 }
 
 type ButtonState = 'save' | 'saved' | 'delete';
@@ -76,6 +88,8 @@ export function TranslationCard({
   targetLang,
   onRequestExample,
   exampleLoading,
+  examplesSupported = true,
+  exampleStatus = 'idle',
 }: TranslationCardProps) {
   const { theme } = useUnistyles();
 
@@ -116,8 +130,10 @@ export function TranslationCard({
             noticeText={t.noticeText}
             onSave={() => onSave(i)}
             onDelete={() => onDelete(i)}
-            canRequestExample={t.saveable ?? true}
+            canRequestExample={(t.saveable ?? true) && examplesSupported}
             exampleLoading={exampleLoading}
+            /* Only the expanded sense can have an in-flight/settled fetch. */
+            exampleStatus={i === currentIdx ? exampleStatus : 'idle'}
             onRequestExample={onRequestExample != null ? () => onRequestExample(i) : undefined}
           />
         ))}
@@ -137,6 +153,7 @@ function TranslationItem({
   onDelete,
   canRequestExample,
   exampleLoading,
+  exampleStatus = 'idle',
   onRequestExample,
 }: {
   translation: Translation;
@@ -149,6 +166,7 @@ function TranslationItem({
   onDelete: () => void;
   canRequestExample: boolean;
   exampleLoading?: boolean;
+  exampleStatus?: 'idle' | 'empty' | 'error';
   onRequestExample?: () => void;
 }) {
   const { theme } = useUnistyles();
@@ -192,6 +210,13 @@ function TranslationItem({
                 <View style={styles.exampleReqBtn} accessibilityRole="button" accessibilityState={{ busy: true }}>
                   <RNText style={styles.exampleReqText}>{t('translationCard.loadingExample')}</RNText>
                 </View>
+              ) : exampleStatus === 'empty' ? (
+                /* Terminal: the dictionary has no sentence for THIS sense. Say so
+                   once and stop — the server cached the empty result, so there is
+                   nothing to retry and the button must not come back. */
+                <RNText style={styles.exampleNote} testID="result-example-empty">
+                  {t('translationCard.noExample')}
+                </RNText>
               ) : (
                 <Pressable
                   onPress={onRequestExample}
@@ -200,7 +225,9 @@ function TranslationItem({
                   testID="result-example"
                 >
                   <IconBook size={14} color={theme.color.brand} />
-                  <RNText style={styles.exampleReqText}>{t('translationCard.showExample')}</RNText>
+                  <RNText style={styles.exampleReqText}>
+                    {t(exampleStatus === 'error' ? 'translationCard.exampleError' : 'translationCard.showExample')}
+                  </RNText>
                 </Pressable>
               )}
             </View>
@@ -353,6 +380,17 @@ const styles = StyleSheet.create((theme) => {
       borderColor: color.brandSoft,
     },
     exampleReqBtnPressed: { opacity: 0.6 },
+    // Terminal "no example" line — deliberately quiet and non-interactive, sized
+    // to sit where the button was without shifting the card's rhythm.
+    exampleNote: {
+      fontFamily: fonts.sans.regular,
+      fontSize: 13,
+      fontStyle: 'italic',
+      color: color.textMuted,
+      lineHeight: 20,
+      paddingVertical: 10,
+      textAlign: 'center',
+    },
     exampleReqText: { fontFamily: fonts.sans.semibold, fontSize: 13, color: color.brand },
 
     detailsWrap: { marginHorizontal: 18, marginBottom: 12 },

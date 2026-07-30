@@ -11,8 +11,9 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { lh } from '@/theme/theme';
 import { useTranslation } from '@/i18n';
-import { useHomeData, useProgressData } from '@/query/hooks';
+import { useHomeData, useProgressData, useSessionPace } from '@/query/hooks';
 import { LanguageIndicator } from '@/screens/shared/LanguageSwitcher';
 import { usePrefsStore } from '@/store/prefsStore';
 import { useUiStore } from '@/store/uiStore';
@@ -25,6 +26,7 @@ import {
   IconCalendar,
   IconCheck,
   IconChevronDown,
+  IconClock,
   IconChevronUp,
   IconFire,
   IconInfo,
@@ -76,7 +78,12 @@ export function HomeScreen() {
                     breaks the walkthrough's measure() on these anchors. */}
                 <View ref={(node) => { tourTargets.studyCard.current = node; }} collapsable={false}>
                   {snapshot.needRecallTotal > 0 || tourActive ? (
-                    <StudyCard due={snapshot.needRecallTotal} onStudy={() => router.push('/quiz')} />
+                    <StudyCard
+                      due={snapshot.needRecallTotal}
+                      dueToday={snapshot.needRecallToday}
+                      dueTomorrow={snapshot.dueTomorrow}
+                      onStudy={() => router.push('/quiz')}
+                    />
                   ) : (
                     <CaughtUpCard dueTomorrow={snapshot.dueTomorrow} onStudyAhead={() => router.push('/quiz')} />
                   )}
@@ -148,12 +155,68 @@ function GreetingRow({ dateLabel, streakDays, subline }: { dateLabel: string; st
   );
 }
 
-function StudyCard({ due, onStudy }: { due: number; onStudy: () => void }) {
+// The primary CTA on the primary screen. Redesigned 2026-07-30 (Casey): the
+// card only ever said HOW MANY words were waiting, never why now — so the one
+// thing Lexicamp does better than a flashcard pile, scheduling each word to the
+// moment it is about to slip, was invisible on the surface that matters most.
+//
+// It now shows PERISHABILITY, and only from numbers already derived in
+// `homeSnapshot` — no invented metrics (17 §X3 cut a fabricated reviews/day
+// stat once already):
+//   - `needRecallTotal - needRecallToday` = words that came due on an EARLIER
+//     day and are still waiting. Real evidence the schedule is tracking time,
+//     and the honest form of urgency: these are past their best moment.
+//   - `dueTomorrow` = what the scheduler already has queued next, shown when
+//     there is no backlog, so the card reads as a schedule rather than a pile.
+//
+// The WHOLE CARD is the tap target now; the button stays as the affordance.
+function StudyCard({
+  due,
+  dueToday,
+  dueTomorrow,
+  onStudy,
+}: {
+  due: number;
+  dueToday: number;
+  dueTomorrow: number;
+  onStudy: () => void;
+}) {
   const { theme } = useUnistyles();
   const isDark = useColorScheme() === 'dark';
   const { t } = useTranslation();
+  // MEASURED, never guessed: median seconds/card over the user's own recent
+  // sessions (get_session_pace). Null until they have 3 timed sessions, and
+  // null means HIDE — showing "0 min" or a hardcoded constant would be the
+  // fabricated-metric mistake 17 §X3 already cut once.
+  const secondsPerCard = useSessionPace();
+  const estMinutes =
+    secondsPerCard == null ? null : Math.max(1, Math.round((due * secondsPerCard) / 60));
+
+  // Anything due that did NOT come due today has been waiting at least a day.
+  // Clamped: the two counts come from the same pass, but a clock change between
+  // them should degrade to "no backlog", never to a negative.
+  const backlog = Math.max(0, due - dueToday);
+  const scheduleNote =
+    backlog > 0
+      ? t('home.studyBacklog', { count: backlog })
+      : dueTomorrow > 0
+        ? t('home.studyNextUp', { count: dueTomorrow })
+        : null;
+
   return (
-    <View style={styles.studyCard}>
+    <Pressable
+      onPress={onStudy}
+      accessibilityRole="button"
+      // The label carries the count and the backlog, because a screen reader
+      // user gets one announcement for the whole card rather than reading the
+      // number, the unit and the note as three separate stops.
+      accessibilityLabel={
+        scheduleNote == null
+          ? `${t('home.studyNow')}. ${t('home.wordsReadyA11y', { count: due })}`
+          : `${t('home.studyNow')}. ${t('home.wordsReadyA11y', { count: due })} ${scheduleNote}`
+      }
+      style={({ pressed }) => [styles.studyCard, pressed && styles.studyCardPressed]}
+    >
       <Svg style={RNStyleSheet.absoluteFill} width="100%" height="100%">
         <Defs>
           <LinearGradient id="study" x1="0" y1="0" x2="1" y2="1">
@@ -167,19 +230,30 @@ function StudyCard({ due, onStudy }: { due: number; onStudy: () => void }) {
       <View style={styles.studyContent}>
         <RawText style={styles.studyEyebrow}>{t('home.ready')}</RawText>
         <RawText style={styles.studyNumber}>{due}</RawText>
-        <RawText style={styles.studyDue}>{t('home.wordsReady')}</RawText>
-        <RawText style={styles.studySub}>{t('home.studySub')}</RawText>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('home.studyNow')}
-          onPress={onStudy}
-          style={({ pressed }) => [styles.studyBtn, pressed && styles.studyBtnPressed]}
-        >
+        <RawText style={styles.studyDue}>
+          {t('home.wordsReady')}
+          {estMinutes != null && (
+            <RawText style={styles.studyEta}>{t('home.studyEta', { count: estMinutes })}</RawText>
+          )}
+        </RawText>
+
+        {scheduleNote != null && (
+          <View testID="studyScheduleNote" style={styles.studyNote}>
+            <IconClock size={13} color={backlog > 0 ? theme.palette.amber[300] : 'rgba(255, 255, 255, 0.85)'} />
+            <RawText style={[styles.studyNoteText, backlog > 0 && { color: theme.palette.amber[300] }]}>
+              {scheduleNote}
+            </RawText>
+          </View>
+        )}
+
+        {/* Not a Pressable any more — the card handles the press. Kept as the
+            visual affordance so the action still reads as a button. */}
+        <View testID="studyCtaButton" style={styles.studyBtn}>
           <RawText style={styles.studyBtnText}>{t('home.studyNow')}</RawText>
           <IconArrowRight size={16} color={theme.color.textOnAccentCta} />
-        </Pressable>
+        </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -295,8 +369,20 @@ function HowItWorksCard({ defaultOpen = false, dismissible = false }: { defaultO
 function CaughtUpCard({ dueTomorrow, onStudyAhead }: { dueTomorrow: number; onStudyAhead: () => void }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
+  // Same shape as StudyCard (2026-07-30): whole card is the tap target, the
+  // button is the affordance, and the schedule note sits in the same slot — so
+  // the two states read as one component rather than two designs. Only the
+  // surface differs: calm/light when there is nothing due, the blue hero when
+  // there is.
   return (
-    <View style={styles.caughtUpCard}>
+    <Pressable
+      onPress={onStudyAhead}
+      accessibilityRole="button"
+      accessibilityLabel={`${t('home.studyAheadA11y')}. ${
+        dueTomorrow > 0 ? t('home.caughtUpTomorrow', { count: dueTomorrow }) : t('home.caughtUpNothing')
+      }`}
+      style={({ pressed }) => [styles.caughtUpCard, pressed && styles.studyCardPressed]}
+    >
       <View style={styles.caughtUpBadge}>
         <IconCheck size={18} color={theme.color.evergreen} />
       </View>
@@ -304,15 +390,11 @@ function CaughtUpCard({ dueTomorrow, onStudyAhead }: { dueTomorrow: number; onSt
       <RawText style={styles.caughtUpBody}>
         {dueTomorrow > 0 ? t('home.caughtUpTomorrow', { count: dueTomorrow }) : t('home.caughtUpNothing')}
       </RawText>
-      <Pressable
-        onPress={onStudyAhead}
-        accessibilityRole="button"
-        accessibilityLabel={t('home.studyAheadA11y')}
-        style={({ pressed }) => [styles.caughtUpBtn, pressed && { transform: [{ scale: 0.98 }] }]}
-      >
+      <View style={styles.caughtUpBtn}>
         <RawText style={styles.caughtUpBtnText}>{t('home.studyAhead')}</RawText>
-      </Pressable>
-    </View>
+        <IconArrowRight size={16} color={theme.color.textOnAccentCta} />
+      </View>
+    </Pressable>
   );
 }
 
@@ -333,6 +415,29 @@ function AddFirstWordCard({ onAdd }: { onAdd: () => void }) {
     </View>
   );
 }
+
+// One spacing value for the whole study card, so the rhythm is even by
+// construction rather than by four hand-tuned margins that drift apart.
+const STUDY_GAP = 14;
+
+// The hero number needs care that the other rows don't.
+//
+// A tight lineHeight CLIPS it: at 44px, the design system's `tight` leading
+// (1.12) gives a 49px line box, which Spectral Bold's digits overflow — the
+// glyph gets cut. Every other 44px serif in the app (ProgressScreen's
+// `projDays`) sets no lineHeight at all for exactly this reason.
+//
+// But leaving it unset is what produced the original uneven rhythm: the natural
+// box adds ~1.5x of leading that no margin accounts for, so the gap under the
+// number was visibly the largest on the card while declaring the smallest
+// margin. So: take a leading that CANNOT clip, then subtract the half-leading
+// it adds above and below from the gaps either side. The visual rhythm ends up
+// even, and the number is never cut.
+const STUDY_NUM_SIZE = 44;
+const STUDY_NUM_LEADING = lh(STUDY_NUM_SIZE, 'normal'); // 1.5x — comfortably above the face's natural box
+const STUDY_NUM_HALF_LEADING = Math.round((STUDY_NUM_LEADING - STUDY_NUM_SIZE) / 2);
+/** Gap either side of the number, less the leading the line box already adds. */
+const STUDY_NUM_GAP = Math.max(0, STUDY_GAP - STUDY_NUM_HALF_LEADING);
 
 const styles = StyleSheet.create((theme) => {
   const { color, fonts } = theme;
@@ -371,6 +476,8 @@ const styles = StyleSheet.create((theme) => {
     caughtUpBody: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 20, color: color.textMuted, textAlign: 'center', maxWidth: 260, marginBottom: 16 },
     caughtUpBtn: {
       alignSelf: 'stretch',
+      flexDirection: 'row',
+      gap: 8,
       backgroundColor: color.accentCta,
       borderRadius: theme.radius.md,
       paddingVertical: 13,
@@ -382,12 +489,22 @@ const styles = StyleSheet.create((theme) => {
 
     // No `overflow: hidden` — that would clip the Study button's glow. The gradient is
     // rounded via the SVG Rect's rx/ry instead, so the card corners still read clean.
+    // No `overflow: 'hidden'` — the gradient <Rect> already has rx/ry, so the
+    // corners are rounded without it, and clipping would cut off the CTA's
+    // orange glow (boxShadow) at the card edges.
     studyCard: { borderRadius: theme.radius.lg, boxShadow: theme.shadow.brand },
+    studyCardPressed: { transform: [{ scale: 0.985 }], opacity: 0.95 },
+    // Schedule note: amber when there is a backlog (past its best moment),
+    // plain white when it is just the next-up preview.
+    studyEta: { fontFamily: fonts.sans.regular, fontSize: 15, lineHeight: 20, color: 'rgba(255, 255, 255, 0.8)' },
+    studyNote: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: STUDY_GAP },
+    studyNoteText: { fontFamily: fonts.sans.semibold, fontSize: 13, lineHeight: 18, color: 'rgba(255, 255, 255, 0.85)' },
     studyContent: { paddingHorizontal: 20, paddingTop: 22, paddingBottom: 20 },
-    studyEyebrow: { fontFamily: fonts.sans.medium, fontSize: 12, letterSpacing: 0.5, textTransform: 'uppercase', color: 'rgba(255, 255, 255, 0.65)', marginBottom: 4 },
-    studyNumber: { fontFamily: fonts.serif.bold, fontSize: 44, letterSpacing: -0.9, color: '#fff', marginBottom: 2 },
-    studyDue: { fontFamily: fonts.sans.semibold, fontSize: 15, color: '#fff', marginBottom: 3 },
-    studySub: { fontFamily: fonts.sans.regular, fontSize: 13, color: 'rgba(255, 255, 255, 0.65)', marginBottom: 18 },
+    studyEyebrow: { fontFamily: fonts.sans.medium, fontSize: 12, lineHeight: 16, letterSpacing: 0.5, textTransform: 'uppercase', color: 'rgba(255, 255, 255, 0.65)', marginBottom: STUDY_NUM_GAP },
+    // See STUDY_NUM_* above: a clip-proof line box, with its own leading
+    // subtracted from the gaps either side so the rhythm still reads even.
+    studyNumber: { fontFamily: fonts.serif.bold, fontSize: STUDY_NUM_SIZE, lineHeight: STUDY_NUM_LEADING, letterSpacing: -0.9, color: '#fff', marginBottom: STUDY_NUM_GAP },
+    studyDue: { fontFamily: fonts.sans.semibold, fontSize: 15, lineHeight: 20, color: '#fff', marginBottom: STUDY_GAP },
     studyBtn: {
       backgroundColor: color.accentCta,
       borderRadius: theme.radius.md,
@@ -396,7 +513,6 @@ const styles = StyleSheet.create((theme) => {
       alignItems: 'center',
       justifyContent: 'center',
       gap: 8,
-      boxShadow: '0 4px 12px rgba(232, 119, 34, 0.4)',
     },
     studyBtnPressed: { transform: [{ scale: 0.98 }] },
     studyBtnText: { fontFamily: fonts.sans.bold, fontSize: 16, color: color.textOnAccentCta },

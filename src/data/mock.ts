@@ -8,6 +8,7 @@ import type { BufferedRating, QuizCardItem } from '@/domain/quiz';
 import { assessResultQuality, type DictionarySense, type LookupOutcome, type LookupResult } from '@/domain/translation';
 import type { Card, CardFsrsState, Deck, Entitlement, NotificationPrefs, Profile, SearchDirection } from '@/domain/types';
 import { type DevPlan, type DevUserState, useDevStore } from '@/store/devStore';
+import { getTierByStability, TIERS } from '@/theme/tiers';
 
 import type { DataSource, DeckCards, DeckSummary, Engagement, LeaderboardEntry, ProgressStats, WordListItem } from './DataSource';
 
@@ -212,6 +213,7 @@ function buildWords(userState: DevUserState): WordListItem[] {
         pos: POS_POOL[g % POS_POOL.length],
         example: EXAMPLE_FRAMES[g % EXAMPLE_FRAMES.length].source(w.native),
         exampleTranslation: EXAMPLE_FRAMES[g % EXAMPLE_FRAMES.length].target(w.target),
+        provider: 'azure_dictionary',
         stability: TIER_STABILITY[tierIdx],
         reps: 2 + (g % 9),
         createdAt,
@@ -233,12 +235,85 @@ const PROGRESS_STATS: Record<DevUserState, ProgressStats> = {
   summit: { sessionsTotal: 42, avgAccuracy: 85, bestStreak: 14, daysActive: 30 },
 };
 
-// Custom decks (Premium). Static fixtures; word membership is not modeled in the mock.
-const DECKS: DeckSummary[] = [
-  { id: 'd_travel', name: 'Travel', wordCount: 12, reviews: 9, createdAt: new Date(Date.now() - 24 * DAY), lastReviewedAt: new Date(Date.now() - 2 * DAY) },
-  { id: 'd_business', name: 'Business', wordCount: 8, reviews: 5, createdAt: new Date(Date.now() - 12 * DAY), lastReviewedAt: new Date(Date.now() - 5 * HOUR) },
-  { id: 'd_favorites', name: 'Favorites', wordCount: 5, reviews: 3, createdAt: new Date(Date.now() - 4 * DAY), lastReviewedAt: null },
+// Custom decks (Premium). Membership is REAL in the mock as of 2026-07-30 —
+// previously these were static fixtures with a hardcoded `wordCount` and no
+// contents at all, which is what let the Deck detail sheet ship a positional
+// `words.slice(0, wordCount)` stand-in all the way to a live bug report. The
+// fixture now seeds each deck with a deterministic STRIDE of the scenario's
+// words (so the three decks differ and overlap the way real ones would), the
+// count is DERIVED from membership, and create/delete/add/remove mutate it. The
+// mock exercises the same contract as the live source; a UI that only works
+// against a fixed fixture can't pass here any more.
+const DECK_FIXTURES: { meta: Omit<DeckSummary, 'wordCount'>; stride: number; offset: number }[] = [
+  { meta: { id: 'd_travel', name: 'Travel', reviews: 9, createdAt: new Date(Date.now() - 24 * DAY), lastReviewedAt: new Date(Date.now() - 2 * DAY) }, stride: 3, offset: 0 },
+  { meta: { id: 'd_business', name: 'Business', reviews: 5, createdAt: new Date(Date.now() - 12 * DAY), lastReviewedAt: new Date(Date.now() - 5 * HOUR) }, stride: 4, offset: 1 },
+  { meta: { id: 'd_favorites', name: 'Favorites', reviews: 3, createdAt: new Date(Date.now() - 4 * DAY), lastReviewedAt: null }, stride: 5, offset: 2 },
 ];
+
+let mockDeckMeta: Omit<DeckSummary, 'wordCount'>[] = [];
+let mockDeckMembers = new Map<string, Set<string>>();
+let mockDecksSeededFor: DevUserState | null = null;
+
+/** Re-seed decks + membership when the dev scenario changes (each scenario has a
+ *  different word set, so carrying card ids across would strand memberships). */
+function seedDecks(userState: DevUserState): void {
+  if (mockDecksSeededFor === userState) return;
+  mockDecksSeededFor = userState;
+  mockDeckMembers = new Map();
+  if (userState === 'empty') {
+    mockDeckMeta = []; // new user → decks-tab empty state (they can still create one)
+    return;
+  }
+  const words = buildWords(userState);
+  mockDeckMeta = DECK_FIXTURES.map((f) => f.meta);
+  DECK_FIXTURES.forEach((f) => {
+    mockDeckMembers.set(f.meta.id, new Set(words.filter((_, i) => i % f.stride === f.offset).map((w) => w.id)));
+  });
+}
+
+/** WordListItem → QuizCardItem for a deck-scoped mock session. Recognition below
+ *  the hard-climb tier, recall at and above it — the same shape the fixture
+ *  session uses, derived rather than hand-written. Preserves the real dueAt so
+ *  the due-first ordering and the 18 §2c fill behave like the live source. */
+function buildDeckSession(userState: DevUserState, deckId: string, limit: number): QuizCardItem[] {
+  seedDecks(userState);
+  const ids = mockDeckMembers.get(deckId);
+  if (ids == null) return [];
+  const now = Date.now();
+  return buildWords(userState)
+    .filter((w) => ids.has(w.id) && !w.suspended) // archived words leave the queue (18 §E3)
+    .map((w) => {
+      const tier = getTierByStability(w.stability);
+      const tierIdx = TIERS.findIndex((x) => x.id === tier.id);
+      return {
+        id: w.id,
+        tierId: tier.id,
+        mode: tierIdx >= 2 ? ('recall' as const) : ('recognition' as const),
+        content: {
+          frontWord: tierIdx >= 2 ? w.native : w.target,
+          frontSub: w.pos || undefined,
+          frontPrompt: tierIdx >= 2 ? 'Recall the word.' : "What's the translation?",
+          backWord: tierIdx >= 2 ? w.target : w.native,
+          backPos: w.pos || undefined,
+          backExample: w.example || undefined,
+        },
+        fsrs: {
+          cardId: w.id,
+          userId: USER_ID,
+          stability: w.stability,
+          difficulty: 5,
+          dueAt: w.dueAt,
+          lastReviewAt: new Date(now - Math.round(w.stability * DAY)),
+          state: 2 as const,
+          reps: w.reps,
+          lapses: 0,
+          learningSteps: 0,
+        },
+      };
+    })
+    .sort((a, b) => a.fsrs.dueAt.getTime() - b.fsrs.dueAt.getTime())
+    .slice(0, Math.max(0, limit));
+}
 
 // ── Mock dictionary (Azure dictionary/lookup-shaped, per 16 §1) ───────────────
 // 'fly' senses mirror the real Azure documentation example; the generic path
@@ -413,15 +488,69 @@ export const mockDataSource: DataSource = {
   },
   async getDecks(lang): Promise<DeckSummary[]> {
     if ((lang ?? mockActiveLang) !== 'es') return []; // fresh language (Phase D demo)
-    // New user (empty scenario) has no decks yet → decks-tab empty state.
-    return scenario().userState === 'empty' ? [] : DECKS;
+    seedDecks(scenario().userState);
+    // wordCount is DERIVED from membership — the count and the list can no
+    // longer disagree, which is the whole point of the 2026-07-30 rework.
+    return mockDeckMeta.map((d) => ({ ...d, wordCount: mockDeckMembers.get(d.id)?.size ?? 0 }));
+  },
+  async getDeckWords(deckId: string, lang?: string): Promise<WordListItem[]> {
+    if ((lang ?? mockActiveLang) !== 'es') return []; // fresh language (Phase D demo)
+    seedDecks(scenario().userState);
+    const ids = mockDeckMembers.get(deckId);
+    if (ids == null) return [];
+    // Ordered like the live source (newest first); buildWords is already newest-first.
+    return buildWords(scenario().userState).filter((w) => ids.has(w.id));
+  },
+  async getCardDeckIds(cardId: string): Promise<string[]> {
+    if (mockActiveLang !== 'es') return []; // fresh language (Phase D demo)
+    seedDecks(scenario().userState);
+    return [...mockDeckMembers.entries()].filter(([, ids]) => ids.has(cardId)).map(([id]) => id);
+  },
+  async createDeck(name: string, cardIds: string[], lang?: string): Promise<string> {
+    // Mock fixtures only exist for 'es' (Phase D demo). Creating a deck under
+    // another language would occupy the name space and then be invisible,
+    // because getDecks returns [] for those — so reject it the way the server
+    // rejects an unseeded language.
+    if ((lang ?? mockActiveLang) !== 'es') throw new Error('language_not_enrolled');
+    seedDecks(scenario().userState);
+    const clean = name.trim().replace(/\s+/g, ' ');
+    // Same rejection tokens as the RPC so the sheet's error path is exercised
+    // in mock mode too (the premium gate is left to the dev plan knob).
+    if (clean.length < 1 || clean.length > 40) throw new Error('deck_name_invalid');
+    if (mockDeckMeta.some((d) => d.name.trim().toLowerCase() === clean.toLowerCase())) throw new Error('deck_name_taken');
+    const id = `d_${mockDeckMeta.length}_${clean.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    mockDeckMeta = [...mockDeckMeta, { id, name: clean, reviews: 0, createdAt: new Date(), lastReviewedAt: null }];
+    const known = new Set(buildWords(scenario().userState).map((w) => w.id));
+    mockDeckMembers.set(id, new Set(cardIds.filter((c) => known.has(c))));
+    return id;
+  },
+  async deleteDeck(deckId: string): Promise<void> {
+    seedDecks(scenario().userState);
+    mockDeckMeta = mockDeckMeta.filter((d) => d.id !== deckId);
+    mockDeckMembers.delete(deckId); // membership goes; the WORDS are untouched
+  },
+  async addCardToDeck(deckId: string, cardId: string): Promise<void> {
+    seedDecks(scenario().userState);
+    const ids = mockDeckMembers.get(deckId);
+    if (ids == null) throw new Error('deck not found');
+    ids.add(cardId); // idempotent, like the RPC's on-conflict-do-nothing
+  },
+  async removeCardFromDeck(deckId: string, cardId: string): Promise<void> {
+    seedDecks(scenario().userState);
+    mockDeckMembers.get(deckId)?.delete(cardId);
   },
   async getWords(lang?: string): Promise<WordListItem[]> {
     if ((lang ?? mockActiveLang) !== 'es') return []; // fresh language (Phase D demo)
     return buildWords(scenario().userState);
   },
-  async getDueCards(limit: number, lang?: string): Promise<QuizCardItem[]> {
+  async getDueCards(limit: number, lang?: string, deckId?: string): Promise<QuizCardItem[]> {
     if ((lang ?? mockActiveLang) !== 'es') return []; // fresh language (Phase D demo)
+    // Deck-scoped session (2026-07-30): composed from the deck's ACTUAL member
+    // words, not from the QUIZ_SESSION fixture. The fixture's ids (`q_*`) are
+    // disjoint from the word ids membership is keyed on (`w<tier>_<j>`), so
+    // filtering it would silently return nothing — and slicing it to the member
+    // COUNT would be the positional-prefix lie this whole rework deleted.
+    if (deckId != null) return buildDeckSession(scenario().userState, deckId, limit);
     // Synthesize an in-band scheduling state per item so the results screen can
     // compute real FSRS tier transitions (domain/fsrs.tierTransition).
     // 18 §2c fill semantics, mirrored from the live source: the first items are
@@ -538,7 +667,11 @@ export const mockDataSource: DataSource = {
     else next.delete(cardId);
     mockArchived = next;
   },
-  async commitQuizSession(_payload: { ratings: BufferedRating[] }): Promise<void> {
+  async getSessionPace(): Promise<number | null> {
+    // A plausible measured pace so the mock scenarios exercise the estimate row.
+    return 7.5;
+  },
+  async commitQuizSession(_payload: { ratings: BufferedRating[]; durationMs?: number }): Promise<void> {
     // TODO(P4 data): batch-write per 03 (update card_fsrs_state via ts-fsrs, append
     // review_logs, write quiz_completed event) — Supabase + ts-fsrs. No-op in mock.
   },

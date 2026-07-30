@@ -15,7 +15,7 @@ export interface Tier {
   numeral: number;          // 1–5 (milestones)
   chipGlyph: number | string; // in-quiz chip glyph (1–4, '★')
   cefr: string;
-  wordCount: number;        // cumulative words at tier
+  wordCount: number;        // mastered-word unlock threshold (mirrors MOUNTAIN_TIERS.masteredMin)
   color: string; accent: string;
   bg: string; border: string; text: string; labelColor: string;
   badgeBg: string; badgeText: string; badgeBorder: string;
@@ -47,7 +47,7 @@ const DARK_AMBER = {
 export const TIERS: Tier[] = [
   {
     id: 'bc', name: 'Base Camp', short: 'BC', numeral: 1, chipGlyph: 1,
-    cefr: 'A1', wordCount: 100,
+    cefr: 'A1', wordCount: 0,
     color: c.green[500], accent: c.green[500],
     bg: c.green[100], border: c.green[300], text: c.green[900], labelColor: c.green[800],
     badgeBg: c.green[100], badgeText: c.green[900], badgeBorder: c.green[300],
@@ -59,7 +59,7 @@ export const TIERS: Tier[] = [
   },
   {
     id: 'abc', name: 'Adv. Base Camp', short: 'ABC', numeral: 2, chipGlyph: 2,
-    cefr: 'A2', wordCount: 500,
+    cefr: 'A2', wordCount: 100,
     color: c.green[400], accent: c.green[400],
     bg: c.green[50], border: c.green[200], text: c.green[800], labelColor: c.green[700],
     badgeBg: c.green[50], badgeText: c.green[800], badgeBorder: c.green[200],
@@ -71,7 +71,7 @@ export const TIERS: Tier[] = [
   },
   {
     id: 'hc', name: 'High Camp', short: 'HC', numeral: 3, chipGlyph: 3,
-    cefr: 'B1 / B2', wordCount: 1000,
+    cefr: 'B1 / B2', wordCount: 500,
     color: c.blue[600], accent: c.blue[600],
     bg: c.blue[100], border: c.blue[300], text: c.blue[900], labelColor: c.blue[800],
     badgeBg: c.blue[100], badgeText: c.blue[900], badgeBorder: c.blue[300],
@@ -83,7 +83,7 @@ export const TIERS: Tier[] = [
   },
   {
     id: 'sr', name: 'Summit Ridge', short: 'SR', numeral: 4, chipGlyph: 4,
-    cefr: 'C1', wordCount: 2000,
+    cefr: 'C1', wordCount: 1500,
     color: c.blue[400], accent: c.blue[400],
     bg: c.blue[50], border: c.blue[200], text: c.blue[800], labelColor: c.blue[700],
     badgeBg: c.blue[50], badgeText: c.blue[800], badgeBorder: c.blue[200],

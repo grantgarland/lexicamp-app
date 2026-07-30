@@ -36,6 +36,11 @@ export interface WordListItem {
   example: string;
   /** The example's translation (target-language side; '' when absent). */
   exampleTranslation: string;
+  /** translations_cache.provider. `azure_mt` (phrase_mt) entries can NEVER carry
+   *  example sentences — supabase/functions/examples returns [] for them by
+   *  contract (16 §3 forbids MT-generated examples) — so the UI hides the
+   *  "Show example sentence" affordance rather than offering a dead end. */
+  provider: 'azure_dictionary' | 'azure_mt';
   /** FSRS stability (days) → drives the row's tier indicator. */
   stability: number;
   /** Completed reviews so far. */
@@ -89,6 +94,15 @@ export interface AccountIdentity {
  *  `username_change_limit` = free tier's single change already spent;
  *  `rate_limited` = 20 saves/day cap; `username_invalid` = name does not
  *  decompose into official-list words (impossible via the cycle UI). */
+/** Tokens the deck-membership RPCs reject with (Error.message), 2026-07-30.
+ *  `premium_required` = custom decks are a Premium feature (server-enforced;
+ *  the UI gates first); `deck_name_taken` = you already have a deck with this
+ *  name IN THIS LANGUAGE; `deck_name_invalid` = empty or >40 chars after
+ *  normalisation; `deck_cap_reached` = 50 custom decks per language;
+ *  `main_deck_undeletable` = the hidden per-language deck can't be deleted or
+ *  written to (its cascade would take every card in the language). */
+export type DeckWriteError = 'premium_required' | 'deck_name_taken' | 'deck_name_invalid' | 'deck_cap_reached' | 'main_deck_undeletable' | 'language_not_enrolled';
+
 export type UsernameSaveError = 'username_taken' | 'username_invalid' | 'username_change_limit' | 'rate_limited';
 
 /** 20 §4: one row of `get_leaderboard` — a (user, learning-language) pair
@@ -148,15 +162,54 @@ export interface DataSource {
   getProgressStats(): Promise<ProgressStats>;
   /** Custom decks (Premium feature). */
   getDecks(lang?: string): Promise<DeckSummary[]>;
+  /** Words in ONE custom deck (newest first), resolved through the `deck_cards`
+   *  join. Membership is ADDITIVE — the card stays in its language's main deck
+   *  via `cards.deck_id`, which is what keeps every language-scoped read intact.
+   *  Returns archived words too, exactly like `getWords`: the deck's own count
+   *  and its list must agree, and 18 §E3 keeps archived words in list contexts. */
+  getDeckWords(deckId: string, lang?: string): Promise<WordListItem[]>;
+  /** The custom decks one card belongs to — powers Add-to-Deck's "Already
+   *  added" state, which until 2026-07-30 was local component state that no
+   *  mutation ever wrote (and so lied after any reload). */
+  getCardDeckIds(cardId: string): Promise<string[]>;
+  /** Create a custom deck, optionally seeded with words (`create_deck` RPC;
+   *  Premium). The server normalises the name, enforces per-language name
+   *  uniqueness and the deck cap, and drops any seed card that isn't the
+   *  caller's or isn't in this language. Resolves the new deck id.
+   *  Rejects with Error(DeckWriteError). */
+  createDeck(name: string, cardIds: string[], lang?: string): Promise<string>;
+  /** Delete a custom deck (`delete_deck` RPC). The deck and its membership rows
+   *  go; the WORDS are untouched — they live in the main deck. Rejects with
+   *  Error('main_deck_undeletable') if pointed at the hidden main deck. */
+  deleteDeck(deckId: string): Promise<void>;
+  /** Add a saved word to a custom deck (`add_card_to_deck` RPC; Premium).
+   *  Idempotent — a double-tap or an outbox replay is a no-op, not an error. */
+  addCardToDeck(deckId: string, cardId: string): Promise<void>;
+  /** Remove a word from a custom deck (`remove_card_from_deck` RPC). The word
+   *  stays in the library. NEVER premium-gated — same covenant as clearing a
+   *  translation override: a lapsed subscription can always undo its own state. */
+  removeCardFromDeck(deckId: string, cardId: string): Promise<void>;
   /** The user's saved words for the Word List (newest first). */
   getWords(lang?: string): Promise<WordListItem[]>;
   /** The study-session queue (18 §2c): everything due now (dueAt asc — oldest
    *  overdue first), FILLED with the next-due upcoming cards when the due count
    *  is under `limit`, so a session always uses the user's full quiz length
-   *  while words exist. Returns fewer only when the deck itself is smaller. */
-  getDueCards(limit: number, lang?: string): Promise<QuizCardItem[]>;
-  /** Commit a completed session's buffered ratings (03 batch write). */
-  commitQuizSession(payload: { ratings: BufferedRating[] }): Promise<void>;
+   *  while words exist. Returns fewer only when the deck itself is smaller.
+   *  `deckId` (2026-07-30) scopes the session to ONE custom deck's membership —
+   *  what "Study Deck" has always claimed to do and, until deck contents became
+   *  real, could not. Omitted = the whole active language (Home's "Study now"). */
+  getDueCards(limit: number, lang?: string, deckId?: string): Promise<QuizCardItem[]>;
+  /** Commit a completed session's buffered ratings (03 batch write).
+   *  `durationMs` is the wall-clock the CLIENT measured for the session. It has
+   *  to come from here: review_logs.reviewed_at is the transaction's commit
+   *  time (one `default now()` for the whole batch), so the server cannot
+   *  reconstruct per-answer timing. Optional — omit it and the server simply
+   *  records no duration for that session. */
+  commitQuizSession(payload: { ratings: BufferedRating[]; durationMs?: number }): Promise<void>;
+  /** Median seconds-per-card over the user's recent sessions, or null when
+   *  there isn't enough signal (fewer than 3 timed sessions). Null means HIDE
+   *  the estimate — never treat it as zero. */
+  getSessionPace(): Promise<number | null>;
   /** Notification prefs (2.5) — read + partial update. */
   getNotificationPrefs(): Promise<NotificationPrefs>;
   updateNotificationPrefs(prefs: Partial<NotificationPrefs>): Promise<void>;

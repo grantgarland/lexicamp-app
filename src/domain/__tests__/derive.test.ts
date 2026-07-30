@@ -70,16 +70,35 @@ describe('wordLifecycle', () => {
 
 // ── mountainTier ─────────────────────────────────────────────────────────────
 describe('mountainTier', () => {
+  // Ladder rev 2026-07-30: 0 / 100 / 500 / 1500 / 3000 mastered words.
+  // Every boundary is asserted on BOTH sides so an off-by-one in the loop in
+  // mountainTier() cannot pass.
   it('maps mastered counts to tiers at exact thresholds', () => {
     expect(mountainTier(0).id).toBe('bc');
-    expect(mountainTier(499).id).toBe('bc');
-    expect(mountainTier(500).id).toBe('abc');
-    expect(mountainTier(1499).id).toBe('abc');
-    expect(mountainTier(1500).id).toBe('hc');
-    expect(mountainTier(2999).id).toBe('hc');
-    expect(mountainTier(3000).id).toBe('sr');
-    expect(mountainTier(5000).id).toBe('summit');
+    expect(mountainTier(99).id).toBe('bc');
+    expect(mountainTier(100).id).toBe('abc');
+    expect(mountainTier(499).id).toBe('abc');
+    expect(mountainTier(500).id).toBe('hc');
+    expect(mountainTier(1499).id).toBe('hc');
+    expect(mountainTier(1500).id).toBe('sr');
+    expect(mountainTier(2999).id).toBe('sr');
+    expect(mountainTier(3000).id).toBe('summit');
     expect(mountainTier(100000).id).toBe('summit');
+  });
+
+  it('pins the exact ladder so a silent threshold edit fails here', () => {
+    expect(MOUNTAIN_TIERS.map((t) => [t.id, t.masteredMin])).toEqual([
+      ['bc', 0],
+      ['abc', 100],
+      ['hc', 500],
+      ['sr', 1500],
+      ['summit', 3000],
+    ]);
+  });
+
+  it('negative / non-finite mastered counts clamp to Base Camp', () => {
+    expect(mountainTier(-1).id).toBe('bc');
+    expect(mountainTier(Number.NaN).id).toBe('bc');
   });
 
   it('thresholds ascend and ids exist in the tier registry', () => {
@@ -89,6 +108,18 @@ describe('mountainTier', () => {
       prev = t.masteredMin;
       expect(getTier(t.id).id).toBe(t.id);
     }
+  });
+
+  // The registry mirrors the ladder on `wordCount`. These two lists drifting
+  // apart is exactly the latent-reference bug this rewrite was meant to kill,
+  // so assert parity in BOTH order and value.
+  it('theme/tiers.ts wordCount mirrors MOUNTAIN_TIERS.masteredMin', () => {
+    expect(TIERS.map((t) => t.id)).toEqual(MOUNTAIN_TIERS.map((t) => t.id));
+    expect(TIERS.map((t) => t.wordCount)).toEqual(MOUNTAIN_TIERS.map((t) => t.masteredMin));
+  });
+
+  it('registry CEFR labels match the mountain ladder', () => {
+    expect(TIERS.map((t) => t.cefr)).toEqual(MOUNTAIN_TIERS.map((t) => t.cefr));
   });
 });
 
@@ -236,5 +267,65 @@ describe('homeSnapshot — archived (suspended) cards (07-17c ruling)', () => {
     expect(snap.masteredCount).toBe(2); // earned: archived counts
     expect(snap.tierCounts.reduce((a, b) => a + b, 0)).toBe(2);
     expect(snap.needRecallTotal).toBe(1); // queue: archived excluded
+  });
+});
+
+// ── Study-card backlog (Home CTA, 2026-07-30) ───────────────────────────────
+// The card's urgency line is `needRecallTotal - needRecallToday`: words that
+// came due on an EARLIER day and are still waiting. It is the only honest
+// urgency signal available without inventing a metric, so the two counts it
+// subtracts have to keep meaning what the card assumes they mean.
+describe('homeSnapshot due-queue split (drives the study-card backlog line)', () => {
+  const at = (d: Date) => d;
+
+  it('separates words that came due today from an older backlog', () => {
+    const yesterday = new Date(NOW.getTime() - 30 * HOUR);
+    const earlierToday = new Date(NOW.getTime() - 2 * HOUR);
+    const cards = [card({ id: 'a' }), card({ id: 'b' }), card({ id: 'c' })];
+    const states = [
+      state({ cardId: 'a', state: 2, reps: 3, dueAt: at(yesterday) }),
+      state({ cardId: 'b', state: 2, reps: 3, dueAt: at(new Date(NOW.getTime() - 50 * HOUR)) }),
+      state({ cardId: 'c', state: 2, reps: 3, dueAt: at(earlierToday) }),
+    ];
+    const snap = homeSnapshot(cards, states, NOW);
+    expect(snap.needRecallTotal).toBe(3);
+    expect(snap.needRecallToday).toBe(1); // only 'c' came due today
+    expect(snap.needRecallTotal - snap.needRecallToday).toBe(2); // the backlog
+  });
+
+  it('reports no backlog when everything came due today', () => {
+    const cards = [card({ id: 'a' }), card({ id: 'b' })];
+    const states = [
+      state({ cardId: 'a', state: 2, reps: 3, dueAt: new Date(NOW.getTime() - 1 * HOUR) }),
+      state({ cardId: 'b', state: 2, reps: 3, dueAt: new Date(NOW.getTime() - 3 * HOUR) }),
+    ];
+    const snap = homeSnapshot(cards, states, NOW);
+    expect(snap.needRecallTotal - snap.needRecallToday).toBe(0);
+  });
+
+  it('never lets the backlog go negative', () => {
+    // The card clamps, but the invariant should hold at the source too:
+    // today's due can never exceed the total due.
+    const cards = [card({ id: 'a' }), card({ id: 'b' }), card({ id: 'c' })];
+    const states = [
+      state({ cardId: 'a', state: 2, reps: 3, dueAt: new Date(NOW.getTime() - 1 * HOUR) }),
+      state({ cardId: 'b', state: 2, reps: 3, dueAt: new Date(NOW.getTime() - 40 * HOUR) }),
+      state({ cardId: 'c', state: 2, reps: 3, dueAt: new Date(NOW.getTime() + 2 * HOUR) }),
+    ];
+    const snap = homeSnapshot(cards, states, NOW);
+    expect(snap.needRecallToday).toBeLessThanOrEqual(snap.needRecallTotal);
+  });
+
+  it('keeps archived words out of the backlog — they never resurface', () => {
+    // 07-17c: suspended cards leave the review queue, so they must not show up
+    // as "waiting since yesterday" on a card the user cannot act on.
+    const cards = [card({ id: 'a', suspended: true }), card({ id: 'b' })];
+    const states = [
+      state({ cardId: 'a', state: 2, reps: 3, dueAt: new Date(NOW.getTime() - 40 * HOUR) }),
+      state({ cardId: 'b', state: 2, reps: 3, dueAt: new Date(NOW.getTime() - 40 * HOUR) }),
+    ];
+    const snap = homeSnapshot(cards, states, NOW);
+    expect(snap.needRecallTotal).toBe(1);
+    expect(snap.needRecallTotal - snap.needRecallToday).toBe(1);
   });
 });

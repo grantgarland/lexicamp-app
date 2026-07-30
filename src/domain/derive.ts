@@ -3,7 +3,7 @@
 // (today/total), due-tomorrow, added-today, word lifecycle, and the per-user
 // mountain tier → CEFR. Screens render these over raw domain entities; the math
 // lives HERE so it stays identical no matter where the data comes from.
-import { findLanguage } from '@/constants';
+import { findLanguage, languageShortLabel } from '@/constants';
 import i18n from '@/i18n';
 import { getTierByStability, TIERS, type TierId } from '@/theme/tiers';
 
@@ -66,7 +66,8 @@ export interface DirectionLangs {
   /** Source/target ISO codes for this direction (e.g. 'en' / 'es'). */
   sourceCode: LanguageCode;
   targetCode: LanguageCode;
-  /** Short uppercase chip labels (e.g. 'EN' / 'ES'). */
+  /** Short uppercase chip labels (e.g. 'EN' / 'ES'). Primary subtag only —
+   *  'tlh-Latn' → 'TLH' — so the direction toggle can't outgrow the header. */
   sourceShort: string;
   targetShort: string;
   /** Full display names (e.g. 'English' / 'Spanish'). */
@@ -102,20 +103,25 @@ export function directionLangs(
   return {
     sourceCode,
     targetCode,
-    sourceShort: sourceCode.toUpperCase(),
-    targetShort: targetCode.toUpperCase(),
+    sourceShort: languageShortLabel(sourceCode),
+    targetShort: languageShortLabel(targetCode),
     sourceName: languageName(sourceCode),
     targetName: languageName(targetCode),
   };
 }
 
 // ── Per-user mountain tier (03 "Mountain-progression tier") ──────────────────
+// Ladder rev 2026-07-30 (Casey): unlock thresholds are 0 / 100 / 500 / 1500 /
+// 3000 mastered words — bands read BC 0–99, ABC 100–499, HC 500–1,499,
+// SR 1,500–2,999, Summit 3,000+. Driver is UNCHANGED: masteredCount, i.e.
+// words at MASTERY_STABILITY (30d) or above — not saved-word count.
+// Mirrored by `theme/tiers.ts` TIERS[i].wordCount; a guard test asserts parity.
 export const MOUNTAIN_TIERS: { id: TierId; cefr: string; masteredMin: number }[] = [
   { id: 'bc', cefr: 'A1', masteredMin: 0 },
-  { id: 'abc', cefr: 'A2', masteredMin: 500 },
-  { id: 'hc', cefr: 'B1 / B2', masteredMin: 1500 },
-  { id: 'sr', cefr: 'C1', masteredMin: 3000 },
-  { id: 'summit', cefr: 'C2', masteredMin: 5000 },
+  { id: 'abc', cefr: 'A2', masteredMin: 100 },
+  { id: 'hc', cefr: 'B1 / B2', masteredMin: 500 },
+  { id: 'sr', cefr: 'C1', masteredMin: 1500 },
+  { id: 'summit', cefr: 'C2', masteredMin: 3000 },
 ];
 
 export function mountainTier(masteredCount: number): (typeof MOUNTAIN_TIERS)[number] {

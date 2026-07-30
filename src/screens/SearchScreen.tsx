@@ -176,11 +176,43 @@ export function SearchView({ onClose }: { onClose: () => void }) {
   // is fetched on demand (targetTerm scopes the examples fn to that sense).
   const isPrimaryExpanded = currentIdx === 0;
   const serverExample = isPrimaryExpanded && outcome?.status === 'found' ? outcome.result.examples?.[0] : undefined;
-  const { examples: fetchedExamples, isLoading: exampleLoading } = useExamples(
+  const {
+    examples: fetchedExamples,
+    isLoading: exampleLoading,
+    isSettled: exampleSettled,
+    isError: exampleFailed,
+    refetch: refetchExample,
+  } = useExamples(
     expandedRequested && serverExample == null && foundTranslationId != null ? foundTranslationId : null,
     isPrimaryExpanded ? undefined : expandedSense?.normalizedTarget,
   );
   const expandedExample = serverExample ?? (expandedRequested ? fetchedExamples?.[0] : undefined);
+  // `azure_mt` (phrase_mt) results can never have examples — the examples fn
+  // short-circuits to [] for them (16 §3: no MT-generated example sentences), so
+  // the button would always be a dead end. This is the ONE case we can know for
+  // free, before any call; everything else has to be asked (numExamples
+  // under-reports, so it can't be used to predict — see BackTranslation).
+  const examplesSupported = outcome?.status !== 'found' || outcome.result.provider !== 'azure_mt';
+  // A resolved-but-empty fetch is terminal for this sense; a failed one is offered
+  // as a retry. Neither may fall back to re-rendering the untouched button.
+  // The examples fn caches the EMPTY result too, and translate/ passes that empty
+  // array back on the next lookup (`examples: []`). Without this the button would
+  // resurrect on every repeat search of a word already known to have no sentences
+  // — and cost a pointless round trip each time it was pressed.
+  const serverExampleEmpty =
+    isPrimaryExpanded && outcome?.status === 'found' && outcome.result.examples != null && outcome.result.examples.length === 0;
+  const exampleStatus: 'idle' | 'empty' | 'error' =
+    expandedExample != null
+      ? 'idle'
+      : serverExampleEmpty
+        ? 'empty'
+        : !expandedRequested
+          ? 'idle'
+          : exampleFailed
+            ? 'error'
+            : exampleSettled && (fetchedExamples?.length ?? 0) === 0
+              ? 'empty'
+              : 'idle';
   const result =
     outcome?.status === 'found'
       ? toCardResult(
@@ -365,9 +397,19 @@ export function SearchView({ onClose }: { onClose: () => void }) {
               onDelete={setPendingUnsave}
               onRequestExample={(index) => {
                 const id = result?.translations[index]?.id;
-                if (id != null) setExampleReqIds((s) => new Set(s).add(id));
+                if (id == null) return;
+                // Already requested ⇒ this press is the error-state retry. The
+                // query is cached with staleTime Infinity and retry:false, so
+                // re-adding the id would be a no-op — force the refetch.
+                if (exampleReqIds.has(id)) {
+                  void refetchExample();
+                  return;
+                }
+                setExampleReqIds((s) => new Set(s).add(id));
               }}
               exampleLoading={exampleLoading}
+              examplesSupported={examplesSupported}
+              exampleStatus={exampleStatus}
             />
           </View>
         )}
@@ -457,7 +499,10 @@ function DirectionToggle({
               accessibilityState={{ selected: isActive }}
               style={[styles.segBtn, isActive && { backgroundColor: theme.color.brand }]}
             >
-              <RawText style={[styles.segText, { color: isActive ? '#fff' : theme.color.textMuted, fontFamily: isActive ? theme.fonts.mono.bold : theme.fonts.mono.regular }]}>
+              <RawText
+                numberOfLines={1}
+                style={[styles.segText, { color: isActive ? '#fff' : theme.color.textMuted, fontFamily: isActive ? theme.fonts.mono.bold : theme.fonts.mono.regular }]}
+              >
                 {label}
               </RawText>
             </Pressable>
@@ -577,14 +622,28 @@ const styles = StyleSheet.create((theme) => {
   return {
     fill: { flex: 1 },
     handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: color.borderStrong, alignSelf: 'center', marginTop: 8, marginBottom: 4 },
-    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 4, paddingBottom: 2 },
-    close: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
-    headerSpacer: { minWidth: 32, alignItems: 'flex-end' },
+    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 4, paddingBottom: 2, gap: 4 },
+    // The two fixed-size ends never give up space; the toggle in the middle is
+    // the only thing allowed to compress. flexShrink defaults to 0 in RN, so
+    // these have to be stated even where they look like the obvious default.
+    close: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+    headerSpacer: { minWidth: 32, alignItems: 'flex-end', flexShrink: 0 },
 
-    dirWrap: { flex: 1, alignItems: 'center', gap: 7 },
-    segmented: { flexDirection: 'row', backgroundColor: color.surfaceSunken, borderRadius: 10, padding: 3, gap: 2 },
-    segBtn: { paddingVertical: 6, paddingHorizontal: 18, borderRadius: 8 },
-    segText: { fontSize: 13 },
+    // minWidth: 0 lets a flex child shrink below its content width — without it
+    // the text's intrinsic size wins and the control overdraws its neighbours.
+    dirWrap: { flex: 1, minWidth: 0, alignItems: 'center', gap: 7 },
+    segmented: {
+      flexDirection: 'row',
+      backgroundColor: color.surfaceSunken,
+      borderRadius: 10,
+      padding: 3,
+      gap: 2,
+      flexShrink: 1,
+      minWidth: 0,
+      maxWidth: '100%',
+    },
+    segBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, flexShrink: 1, minWidth: 0 },
+    segText: { fontSize: 13, textAlign: 'center' },
 
     searchPad: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10 },
     searchBox: {

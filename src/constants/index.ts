@@ -7,6 +7,7 @@ export {
   LOCALIZED_LANGUAGES,
   findLanguage,
   languageDisplayName,
+  languageShortLabel,
   textHasScript,
   type Language,
   type TextDirection,

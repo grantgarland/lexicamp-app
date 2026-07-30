@@ -68,6 +68,7 @@ const WORD = {
   pos: 'adjective',
   example: '',
   exampleTranslation: '',
+  provider: 'azure_dictionary' as const,
   stability: 4,
   reps: 3,
   createdAt: new Date('2026-07-01T00:00:00Z'),
