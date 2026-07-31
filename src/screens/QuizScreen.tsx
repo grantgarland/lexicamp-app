@@ -3,7 +3,7 @@
 // in-memory, and commits the batch on completion (`useCommitQuizSession`) per 03's
 // quiz write pattern. Composes the kit (QuizCardFront/Back, RatingButtons, TierBadge)
 // + screen-specific phases built inline (top bar, end, stats, tier-promo, exit confirm).
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { TFunction } from 'i18next';
 import { useRouter } from 'expo-router';
 import { ActivityIndicator, Image, Keyboard, Pressable, ScrollView, View } from 'react-native';
@@ -130,9 +130,15 @@ export function QuizScreen({ deckId, deckName }: QuizScreenProps = {}) {
   // first card is actually on screen (not at mount, which would bill the user
   // for the queue fetch), and sent with the commit so `get_session_pace` has
   // something real to take a median of.
-  const [startedAt, setStartedAt] = useState<number | null>(null);
+  // A ref, not state: the timestamp never drives render (only the commit's
+  // durationMs reads it), and Date.now() is impure so it can't run during render
+  // the way the render-adjust above does. The effect fires post-paint, which is
+  // exactly "the first card is actually on screen."
+  const startedAt = useRef<number | null>(null);
   if (sessionCards == null && cards.length > 0) setSessionCards(cards);
-  if (startedAt == null && cards.length > 0) setStartedAt(Date.now());
+  useEffect(() => {
+    if (startedAt.current == null && cards.length > 0) startedAt.current = Date.now();
+  }, [cards.length]);
   const sc = sessionCards ?? cards;
 
   const total = sc.length;
@@ -152,7 +158,7 @@ export function QuizScreen({ deckId, deckName }: QuizScreenProps = {}) {
     setAutoRating(null);
     if (idx + 1 >= total) {
       // Session complete → batch write (03), with the measured duration.
-      commit.mutate({ ratings: next, durationMs: startedAt == null ? undefined : Date.now() - startedAt });
+      commit.mutate({ ratings: next, durationMs: startedAt.current == null ? undefined : Date.now() - startedAt.current });
       setPhase('end');
     } else {
       setIdx(idx + 1);

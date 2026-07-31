@@ -204,6 +204,16 @@ function RouteTab({ data, t, onInfo }: TabProps) {
 function ProjectionTab({ data, t }: TabProps) {
   const { theme } = useUnistyles();
   const [view, setView] = useState<'next' | 'summit'>('next');
+  // Frozen once per mount, NOT sampled inside the memo. Two reasons, and the
+  // second is the one that matters:
+  //   1. `new Date()` inside a useMemo factory runs during render, which is
+  //      impure (react-hooks/purity) — a memo may be recomputed at any time.
+  //   2. More importantly it would make the projection DRIFT: the same data
+  //      could resolve to a slightly different answer on every recompute,
+  //      because every card's days-to-mastery is measured from `now`.
+  // Same pattern (and same reasoning) as QuizScreen's frozen `now`; state
+  // rather than a ref so it is safe to read during render.
+  const [now] = useState(() => new Date());
 
   const model = useMemo(() => {
     const base = projectionBase({
@@ -211,7 +221,7 @@ function ProjectionTab({ data, t }: TabProps) {
       states: data.states,
       avgAccuracy: data.avgAccuracy,
       daysActive: data.daysActive,
-      now: new Date(),
+      now,
     });
     const next = nextCampTarget(base.mastered);
     return {
@@ -219,7 +229,7 @@ function ProjectionTab({ data, t }: TabProps) {
       nextCamp: next == null ? null : { ...resolve(base, next.target), tierId: next.id, cefr: next.cefr, target: next.target },
       summit: { ...resolve(base, SUMMIT_TARGET), tierId: TIERS[TIERS.length - 1]!.id, cefr: MOUNTAIN_TIERS[MOUNTAIN_TIERS.length - 1]!.cefr, target: SUMMIT_TARGET },
     };
-  }, [data.cards, data.states, data.avgAccuracy, data.daysActive]);
+  }, [data.cards, data.states, data.avgAccuracy, data.daysActive, now]);
 
   if (data.totalSaved === 0) {
     return <EmptyState style={styles.empty} illustration={<IconChart size={48} color={theme.color.textMuted} />} title={t('progress.emptyProjectionTitle')} body={t('progress.emptyProjectionBody')} />;
