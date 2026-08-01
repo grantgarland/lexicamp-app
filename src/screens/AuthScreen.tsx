@@ -6,12 +6,20 @@
 // decorative until native OAuth config lands (see src/auth/session.ts). Google
 // sign-in will not be supported (product decision 2026-07-27).
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
-import { requestPasswordReset, signInWithEmail, signUpWithEmail } from '@/auth/session';
+import {
+  AppleSignInCancelled,
+  isAppleSignInAvailable,
+  requestPasswordReset,
+  signInWithApple,
+  signInWithEmail,
+  signUpWithEmail,
+} from '@/auth/session';
 import { dataSource, USE_SUPABASE } from '@/data';
+import { supabase } from '@/data/supabase/client';
 import { defaultDisplayName } from '@/domain/derive';
 import { useTranslation } from '@/i18n';
 import { registerForPush } from '@/notifications/push';
@@ -27,6 +35,9 @@ export function AuthScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const [mode, setMode] = useState<Mode>('signup');
+  // Apple's sheet only exists on iOS 13+; hide the button anywhere it can't run
+  // rather than showing a control that throws on press.
+  const [appleAvailable, setAppleAvailable] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -37,6 +48,16 @@ export function AuthScreen() {
   const isSignup = mode === 'signup';
   const isForgot = mode === 'forgot';
   const enter = () => router.replace('/');
+
+  useEffect(() => {
+    let alive = true;
+    void isAppleSignInAvailable().then((ok) => {
+      if (alive) setAppleAvailable(ok);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const switchMode = (m: Mode) => {
     setMode(m);
@@ -62,6 +83,28 @@ export function AuthScreen() {
     }
   };
 
+  // Shared tail for BOTH auth paths (email + Apple): materialize the onboarding
+  // buffer (03 flow), arm push, then enter. The RPC is idempotent and never
+  // overwrites, so calling after sign-IN is safe too — it only fills the gap for
+  // accounts that somehow lack a profile.
+  const finishAuth = async (displayName: string) => {
+    const ob = useOnboardingStore.getState();
+    await dataSource.completeOnboarding({
+      nativeLang: ob.nativeLang,
+      targetLang: ob.targetLang ?? 'es', // O-05 default if the buffer is cold (direct sign-in path)
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC',
+      notificationsEnabled: ob.notificationsEnabled,
+      // 18 §A7 (D1): never leave a profile blank — Apple supplies a real name on
+      // first sign-in, email falls back to a prettified local-part.
+      displayName,
+    });
+    // O-06 opt-in → OS permission prompt + device token registration (2.5).
+    // Fire-and-forget: a denied prompt must not block entry into the app.
+    if (ob.notificationsEnabled) void registerForPush().catch(() => {});
+    ob.reset();
+    enter();
+  };
+
   const submit = async () => {
     if (!USE_SUPABASE) return enter(); // mock mode: no network
     setBusy(true);
@@ -69,25 +112,27 @@ export function AuthScreen() {
     try {
       if (isSignup) await signUpWithEmail(email.trim(), password);
       else await signInWithEmail(email.trim(), password);
-      // Materialize the onboarding buffer (03 flow). The RPC is idempotent and
-      // never overwrites, so calling after sign-IN is safe too — it only fills
-      // the gap for accounts that somehow lack a profile.
-      const ob = useOnboardingStore.getState();
-      await dataSource.completeOnboarding({
-        nativeLang: ob.nativeLang,
-        targetLang: ob.targetLang ?? 'es', // O-05 default if the buffer is cold (direct sign-in path)
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC',
-        notificationsEnabled: ob.notificationsEnabled,
-        // 18 §A7 (D1): seed a default name so profiles are never blank — Apple
-        // provider names slot in here when that auth flow lands.
-        displayName: defaultDisplayName(email.trim()),
-      });
-      // O-06 opt-in → OS permission prompt + device token registration (2.5).
-      // Fire-and-forget: a denied prompt must not block entry into the app.
-      if (ob.notificationsEnabled) void registerForPush().catch(() => {});
-      ob.reset();
-      enter();
+      await finishAuth(defaultDisplayName(email.trim()));
     } catch (e) {
+      setError(e instanceof Error ? e.message : t('auth.genericError'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Native Sign in with Apple. Apple returns the user's name ONLY on the very
+  // first sign-in for an Apple ID, so seed the profile with it when present and
+  // fall back to the relay/private email's local-part otherwise.
+  const submitApple = async () => {
+    if (!USE_SUPABASE) return enter(); // mock mode: no network
+    setBusy(true);
+    setError(null);
+    try {
+      const { displayName } = await signInWithApple();
+      const { data } = await supabase.auth.getUser();
+      await finishAuth(displayName ?? defaultDisplayName(data.user?.email ?? ''));
+    } catch (e) {
+      if (e instanceof AppleSignInCancelled) return; // user backed out — no error UI
       setError(e instanceof Error ? e.message : t('auth.genericError'));
     } finally {
       setBusy(false);
@@ -111,15 +156,23 @@ export function AuthScreen() {
 
         {!isForgot && (
           <>
-            <View style={styles.social}>
-              <Button title={t('auth.continueApple')} variant="secondary" onPress={enter} />
-            </View>
+            {appleAvailable && (
+              <>
+                <View style={styles.social}>
+                  <Button
+                    title={t('auth.continueApple')}
+                    variant="secondary"
+                    onPress={busy ? undefined : submitApple}
+                  />
+                </View>
 
-            <View style={styles.divider}>
-              <View style={styles.line} />
-              <RawText style={styles.or}>{t('auth.or')}</RawText>
-              <View style={styles.line} />
-            </View>
+                <View style={styles.divider}>
+                  <View style={styles.line} />
+                  <RawText style={styles.or}>{t('auth.or')}</RawText>
+                  <View style={styles.line} />
+                </View>
+              </>
+            )}
           </>
         )}
 

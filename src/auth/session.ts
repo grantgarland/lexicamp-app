@@ -1,9 +1,10 @@
 // Auth session — thin wrappers over supabase.auth + a session hook. Email
 // confirmation is OFF (00 infra decision, 2026-07-05), so signUp returns a live
-// session directly. Social sign-in (Apple) is a follow-up: it needs native OAuth
-// config (expo-apple-authentication) — the button stays decorative until then.
-// Google sign-in will not be supported (product decision 2026-07-27). Errors
-// surface as thrown Error with a message the screen can show inline.
+// session directly. Sign in with Apple is REAL as of 2026-08-01 (native flow,
+// see signInWithApple). Google sign-in will not be supported (product decision
+// 2026-07-27). Errors surface as thrown Error with a message the screen can
+// show inline.
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 
@@ -41,6 +42,66 @@ export async function requestPasswordReset(email: string): Promise<void> {
 export async function updatePassword(password: string): Promise<void> {
   const { error } = await supabase.auth.updateUser({ password });
   if (error) throw new Error(error.message);
+}
+
+// ── Sign in with Apple ────────────────────────────────────────────────────────
+// NATIVE flow only (Apple's Authentication Services via expo-apple-authentication):
+// the OS returns a signed identity token, which Supabase verifies directly. This
+// needs NO Services ID, signing key, or 6-month secret rotation — those belong to
+// the web OAuth flow. Server-side requirement is just: Auth → Providers → Apple
+// enabled, with the bundle id `com.lexicamp.app` listed under Client IDs.
+
+/** The user dismissed Apple's sheet. Not an error — callers stay put silently. */
+export class AppleSignInCancelled extends Error {
+  constructor() {
+    super('Apple sign-in cancelled');
+    this.name = 'AppleSignInCancelled';
+  }
+}
+
+/** Is native Sign in with Apple usable here? (iOS 13+ device; false on Android.) */
+export async function isAppleSignInAvailable(): Promise<boolean> {
+  try {
+    return await AppleAuthentication.isAvailableAsync();
+  } catch {
+    return false;
+  }
+}
+
+/** Run the native Apple flow and exchange the identity token for a Supabase
+ *  session. Returns the display name Apple supplied, which it only ever sends on
+ *  the FIRST sign-in for a given Apple ID — so we also persist it to user
+ *  metadata immediately; later sign-ins return null and read it back from there.
+ *  Throws AppleSignInCancelled when the user dismisses the sheet. */
+export async function signInWithApple(): Promise<{ displayName: string | null }> {
+  let credential: AppleAuthentication.AppleAuthenticationCredential;
+  try {
+    credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+    });
+  } catch (e) {
+    if ((e as { code?: string }).code === 'ERR_REQUEST_CANCELED') throw new AppleSignInCancelled();
+    throw e;
+  }
+
+  if (credential.identityToken == null) throw new Error('Apple did not return an identity token.');
+
+  const { error } = await supabase.auth.signInWithIdToken({
+    provider: 'apple',
+    token: credential.identityToken,
+  });
+  if (error) throw new Error(error.message);
+
+  const displayName =
+    [credential.fullName?.givenName, credential.fullName?.familyName].filter(Boolean).join(' ').trim() || null;
+  if (displayName != null) {
+    // Best-effort: a failure here must not sink an otherwise-good sign-in.
+    await supabase.auth.updateUser({ data: { full_name: displayName } }).catch(() => {});
+  }
+  return { displayName };
 }
 
 /** Current session (null = signed out). Subscribes to auth state changes. */
