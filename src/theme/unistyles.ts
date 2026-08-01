@@ -1,7 +1,9 @@
 // Unistyles 3.0 runtime configuration.
 // IMPORTANT: import this file ONCE, before any component renders — at the very top
 // of the app entry (app/_layout.tsx) so `StyleSheet.create((theme) => …)` resolves.
+import { Appearance } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
+
 import { lightTheme, darkTheme, breakpoints } from './theme';
 
 type AppBreakpoints = typeof breakpoints;
@@ -20,9 +22,11 @@ StyleSheet.configure({
   themes: { light: lightTheme, dark: darkTheme },
   breakpoints,
   settings: {
-    // Device system color scheme drives light/dark. No in-app toggle (14 §5).
-    // `adaptiveThemes` and `initialTheme` are mutually exclusive in Unistyles 3 —
-    // with adaptive on, the runtime resolves the initial theme from the OS.
-    adaptiveThemes: true,
+    // Device system color scheme drives light/dark, but NOT via `adaptiveThemes` —
+    // iOS's dual-appearance app-switcher snapshots make it flap and leave the
+    // ShadowTree half-switched (unistyles#1170). theme/appearance.ts syncs the
+    // theme manually (debounced, foreground-only); _layout starts it. No in-app
+    // toggle (14 §5).
+    initialTheme: () => (Appearance.getColorScheme() === 'dark' ? 'dark' : 'light'),
   },
 });

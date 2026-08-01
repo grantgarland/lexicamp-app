@@ -20,6 +20,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { useUnistyles } from 'react-native-unistyles';
@@ -27,6 +28,7 @@ import { useUnistyles } from 'react-native-unistyles';
 import { useRecoveryLink } from '@/auth/useRecoveryLink';
 import { DevBadge } from '@/dev/DevBadge';
 import { queryClient } from '@/query/queryClient';
+import { startAppearanceSync } from '@/theme/appearance';
 import { PortalHost, Toast } from '@/ui';
 import { WalkthroughProvider } from '@/tour/walkthrough';
 
@@ -37,6 +39,8 @@ import { WalkthroughProvider } from '@/tour/walkthrough';
 export default function RootLayout() {
   // DF-3: turn password-recovery deep links into a session + /reset-password.
   useRecoveryLink();
+  // Follow the OS color scheme (manual, debounced — see theme/appearance.ts).
+  useEffect(() => startAppearanceSync(), []);
   // Adaptive-theme aware: the nav scene background follows the canvas token so
   // transitions / behind-modal areas don't flash white in dark mode.
   const { theme } = useUnistyles();
