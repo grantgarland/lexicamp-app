@@ -39,6 +39,7 @@ jest.mock('react-native-unistyles', () => {
       create: (styles) => (typeof styles === 'function' ? styles(lightTheme) : styles),
       configure: () => {},
     },
+    createUnistylesElement: (c) => c,
     useUnistyles: () => ({ theme: lightTheme }),
     UnistylesRuntime: { setRootViewBackgroundColor: () => {} },
   };

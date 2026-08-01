@@ -3,7 +3,7 @@
 // not multipliers). Mirrors the prototypes' type usage (Spectral display/reading,
 // Plus Jakarta Sans UI, Space Mono numerals). Every other component composes this.
 import { Text as RNText, type TextProps as RNTextProps } from 'react-native';
-import { StyleSheet, useUnistyles } from 'react-native-unistyles';
+import { createUnistylesElement, StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { lh, track, type AppTheme } from '@/theme/theme';
 
@@ -13,10 +13,19 @@ import { lh, track, type AppTheme } from '@/theme/theme';
 // primitive below + RawText for bespoke RN Text usages.)
 export const FONT_SCALE_MAX = 1.4;
 
+// Unistyles updates styles by writing straight to the native ShadowNode, which it
+// can only do for elements it owns. A plain function wrapper around <Text> is
+// invisible to it, so RawText nodes kept the PREVIOUS theme's colors across a
+// runtime light/dark switch — textStrong headings turned near-invisible on both
+// canvases (TestFlight 1.0.0 (2), 2026-08-01). createUnistylesElement registers
+// the host component so those nodes update with everything else.
+const UnistylesText = createUnistylesElement(RNText) as typeof RNText;
+
 /** RN <Text> with the kit's font-scale cap baked in (overridable). For bespoke,
- *  fully-styled text inside components; the variant `Text` below is preferred otherwise. */
+ *  fully-styled text inside components; the variant `Text` below is preferred otherwise.
+ *  Theme-aware — see the note above; do NOT swap this back to a bare RNText. */
 export function RawText({ maxFontSizeMultiplier = FONT_SCALE_MAX, ...props }: RNTextProps) {
-  return <RNText maxFontSizeMultiplier={maxFontSizeMultiplier} {...props} />;
+  return <UnistylesText maxFontSizeMultiplier={maxFontSizeMultiplier} {...props} />;
 }
 
 export type TextVariant =
