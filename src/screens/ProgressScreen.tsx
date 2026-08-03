@@ -17,8 +17,10 @@ import { forecast, horizon, nextCampTarget, projectionBase, resolve, SUMMIT_TARG
 import { formatUsername } from '@/domain/username';
 import { useTranslation } from '@/i18n';
 import { useActiveLang, useLeaderboard, useProgressData } from '@/query/hooks';
+import { TOUR_FIXTURE_PROGRESS } from '@/tour/tourFixture';
+import { useWalkthroughActive } from '@/tour/walkthrough';
 import { TIERS, tierView } from '@/theme/tiers';
-import { EmptyState, IconBook, IconChart, IconCheck, IconFire, IconInfo, IconLock, IconMountain, IconStar, RawText, Screen, ForecastChart, SegmentedPills, SegmentedTabs, Sheet, SkeletonRows, Tooltip } from '@/ui';
+import { EmptyState, IconBook, IconChart, IconCheck, IconFire, IconInfo, IconLock, IconMountain, IconStar, RawText, Screen, ForecastChart, SegmentedPills, SegmentedTabs, Sheet, SkeletonRows, TAB_BAR_FAB_OVERHANG, Tooltip } from '@/ui';
 
 type SubTab = 'route' | 'projection' | 'leaders';
 type InfoKey = 'cefr';
@@ -36,7 +38,14 @@ export function ProgressScreen() {
   const { t } = useTranslation();
   const [tab, setTab] = useState<SubTab>('route');
   const [info, setInfo] = useState<InfoKey | null>(null);
-  const data = useProgressData();
+  const realData = useProgressData();
+  // WALKTHROUGH (w8): a brand-new account has nothing saved, so every tab fell
+  // through to its empty state while the tooltip explained charts that weren't
+  // there. Overlay the demo summary — only when the tour is running AND there is
+  // genuinely nothing real to show. One intercept, so the tabs below stay
+  // oblivious to the tour.
+  const tourActive = useWalkthroughActive();
+  const data = tourActive && realData.totalSaved === 0 ? { ...realData, ...TOUR_FIXTURE_PROGRESS } : realData;
 
   return (
     <Screen edges={['top']}>
@@ -627,7 +636,8 @@ const styles = StyleSheet.create((theme) => {
     header: { backgroundColor: color.surfaceCard, borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.border, paddingHorizontal: 16, paddingTop: 6 },
     title: { fontFamily: fonts.sans.extra, fontSize: 22, letterSpacing: -0.3, color: color.textStrong, marginBottom: 8 },
 
-    scroll: { paddingBottom: 20 },
+    // + the FAB's overhang: the nav's height is spacer-reserved, the FAB is not.
+    scroll: { paddingBottom: 20 + TAB_BAR_FAB_OVERHANG },
     pad: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
     empty: { paddingTop: 56 },
     sectionTitle: { fontFamily: fonts.sans.bold, fontSize: 15, color: color.textStrong },

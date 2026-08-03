@@ -64,4 +64,25 @@ describe('i18n locale parity (en ↔ es)', () => {
     expect(enKeys.size).toBeGreaterThan(50);
     expect(esKeys.size).toBe(enKeys.size);
   });
+
+  // Casey, 2026-08-03: "sense" is OUR word for a dictionary meaning. It is all
+  // over the code and that is fine, but a user has no idea what it means, so it
+  // must never reach the screen. Checks VALUES only — key names like
+  // `quiz.senseHint` are ours to name.
+  it('no user-facing string uses the word "sense" (or its es equivalents)', () => {
+    const banned = /\bsenses?\b|\bsentidos?\b|\bacepci[oó]n(es)?\b/i;
+    const hits: string[] = [];
+    const walk = (t: Tree, name: string, prefix: string) => {
+      for (const [k, v] of Object.entries(t)) {
+        const key = prefix ? `${prefix}.${k}` : k;
+        if (isLeaf(v)) {
+          const values = typeof v === 'string' ? [v] : v;
+          values.filter((str) => banned.test(str)).forEach((str) => hits.push(`${name}:${key} — ${str}`));
+        } else walk(v, name, key);
+      }
+    };
+    walk(en as Tree, 'en', '');
+    walk(es as Tree, 'es', '');
+    expect(hits).toEqual([]);
+  });
 });

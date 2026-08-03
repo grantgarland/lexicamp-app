@@ -29,17 +29,30 @@ export function initNotifications(): void {
   });
 }
 
-/** Request permission + register this device's Expo token with the backend.
- *  Returns whether push is active. Call after the user opts IN (onboarding
- *  O-06 "Enable notifications", or the Settings toggle) — never unprompted. */
+/** Ask the OS for notification permission. Split out of registerForPush so the
+ *  onboarding O-06 step can raise the system prompt AT the moment the user taps
+ *  "Enable notifications" — token registration needs a session, but the
+ *  permission prompt does not, and deferring both until after auth meant the
+ *  prompt appeared unexplained on the Home screen (reported 2026-08-01).
+ *  Safe to call repeatedly: iOS only ever shows the sheet once. */
+export async function requestPushPermission(): Promise<boolean> {
+  if (!Device.isDevice) return false; // simulators have no APNs
+  const existing = await Notifications.getPermissionsAsync();
+  if (existing.granted) return true;
+  // canAskAgain === false means the user previously denied; requesting is a
+  // silent no-op, so don't pretend it succeeded.
+  if (!existing.canAskAgain) return false;
+  const status = await Notifications.requestPermissionsAsync();
+  return status.granted;
+}
+
+/** Register this device's Expo token with the backend. Assumes permission was
+ *  already granted (see requestPushPermission) but re-checks defensively, so the
+ *  post-auth call path is still correct for users who came in another way. */
 export async function registerForPush(): Promise<boolean> {
   if (!USE_SUPABASE || !Device.isDevice) return false; // mock mode / simulator
 
-  const existing = await Notifications.getPermissionsAsync();
-  const status = existing.granted
-    ? existing
-    : await Notifications.requestPermissionsAsync();
-  if (!status.granted) return false;
+  if (!(await requestPushPermission())) return false;
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {

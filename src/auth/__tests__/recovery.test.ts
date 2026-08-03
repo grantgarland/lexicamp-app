@@ -50,3 +50,42 @@ describe('parseRecoveryUrl', () => {
     expect(parseRecoveryUrl(`${BASE}#access_token=at&type=recovery`)).toEqual({ status: 'none' });
   });
 });
+
+// ── PKCE shape (2026-08-02) ──────────────────────────────────────────────────
+// supabase-js v2 defaults to PKCE, so the REAL recovery link is `?code=…`, not
+// the implicit fragment. Missing this made password reset a silent no-op.
+describe('parseRecoveryUrl — PKCE code links', () => {
+  it('extracts the code from the query string', () => {
+    expect(parseRecoveryUrl(`${BASE}?code=8b1f2c3d-4e5f-6071-8293-a4b5c6d7e8f9`)).toEqual({
+      status: 'code',
+      code: '8b1f2c3d-4e5f-6071-8293-a4b5c6d7e8f9',
+    });
+  });
+
+  it('extracts the code when a rewriter promotes it to the fragment', () => {
+    expect(parseRecoveryUrl(`${BASE}#code=abc123`)).toEqual({ status: 'code', code: 'abc123' });
+  });
+
+  it('ignores an empty code rather than trying to exchange it', () => {
+    expect(parseRecoveryUrl(`${BASE}?code=`)).toEqual({ status: 'none' });
+  });
+
+  it('does NOT claim a code on some other path (a future OAuth callback)', () => {
+    expect(parseRecoveryUrl('lexicampapp://oauth-callback?code=abc123')).toEqual({ status: 'none' });
+  });
+
+  it('still prefers explicit recovery tokens when both shapes are present', () => {
+    const url = `${BASE}?code=abc123#access_token=at1&refresh_token=rt1&type=recovery`;
+    expect(parseRecoveryUrl(url)).toEqual({
+      status: 'tokens',
+      tokens: { accessToken: 'at1', refreshToken: 'rt1' },
+    });
+  });
+
+  it('reports an expired PKCE link as an error, not a code', () => {
+    const url = `${BASE}?error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired`;
+    const parsed = parseRecoveryUrl(url);
+    expect(parsed.status).toBe('error');
+  });
+});
+

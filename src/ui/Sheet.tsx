@@ -18,13 +18,14 @@
 // anything that must stay reachable (form CTAs) goes in `footer`, which is
 // pinned OUTSIDE the scroll area.
 import { type ReactNode, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet as RNStyleSheet, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet as RNStyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, runOnJS, useAnimatedKeyboard, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
 import { Portal } from './Portal';
+import { ScrollIntoViewScrollView } from './ScrollIntoView';
 import { Text } from './Text';
 
 export interface SheetProps {
@@ -84,7 +85,9 @@ export function Sheet({ visible, onClose, title, scrollable = false, footer, chi
 
   if (!mounted) return null;
   const body = scrollable ? (
-    <ScrollView
+    /* ScrollIntoView-aware: a sheet body is short, so any accordion inside it
+       (Settings → How Lexicamp works) expands straight past the bottom edge. */
+    <ScrollIntoViewScrollView
       // `handled` (not `always`): a tap on a CTA registers on the FIRST press
       // instead of being eaten by the keyboard dismissal.
       keyboardShouldPersistTaps="handled"
@@ -93,7 +96,7 @@ export function Sheet({ visible, onClose, title, scrollable = false, footer, chi
       contentContainerStyle={styles.scrollContent}
     >
       {children}
-    </ScrollView>
+    </ScrollIntoViewScrollView>
   ) : (
     children
   );

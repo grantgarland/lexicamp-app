@@ -18,5 +18,12 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     persistSession: true,
     // No web URL callbacks in a native app; deep-link flows handle their own codes.
     detectSessionInUrl: false,
+    // PINNED. supabase-js v2 already defaults to PKCE, but the default decides
+    // the SHAPE of every emailed auth link: PKCE sends `?code=<uuid>`, implicit
+    // sends `#access_token=…&refresh_token=…&type=recovery`. auth/recovery.ts
+    // parses both, but leaving this implicit meant a library bump could flip the
+    // shape underneath us with no compile error and no test failure — which is
+    // exactly how password reset silently did nothing (2026-08-02).
+    flowType: 'pkce',
   },
 });

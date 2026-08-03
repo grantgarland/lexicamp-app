@@ -35,6 +35,7 @@ import {
   PremiumBadge,
   RawText,
   Screen,
+  TAB_BAR_FAB_OVERHANG,
 } from '@/ui';
 
 const FREE_FEATURES = ['featureUnlimited', 'featureDecks', 'featureLanguages'] as const;
@@ -292,7 +293,8 @@ const styles = StyleSheet.create((theme) => {
   return {
     header: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 10 },
     title: { fontFamily: fonts.sans.extra, fontSize: 22, letterSpacing: -0.3, color: color.textStrong },
-    scroll: { paddingHorizontal: 16, paddingBottom: 24 },
+    // + the FAB's overhang: the nav's height is spacer-reserved, the FAB is not.
+    scroll: { paddingHorizontal: 16, paddingBottom: 24 + TAB_BAR_FAB_OVERHANG },
 
     section: { marginBottom: 24 },
     sectionLabel: { fontFamily: fonts.sans.bold, fontSize: 11, letterSpacing: 0.9, textTransform: 'uppercase', color: color.textMuted, marginBottom: 6, marginLeft: 4 },

@@ -13,7 +13,7 @@ export { Input, type InputProps } from './Input';
 export { ProgressDots, type ProgressDotsProps } from './ProgressDots';
 export { Sheet, type SheetProps } from './Sheet';
 export { LanguagePickerSheet, type LanguagePickerSheetProps } from './LanguagePickerSheet';
-export { TabBar, TAB_BAR_CORE_HEIGHT, type TabBarProps, type TabId } from './TabBar';
+export { TabBar, TAB_BAR_CORE_HEIGHT, TAB_BAR_FAB_OVERHANG, type TabBarProps, type TabId } from './TabBar';
 export { SearchBar, type SearchBarProps } from './SearchBar';
 export { SegmentedTabs, type SegmentedTab, type SegmentedTabsProps } from './SegmentedTabs';
 export { SegmentedPills, type SegmentedPill, type SegmentedPillsProps } from './SegmentedPills';
@@ -22,6 +22,16 @@ export { ButtonRow, type ButtonRowButton, type ButtonRowProps } from './ButtonRo
 export { List, ListItem, Checkbox, type ListProps, type ListItemProps } from './List';
 export { Skeleton, SkeletonRows } from './Skeleton';
 export { HowItWorksList } from './HowItWorksList';
+export {
+  ScrollIntoView,
+  ScrollIntoViewScrollView,
+  useScrollIntoView,
+  revealOffset,
+  type ScrollIntoViewProps,
+  type ScrollIntoViewScrollViewProps,
+  type ScrollIntoViewOptions,
+  type RevealGeometry,
+} from './ScrollIntoView';
 export { ConfirmDialog, type ConfirmDialogProps } from './ConfirmDialog';
 export { Portal, PortalHost } from './Portal';
 export { Toast } from './Toast';
@@ -94,3 +104,4 @@ export {
   type QuizCardData,
   type QuizMode,
 } from './QuizCard';
+export { Wordmark } from './Wordmark';

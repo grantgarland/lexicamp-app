@@ -527,4 +527,12 @@ export const supabaseDataSource: DataSource = {
     });
     bail(error);
   },
+
+  async deleteOwnAccount(): Promise<void> {
+    // App Store 5.1.1(v). The RPC takes no arguments and derives the target from
+    // auth.uid(), so there is no way to delete anyone else. auth.users cascades
+    // through profiles to every owned row — no client-side cleanup needed.
+    const { error } = await supabase.rpc('delete_own_account');
+    bail(error);
+  },
 };

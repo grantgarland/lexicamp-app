@@ -4,13 +4,15 @@
 // SearchBar, RecentChips, SkeletonCard. Lookup flows through DataSource.lookup()
 // (2.1): Tier-0 capture gate client-side for instant feedback → debounced query
 // through the state layer (mock now, translate Edge Function via SupabaseDataSource).
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet as RNStyleSheet, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { captureReasonI18nKey, evaluateCaptureInput } from '@/domain/capture';
+import { isSearchDemoStep, useTourScene } from '@/tour/tourScene';
+import { TOUR_SEARCH_DEMO_WORD } from '@/tour/tourFixture';
 import { tourTargets } from '@/tour/walkthrough';
 import { directionLangs } from '@/domain/derive';
 import { type LookupResult, posTagI18nKey, qualityReasonI18nKey, senseDisplayWord, type UsageExample } from '@/domain/translation';
@@ -29,6 +31,7 @@ import {
   IconX,
   RawText,
   Screen,
+  ScrollIntoViewScrollView,
   TranslationCard,
   type TranslationResult,
 } from '@/ui';
@@ -94,7 +97,12 @@ function useDebouncedValue<T>(value: T, ms: number): T {
 
 // SearchView — the search body. Reused both as the modal route (SearchScreen) and
 // as an in-Home overlay (so the bottom nav can stay visible). Closes via `onClose`.
-export function SearchView({ onClose }: { onClose: () => void }) {
+/** Height of anything painted OVER the search surface's bottom edge. The tabs
+ *  layout mounts SearchView as a full-bleed overlay with the absolute TabBar on
+ *  top of it, so without this the last result sense sits under the nav — both as
+ *  dead padding and as the floor a reveal has to clear. 0 for the standalone
+ *  `/search` route, which has no bar over it. */
+export function SearchView({ onClose, bottomInset = 0 }: { onClose: () => void; bottomInset?: number }) {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
   const router = useRouter();
@@ -120,7 +128,31 @@ export function SearchView({ onClose }: { onClose: () => void }) {
   const placeholder = langs ? t('search.placeholder', { lang: langs.sourceName }) : t('search.placeholderFallback');
 
   const [query, setQuery] = useState('');
+  // WALKTHROUGH w3/w3b: prefill a real word so the step describes a populated
+  // results card instead of the empty recents list. Deliberately a REAL lookup
+  // rather than a fabricated card — a hand-written Spanish demo would be absurd
+  // for someone studying Russian, and the whole point of w3b (a word carries
+  // several senses) only lands if the senses are the learner's own.
+  const tourStepId = useTourScene((st) => st.stepId);
+  const tourSearchDemo = isSearchDemoStep(tourStepId);
+  const [tourSeeded, setTourSeeded] = useState(false);
+  if (tourSearchDemo && !tourSeeded) {
+    setTourSeeded(true);
+    setQuery(TOUR_SEARCH_DEMO_WORD);
+  }
+  if (!tourSearchDemo && tourSeeded) {
+    // Tour moved on (or ended): drop the demo so the user's own search is clean.
+    setTourSeeded(false);
+    setQuery('');
+  }
   const [currentIdx, setCurrentIdx] = useState(0);
+  // 18 §F2: walkthrough anchor for w3b. The step highlights the whole OPEN
+  // result block, so the anchor has to come from inside TranslationCard — it is
+  // the only thing that knows which item is expanded. Stable identity: a fresh
+  // callback each render would re-run the ref on every keystroke.
+  const setResultAnchor = useCallback((node: View | null) => {
+    tourTargets.searchResultWord.current = node;
+  }, []);
   // Saved-state is DERIVED from the user's saved words (cards.translation_id ↔
   // result.translationId — a stable join), not kept as screen state: a word saved
   // in a previous session must show as saved when searched again. The two local
@@ -272,6 +304,9 @@ export function SearchView({ onClose }: { onClose: () => void }) {
         if (sense != null && !locallyRemoved.has(sense.id)) set.add(sense.id);
       }
     }
+    // NOTE: the tour deliberately leaves the demo word UNSAVED. w3b used to fake
+    // a saved state, which turned the card's CTA into "Delete word" while the
+    // step was telling the user to pick a meaning and save it (Casey, 2026-08-03).
     return set;
   }, [saved, locallyRemoved, outcome, result, words]);
 
@@ -377,7 +412,12 @@ export function SearchView({ onClose }: { onClose: () => void }) {
           <RecentList recents={recents} onTap={setQuery} onDismiss={removeRecent} />
         </View>
       ) : (
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+      <ScrollIntoViewScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: 32 + bottomInset }]}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
+        revealInsetBottom={bottomInset + 8}
+      >
         {phase === 'typing' && (
           <View key="typing">
             <SkeletonCard typed={q} />
@@ -391,6 +431,7 @@ export function SearchView({ onClose }: { onClose: () => void }) {
               targetLang={langs?.targetShort}
               currentIdx={currentIdx}
               onSetCurrent={setCurrentIdx}
+              expandedRef={setResultAnchor}
               savedIds={savedIds}
               justSavedId={justSaved}
               onSave={save}
@@ -438,7 +479,7 @@ export function SearchView({ onClose }: { onClose: () => void }) {
             />
           </View>
         )}
-      </ScrollView>
+      </ScrollIntoViewScrollView>
       )}
 
       {/* Shared delete confirmation — identical prompt to the Word List surfaces. */}

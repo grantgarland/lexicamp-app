@@ -57,6 +57,7 @@ import {
   SegmentedTabs,
   Sheet,
   SkeletonRows,
+  TAB_BAR_FAB_OVERHANG,
   TierBadge,
   Toggle,
   WordDetailSheet,
@@ -1039,7 +1040,8 @@ const styles = StyleSheet.create((theme) => {
     // Matches the Custom Decks "Create new deck" container height/gap (both ~64px, bordered).
     searchUnderTabs: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.divider },
 
-    listContent: { paddingBottom: 16 },
+    // + the FAB's overhang: the nav's height is spacer-reserved, the FAB is not.
+    listContent: { paddingBottom: 16 + TAB_BAR_FAB_OVERHANG },
     empty: { paddingTop: 64 },
     proBadge: { backgroundColor: color.accentSoft, borderRadius: 3, paddingHorizontal: 5, paddingVertical: 1 },
     proBadgeText: { fontFamily: fonts.sans.bold, fontSize: 9, letterSpacing: 0.3, color: color.accentStrong },
@@ -1047,7 +1049,7 @@ const styles = StyleSheet.create((theme) => {
     // decks tab
     decksBody: { flex: 1 },
     stickyCreate: { paddingHorizontal: 16, borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.divider },
-    decksList: { paddingBottom: 20 },
+    decksList: { paddingBottom: 20 + TAB_BAR_FAB_OVERHANG },
     gutter: {},
     gutterScroll: { maxHeight: 190 },
     gutterDivider: { height: 1.5, backgroundColor: color.borderStrong, marginTop: 2, marginBottom: 4, borderRadius: 1 },

@@ -19,7 +19,9 @@ import { useTranslation } from '@/i18n';
 import { dueLabel } from '@/lib/relativeTime';
 import { useCommitQuizSession, useDueCards, useEntitlement, useHomeData } from '@/query/hooks';
 import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
-import { tourTargets, WalkthroughOverlayHost } from '@/tour/walkthrough';
+import { tourFixtureCards } from '@/tour/tourFixture';
+import { isQuizResultsStep, isQuizRevealStep, useTourScene } from '@/tour/tourScene';
+import { tourTargets, useWalkthroughActive, WalkthroughOverlayHost } from '@/tour/walkthrough';
 import { type TierId } from '@/theme/tiers';
 import {
   Button,
@@ -104,7 +106,16 @@ export function QuizScreen({ deckId, deckName }: QuizScreenProps = {}) {
   const { isPaid } = useEntitlement();
   const quizLength = usePrefsStore((s) => s.quizLength);
   const sessionCap = isPaid ? quizLength : QUIZ_LENGTH_FREE;
-  const { cards, isLoading } = useDueCards(sessionCap, deckId);
+  const { cards: realCards, isLoading } = useDueCards(sessionCap, deckId);
+  // WALKTHROUGH: a brand-new account has nothing due, which left w6/w7 pointing
+  // at an empty state. Substitute an in-memory demo session so the rating gutter
+  // and results screen are real, tappable UI. Only when there is genuinely
+  // nothing to show — a user with real due cards always studies their own words.
+  const tourActive = useWalkthroughActive();
+  const useFixture = tourActive && !isLoading && realCards.length === 0;
+  // Frozen for this screen instance so dueAt/lastReviewAt don't drift per render.
+  const [fixtureCards] = useState<QuizCardItem[]>(() => tourFixtureCards(Date.now()));
+  const cards = useFixture ? fixtureCards : realCards;
   const { streakDays } = useHomeData();
   const commit = useCommitQuizSession();
 
@@ -141,9 +152,40 @@ export function QuizScreen({ deckId, deckName }: QuizScreenProps = {}) {
   }, [cards.length]);
   const sc = sessionCards ?? cards;
 
+  // WALKTHROUGH w7 ("Your results"): the step used to leave card 1 of N on
+  // screen while the tooltip described a results view the user could not see
+  // (reported 2026-08-02). Drive the demo session straight to its results and
+  // synthesise the ratings those results summarise. Fixture-only — a real
+  // session is never fast-forwarded, and these ratings are never committed.
+  //
+  // ⚠️ 'stats', NOT 'end'. There are two post-session screens: 'end' is the
+  // "Great session!" splash (mascot + accuracy) and 'stats' is the per-word list
+  // with each word's next interval. The tooltip says "you'll see how far each
+  // word moved and when it returns", which is the LIST — pointing it at the
+  // splash described a screen the user still could not see (Casey, 2026-08-03).
+  const tourStepId = useTourScene((st) => st.stepId);
+  // NOT gated on `useFixture`: anyone replaying the tour has real due cards, so
+  // requiring the fixture meant w7 silently kept showing card 1 of N behind the
+  // tooltip (reported twice, 2026-08-02). The step must demo the results view
+  // over WHATEVER session is on screen. Display-only: `rate()` is never called
+  // on this path so nothing is written, and the commit guard still covers the
+  // fixture case.
+  const showTourResults = tourActive && isQuizResultsStep(tourStepId);
+  const demoRatings: BufferedRating[] = showTourResults
+    ? sc.map((c, i) => ({ cardId: c.id, rating: (i % 3 === 1 ? 'almost' : 'got_it') as UiRating }))
+    : [];
+  const effectivePhase: Phase = showTourResults ? 'stats' : phase;
+  const effectiveRatings = showTourResults ? demoRatings : ratings;
+  // WALKTHROUGH w6 ("Reveal, then rate"): the step anchors the gutter and talks
+  // about grading yourself, but a face-down card puts a single "Tap to reveal"
+  // button there instead of the three ratings (Casey, 2026-08-03). Force the
+  // flip for the duration of the step. DERIVED, not state: stepping Back leaves
+  // the user's own `revealed` untouched, and nothing is rated or written.
+  const effectiveRevealed = revealed || (tourActive && isQuizRevealStep(tourStepId));
+
   const total = sc.length;
   const card = sc[idx];
-  const stats = sessionStats(ratings);
+  const stats = sessionStats(showTourResults ? demoRatings : ratings);
 
   const closeAttempt = () => {
     // Always confirm exiting an in-progress session (even before the first rating).
@@ -158,7 +200,12 @@ export function QuizScreen({ deckId, deckName }: QuizScreenProps = {}) {
     setAutoRating(null);
     if (idx + 1 >= total) {
       // Session complete → batch write (03), with the measured duration.
-      commit.mutate({ ratings: next, durationMs: startedAt.current == null ? undefined : Date.now() - startedAt.current });
+      // EXCEPT during the walkthrough on a demo session: those cards don't exist
+      // server-side, so committing would 404 and would pollute a real account's
+      // history with words the user never saved.
+      if (!useFixture) {
+        commit.mutate({ ratings: next, durationMs: startedAt.current == null ? undefined : Date.now() - startedAt.current });
+      }
       setPhase('end');
     } else {
       setIdx(idx + 1);
@@ -168,7 +215,10 @@ export function QuizScreen({ deckId, deckName }: QuizScreenProps = {}) {
 
   // REAL promotions only (2.2): the milestone screen shows iff ≥1 word actually
   // climbed a tier band this session — not merely "was rated got_it".
-  const promotions = phase === 'end' || phase === 'stats' || phase === 'promo' ? sessionPromotions(sc, ratings) : [];
+  const promotions =
+    effectivePhase === 'end' || effectivePhase === 'stats' || effectivePhase === 'promo'
+      ? sessionPromotions(sc, effectiveRatings)
+      : [];
 
   const done = () => {
     if (promotions.length > 0) setPhase('promo');
@@ -183,30 +233,48 @@ export function QuizScreen({ deckId, deckName }: QuizScreenProps = {}) {
     setSessionCards(null); // re-snapshot whatever is due now
   };
 
-  if (phase === 'end') {
+  // EVERY early return below must keep <WalkthroughOverlayHost scope="quiz" />
+  // mounted. The tour overlay is a Modal owned by whichever host is active, and
+  // the quiz host lives in this component — returning a phase screen without it
+  // unmounted the tooltip mid-step (w7 rendered results, then lost its own
+  // overlay). Wrapping keeps the host alive across phase changes.
+  if (effectivePhase === 'end') {
     return (
-      <EndScreen
-        good={stats.accuracy >= 60}
-        accuracy={stats.accuracy}
-        reviewed={ratings.length}
-        streak={streakDays}
-        commitError={commit.isError}
-        onSeeResults={() => setPhase('stats')}
-        onStudyAgain={studyAgain}
-      />
+      <>
+        <EndScreen
+          good={stats.accuracy >= 60}
+          accuracy={stats.accuracy}
+          reviewed={effectiveRatings.length}
+          streak={streakDays}
+          commitError={commit.isError}
+          onSeeResults={() => setPhase('stats')}
+          onStudyAgain={studyAgain}
+        />
+        <WalkthroughOverlayHost scope="quiz" />
+      </>
     );
   }
-  if (phase === 'stats') {
-    return <StatsScreen cards={sc} ratings={ratings} onStudyAgain={studyAgain} onDone={done} />;
+  if (effectivePhase === 'stats') {
+    return (
+      <>
+        <StatsScreen cards={sc} ratings={effectiveRatings} onStudyAgain={studyAgain} onDone={done} />
+        <WalkthroughOverlayHost scope="quiz" />
+      </>
+    );
   }
   if (phase === 'promo') {
-    return <TierPromoScreen promotions={promotions} onContinue={() => router.back()} />;
+    return (
+      <>
+        <TierPromoScreen promotions={promotions} onContinue={() => router.back()} />
+        <WalkthroughOverlayHost scope="quiz" />
+      </>
+    );
   }
 
   // Quiz phase but no card to show: still loading the due queue, or nothing is due
   // (fresh entry with an empty queue, or "Study again" after the commit cleared it).
   // Without this the screen renders a broken "0 / 0" quiz and rate() crashes on card.id.
-  if (phase === 'quiz' && card == null) {
+  if (effectivePhase === 'quiz' && card == null) {
     return (
       <Screen edges={['top', 'bottom']}>
         {isLoading ? (
@@ -243,7 +311,7 @@ export function QuizScreen({ deckId, deckName }: QuizScreenProps = {}) {
       {card != null && (
         <View style={styles.cardArea}>
           <ScrollView contentContainerStyle={styles.cardScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            {!revealed ? (
+            {!effectiveRevealed ? (
               <QuizCardFront
                 key={card.id}
                 tier={card.tierId}
@@ -277,7 +345,7 @@ export function QuizScreen({ deckId, deckName }: QuizScreenProps = {}) {
               type-out, or manually) — intentional. */}
           {/* 18 §F2: walkthrough anchor (w6 — flip + honest self-rating). */}
           <View ref={(node) => { tourTargets.quizGutter.current = node; }} collapsable={false}>
-            {revealed ? (
+            {effectiveRevealed ? (
               <Animated.View entering={FadeIn.duration(220)} style={styles.ratingArea}>
                 {/* keyed per card so the auto-advance timer restarts cleanly */}
                 <RatingButtons key={card.id} onRate={rate} highlighted={autoRating} onAutoSelect={rate} />

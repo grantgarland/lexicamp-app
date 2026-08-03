@@ -266,4 +266,10 @@ export interface DataSource {
    *  (server-enforced); CLEARING is always allowed, so a lapsed subscription
    *  can still undo its own edits. */
   setCardTargetOverride(cardId: string, target: string | null): Promise<void>;
+  /** Permanently delete the CALLING user's account and every cascaded row
+   *  (cards, decks, review history, push tokens, prefs). Required by App Store
+   *  Guideline 5.1.1(v) for any app that supports account creation — do not
+   *  remove this from the UI. Irreversible; the caller is responsible for the
+   *  confirmation dialog and for signing out afterwards. */
+  deleteOwnAccount(): Promise<void>;
 }

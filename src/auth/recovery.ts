@@ -16,6 +16,8 @@ export interface RecoveryTokens {
 
 export type RecoveryParse =
   | { status: 'tokens'; tokens: RecoveryTokens }
+  /** PKCE: the link carries a one-time `code` to exchange for a session. */
+  | { status: 'code'; code: string }
   | { status: 'error'; message: string }
   | { status: 'none' };
 
@@ -52,6 +54,15 @@ export function parseRecoveryUrl(url: string | null | undefined): RecoveryParse 
   const refreshToken = params.get('refresh_token');
   if (accessToken != null && refreshToken != null && params.get('type') === 'recovery') {
     return { status: 'tokens', tokens: { accessToken, refreshToken } };
+  }
+
+  // PKCE shape (the supabase-js v2 DEFAULT, and what this app actually gets):
+  //   lexicampapp://reset-password?code=8b1f…
+  // There is no `type=recovery` marker on this shape, so scope it to our reset
+  // path — otherwise a future OAuth callback carrying `code` would be swallowed.
+  const code = params.get('code');
+  if (code != null && code !== '' && url.includes('reset-password')) {
+    return { status: 'code', code };
   }
   return { status: 'none' };
 }

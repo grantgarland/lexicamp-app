@@ -8,6 +8,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
 import { Card } from './Card';
+import { ScrollIntoView } from './ScrollIntoView';
 import { IconArrowRight, IconBook, IconCheck, IconChevronDown, IconInfo, IconLock, IconTrash } from './icons';
 import { RawText as RNText } from './Text';
 
@@ -72,6 +73,10 @@ export interface TranslationCardProps {
    *  carries the answer back. 'empty' is terminal for that sense; re-rendering
    *  the same button instead reads as "the tap did nothing". */
   exampleStatus?: 'idle' | 'empty' | 'error';
+  /** Receives the host node of the currently EXPANDED item. The walkthrough
+   *  spotlights it (w3b — "pick the right meaning"), which needs the whole open
+   *  block, not the card and not the search field. */
+  expandedRef?: (node: View | null) => void;
 }
 
 type ButtonState = 'save' | 'saved' | 'delete';
@@ -90,6 +95,7 @@ export function TranslationCard({
   exampleLoading,
   examplesSupported = true,
   exampleStatus = 'idle',
+  expandedRef,
 }: TranslationCardProps) {
   const { theme } = useUnistyles();
 
@@ -120,8 +126,11 @@ export function TranslationCard({
 
       <Animated.View style={styles.accordion} layout={LinearTransition.duration(240)}>
         {result.translations.map((t, i) => (
+          /* The expanded sense is much taller than the collapsed row it replaces
+             — near the bottom of the list its Save button lands under the tab
+             bar. Reveal it (and any example sentence fetched into it later). */
+          <ScrollIntoView key={t.id} enabled={i === currentIdx} nodeRef={i === currentIdx ? expandedRef : undefined}>
           <TranslationItem
-            key={t.id}
             translation={t}
             isExpanded={i === currentIdx}
             onExpand={() => onSetCurrent(i)}
@@ -136,6 +145,7 @@ export function TranslationCard({
             exampleStatus={i === currentIdx ? exampleStatus : 'idle'}
             onRequestExample={onRequestExample != null ? () => onRequestExample(i) : undefined}
           />
+          </ScrollIntoView>
         ))}
       </Animated.View>
     </Card>

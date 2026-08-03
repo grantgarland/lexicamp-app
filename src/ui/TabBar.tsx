@@ -19,6 +19,24 @@ export type TabId = 'home' | 'words' | 'progress' | 'settings';
  *  `bar`/`tab` styles below (tab minHeight 48 + top border). */
 export const TAB_BAR_CORE_HEIGHT = 49;
 
+/** FAB geometry, named because the scenes behind the nav depend on it. */
+const FAB_SIZE = 58;
+/** How far the FAB's top sits above the bar's own top edge (`fabWrap.top`). */
+const FAB_RISE = 28;
+
+/** How much of the FAB floats OVER the scene, above the nav's top edge.
+ *
+ *  The bar reserves its own height via a spacer in `(tabs)/_layout.tsx`, but the
+ *  FAB is absolutely positioned above that, so a scene whose scroll bottoms out
+ *  at the bar's top edge still ends UNDER the FAB (Casey, 2026-08-03 — the Home
+ *  educator card's "Got it" row). Every tab scene adds this to the bottom padding
+ *  of its scroll content, and anything measuring the usable area (see
+ *  `ScrollIntoView`'s `revealInsetBottom`) counts it too.
+ *
+ *  `FAB_RISE` is the circle; the +2 is the glow — `shadow.accent` is
+ *  `0 8px 20px`, so it reaches blur/2 − offsetY = 2pt above the circle's top. */
+export const TAB_BAR_FAB_OVERHANG = FAB_RISE + 2;
+
 // Labels resolve from i18n (`tabs.<id>`) at render — the registry only fixes id + icon.
 const TABS: { id: TabId; Icon: ComponentType<IconProps> }[] = [
   { id: 'home', Icon: IconHome },
@@ -139,7 +157,7 @@ const styles = StyleSheet.create((theme) => ({
   gap: { flex: 1.3 },
   tab: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3, paddingTop: 10, minHeight: 48 },
   tabLabel: { fontSize: 10, lineHeight: 12, letterSpacing: 0.1 },
-  fabWrap: { position: 'absolute', top: -28, left: 0, right: 0, alignItems: 'center', zIndex: 2 },
-  fab: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center' },
+  fabWrap: { position: 'absolute', top: -FAB_RISE, left: 0, right: 0, alignItems: 'center', zIndex: 2 },
+  fab: { width: FAB_SIZE, height: FAB_SIZE, borderRadius: FAB_SIZE / 2, alignItems: 'center', justifyContent: 'center' },
   fabPressed: { transform: [{ scale: 0.91 }] },
 }));

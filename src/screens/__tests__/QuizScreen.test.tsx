@@ -47,7 +47,14 @@ jest.mock('react-native-reanimated', () => {
     FadeInDown: builder(),
     FadeOut: builder(),
     ZoomIn: builder(),
-    Easing: { out: () => () => 0, in: () => () => 0, cubic: () => 0 },
+    Easing: { linear: (x) => x, out: () => (x) => x, in: () => (x) => x, cubic: (x) => x },
+    // Needed once a test renders the RATING gutter (the w6 scene override) —
+    // RatingButtons drives its auto-select timer off shared values.
+    useSharedValue: (initial) => ({ value: initial }),
+    useAnimatedStyle: (fn) => fn(),
+    withTiming: (to) => to,
+    cancelAnimation: () => {},
+    runOnJS: (fn) => fn,
     ...entering,
   };
 });
@@ -65,19 +72,47 @@ const mockCard = {
   tierId: 'bc',
   mode: 'recognition',
   content: { frontWord: 'hola', frontPrompt: 'Translate', backWord: 'hello' },
+  // Real FSRS state: the results phases run `sessionPromotions` over these cards,
+  // and `tierTransition` reads stability/difficulty straight off them.
+  fsrs: {
+    cardId: 'c1',
+    userId: 'u1',
+    stability: 2.4,
+    difficulty: 5.1,
+    dueAt: new Date('2026-08-03T00:00:00Z'),
+    lastReviewAt: null,
+    state: 2,
+    reps: 2,
+    lapses: 0,
+    learningSteps: 0,
+  },
 };
 jest.mock('@/query/hooks', () => ({
-  useDueCards: () => ({ cards: [mockCard, { ...mockCard, id: 'c2' }], isLoading: false }),
+  useDueCards: () => ({ cards: [mockCard, { ...mockCard, id: 'c2', fsrs: { ...mockCard.fsrs, cardId: 'c2' } }], isLoading: false }),
   useHomeData: () => ({ streakDays: 3 }),
   useCommitQuizSession: () => ({ mutate: jest.fn() }),
   useEntitlement: () => ({ entitlement: undefined, isPaid: false, isLoading: false }), // 17 §S2: session cap read
 }));
 
+// The tour drives this screen through `useTourScene` (a real zustand store, safe to
+// drive directly) plus `useWalkthroughActive`, which needs a provider it will not have
+// here — mock the module and keep the overlay host inert.
+jest.mock('@/tour/walkthrough', () => ({
+  useWalkthroughActive: () => true,
+  WalkthroughOverlayHost: () => null,
+  tourTargets: { quizGutter: { current: null } },
+}));
+
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { QuizScreen } from '@/screens/QuizScreen';
+import { useTourScene } from '@/tour/tourScene';
 import i18n from '@/i18n';
 
-beforeEach(() => mockBack.mockClear());
+beforeEach(() => {
+  mockBack.mockClear();
+  useTourScene.getState().setStepId(null);
+});
+afterAll(() => useTourScene.getState().setStepId(null));
 
 test('close button registers a press and shows the in-tree exit confirm', () => {
   render(<QuizScreen />);
@@ -98,4 +133,31 @@ test('confirming exit calls router.back()', () => {
   fireEvent.press(screen.getByLabelText(i18n.t('quiz.closeQuiz')));
   fireEvent.press(screen.getByText(i18n.t('quiz.exitConfirm')));
   expect(mockBack).toHaveBeenCalledTimes(1);
+});
+
+// ── Walkthrough scene overrides ─────────────────────────────────────────────
+// Both of these regressed by pointing a step at the wrong thing, which no test
+// could see because the COPY still read fine. See tour/tourScene.ts.
+
+test('w6 shows the card flipped, so the three rating buttons the step describes are on screen', () => {
+  useTourScene.getState().setStepId('w6');
+  render(<QuizScreen />);
+
+  // The gutter is the step's anchor. Face-down it holds one reveal button; the
+  // step's copy ("grade yourself honestly") only makes sense with all three.
+  expect(screen.queryByText(i18n.t('quiz.tapToReveal'))).toBeNull();
+  expect(screen.getByText(i18n.t('rating.prompt'))).toBeTruthy();
+  expect(screen.getByText(i18n.t('rating.again'))).toBeTruthy();
+  expect(screen.getByText(i18n.t('rating.almost'))).toBeTruthy();
+  expect(screen.getByText(i18n.t('rating.gotIt'))).toBeTruthy();
+});
+
+test('w7 shows the per-word results LIST, not the "Great session!" splash', () => {
+  useTourScene.getState().setStepId('w7');
+  render(<QuizScreen />);
+
+  // The tooltip promises "how far each word moved and when it returns" — only the
+  // stats list shows that. It used to render the end splash instead.
+  expect(screen.getByText(i18n.t('quiz.sessionResults'))).toBeTruthy();
+  expect(screen.queryByText(i18n.t('quiz.endGreat'))).toBeNull();
 });

@@ -13,6 +13,8 @@ import { languageName } from '@/domain/derive';
 import type { LanguageCode, NotificationPrefs, Profile } from '@/domain/types';
 import { formatUsername, generateUsernameCandidate } from '@/domain/username';
 import { useTranslation } from '@/i18n';
+import { signOut } from '@/auth/session';
+import { dataSource } from '@/data';
 import { registerForPush } from '@/notifications/push';
 import { LEGAL_URLS, SUPPORT_EMAIL, SUPPORT_URLS } from '@/constants/legal';
 import { appVersionLabel } from '@/constants/appInfo';
@@ -119,6 +121,7 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
   const changesUsed = profile?.usernameChanges ?? 0;
   const [draft, setDraft] = useState(current);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [confirmFreeChange, setConfirmFreeChange] = useState(false);
   // Premium 20/day cap is discovered reactively (a rate_limited save) — the
   // cycler then disables like the free post-limit state until the next open.
@@ -247,7 +250,28 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
         confirmLabel={t('settings.deleteConfirm')}
         cancelLabel={t('settings.cancel')}
         destructive
-        onConfirm={() => { setConfirmDelete(false); onClose(); }}
+        onConfirm={() => {
+          if (deleting) return;
+          setDeleting(true);
+          void (async () => {
+            try {
+              await dataSource.deleteOwnAccount();
+            } catch {
+              // Surface and BAIL — signing out after a failed delete would hide
+              // the fact that the account still exists.
+              setDeleting(false);
+              setConfirmDelete(false);
+              showToast({ variant: 'warning', message: t('settings.deleteFailed') });
+              return;
+            }
+            // Row is gone; the cached JWT is now worthless. Sign out to clear it,
+            // then the tabs session guard bounces to /onboarding on its own.
+            await signOut().catch(() => {});
+            setDeleting(false);
+            setConfirmDelete(false);
+            onClose();
+          })();
+        }}
         onClose={() => setConfirmDelete(false)}
       />
     </>
@@ -533,7 +557,10 @@ export function QuizLengthSheet({ visible, isPaid, onClose, onUpgrade }: { visib
 export function HowItWorksSheet({ visible, onClose, onStartTour }: { visible: boolean; onClose: () => void; onStartTour?: () => void }) {
   const { t } = useTranslation();
   return (
-    <Sheet visible={visible} onClose={onClose} title={t('home.edu.title')}>
+    /* scrollable: the accordion's three sections each add a paragraph + a
+       graphic, which outgrows the sheet's maxHeight. Without it the overflow is
+       simply clipped and unreachable. */
+    <Sheet visible={visible} onClose={onClose} title={t('home.edu.title')} scrollable>
       <RawText style={styles.quizIntro}>{t('home.edu.teaser')}</RawText>
       <HowItWorksList onStartTour={onStartTour} />
     </Sheet>

@@ -675,4 +675,9 @@ export const mockDataSource: DataSource = {
     // TODO(P4 data): batch-write per 03 (update card_fsrs_state via ts-fsrs, append
     // review_logs, write quiz_completed event) — Supabase + ts-fsrs. No-op in mock.
   },
+
+  async deleteOwnAccount() {
+    // Mock: nothing persistent to destroy — the screen still runs its sign-out
+    // and bounce, which is the part worth exercising in mock mode.
+  },
 };

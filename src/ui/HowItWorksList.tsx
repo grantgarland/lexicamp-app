@@ -2,6 +2,11 @@
 // study queue / usage tips), shared between the Home educator card and the Settings
 // "How Lexicamp works" sheet (17 §H3). Each item independently expands to its
 // explanation + graphic; opening one closes the others.
+//
+// Each item is wrapped in `ScrollIntoView` so the graphic it reveals is scrolled
+// into the viewport instead of landing under the fold. The wrapper sits OUTSIDE
+// the `isOpen &&` so it stays mounted and can observe the expansion. It is inert
+// wherever there is no `ScrollIntoViewScrollView` above it.
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
@@ -10,6 +15,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useTranslation } from '@/i18n';
 
 import { CardSorter, DailyPractice, ForgettingCurve } from './illustrations';
+import { ScrollIntoView } from './ScrollIntoView';
 import { IconChevronDown, IconChevronUp, IconPlay } from './icons';
 import { RawText } from './Text';
 
@@ -35,7 +41,7 @@ export function HowItWorksList({ onStartTour }: HowItWorksListProps = {}) {
       {sections.map((s, i) => {
         const isOpen = openSection === i;
         return (
-          <View key={s.title} style={styles.item}>
+          <ScrollIntoView key={s.title} enabled={isOpen} style={styles.item}>
             <Pressable
               onPress={() => toggleSection(i)}
               accessibilityRole="button"
@@ -56,7 +62,7 @@ export function HowItWorksList({ onStartTour }: HowItWorksListProps = {}) {
                 <View style={styles.itemGraphic}>{s.graphic}</View>
               </Animated.View>
             )}
-          </View>
+          </ScrollIntoView>
         );
       })}
       {onStartTour != null && (

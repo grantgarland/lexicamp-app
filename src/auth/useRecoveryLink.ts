@@ -38,15 +38,28 @@ export function useRecoveryLink(): void {
       useUiStore.getState().showToast({ variant: 'warning', message: t('auth.recoveryLinkError') });
       return;
     }
-    void supabase.auth
-      .setSession({ access_token: parsed.tokens.accessToken, refresh_token: parsed.tokens.refreshToken })
-      .then(({ error }) => {
-        if (error) {
-          useUiStore.getState().showToast({ variant: 'warning', message: t('auth.recoveryLinkError') });
-          return;
-        }
-        router.replace('/reset-password');
-      });
+    // Two link shapes reach us (see auth/recovery.ts):
+    //  • PKCE `?code=…` — the supabase-js v2 default, and what this project
+    //    actually receives. Exchange it for a session; the code VERIFIER was
+    //    stashed in AsyncStorage when the reset was requested, so this only
+    //    works on the device that asked — which is why the email copy says to
+    //    open the link on this device.
+    //  • implicit `#access_token=…` — kept so a flowType change can't break us.
+    const establish =
+      parsed.status === 'code'
+        ? supabase.auth.exchangeCodeForSession(parsed.code)
+        : supabase.auth.setSession({
+            access_token: parsed.tokens.accessToken,
+            refresh_token: parsed.tokens.refreshToken,
+          });
+
+    void establish.then(({ error }) => {
+      if (error) {
+        useUiStore.getState().showToast({ variant: 'warning', message: t('auth.recoveryLinkError') });
+        return;
+      }
+      router.replace('/reset-password');
+    });
   }, [url, router, t]);
 
   useEffect(() => {

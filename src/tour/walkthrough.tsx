@@ -37,6 +37,7 @@ import {
 
 import { USE_SUPABASE } from '@/data';
 import { useTranslation } from '@/i18n';
+import { useTourScene } from './tourScene';
 import { useLogEvent, useProfile } from '@/query/hooks';
 import { usePrefsStore } from '@/store/prefsStore';
 import { useUiStore } from '@/store/uiStore';
@@ -59,6 +60,7 @@ export const tourTargets = {
   studyCard: createRef<View>(), // Home hero (w1 + w5)
   fab: createRef<View>(), // TabBar capture FAB (w2)
   searchInput: createRef<View>(), // Search overlay input (w3)
+  searchResultWord: createRef<View>(), // Search's OPEN result block (w3b)
   wordsToolbar: createRef<View>(), // Word List search/filter bar (w4)
   quizGutter: createRef<View>(), // Quiz reveal/rating gutter (w6)
   progressTab: createRef<View>(), // TabBar Progress button (w8)
@@ -127,6 +129,19 @@ export function WalkthroughController({ activeTab }: { activeTab: string }) {
     { id: 'w2', targetRef: tourTargets.fab, title: t('walkthrough.w2Title'), description: t('walkthrough.w2Body'), spotlightBorderRadius: 29 },
     // w3 — ON the Search screen: where to search + one-tap save (act after).
     { id: 'w3', targetRef: tourTargets.searchInput, title: t('walkthrough.w3Title'), description: t('walkthrough.w3Body'), delayBefore: NAV_SETTLE_MS },
+    // w3b — still on Search, one beat later: choosing WHICH meaning to save. A
+    //       word can carry several and picking the right one is what makes the
+    //       card worth reviewing, so it earns its own step rather than a clause
+    //       in w3. The Search screen renders a demo query + result for w3/w3b
+    //       (see tour/tourScene.ts) so this describes something on screen, and
+    //       deliberately leaves it UNSAVED so the "Save word" CTA is visible.
+    //       Anchored on the OPEN result block, not the search field (Casey,
+    //       2026-08-03) — the field is not what the step is about. The anchor is
+    //       published by TranslationCard and exists from w3, so it is already
+    //       mounted when the lib validates this step's ref. If the lookup is
+    //       still in flight the ref is null and the tooltip centers, same
+    //       graceful fallback as w6 on an empty quiz.
+    { id: 'w3b', targetRef: tourTargets.searchResultWord, title: t('walkthrough.w3bTitle'), description: t('walkthrough.w3bBody') },
     // w4 — ON the Word List: search/filter/details toolbar.
     // w4's scene is pre-warmed during w3 (see applyStepScene) — the lib's ref
     // validation is synchronous at step change, so the anchor must pre-exist.
@@ -158,6 +173,7 @@ export function WalkthroughController({ activeTab }: { activeTab: string }) {
         setSearchOpen(false);
         router.navigate('/');
         break;
+      case 'w3b':
       case 'w3':
         // Open the search overlay AND switch the tab UNDERNEATH it to Words.
         // The overlay covers the scenes, so the switch is invisible — but it
@@ -189,23 +205,33 @@ export function WalkthroughController({ activeTab }: { activeTab: string }) {
     skipButtonText: t('walkthrough.skip'),
     doneButtonText: t('walkthrough.done'),
     enableAccessibility: true,
-    // Backdrop taps advance (never dismiss silently — the Skip button is the
-    // explicit exit, so a stray tap can't kill the tour and mark it done).
-    defaultBackdropBehavior: 'next',
+    // The tooltip buttons are the ONLY way through or out. Backdrop taps used to
+    // advance; a stray tap could then skip a step whose scene setup the next step
+    // depends on, stranding the tour mid-journey (Casey 2026-08-02). The overlay
+    // is a Modal, so with this set to 'none' the whole app beneath is inert and
+    // no conflicting state can be entered mid-walkthrough.
+    defaultBackdropBehavior: 'none',
     // Traversal driver — see applyStepScene above.
     onStepChange: (from, to) => {
-      applyStepScene(steps[from]?.id, steps[to]?.id ?? '');
-      lastStepIdRef.current = steps[to]?.id ?? '';
+      const toId = steps[to]?.id ?? '';
+      applyStepScene(steps[from]?.id, toId);
+      lastStepIdRef.current = toId;
+      // Publish for screens that must RENDER differently on this step
+      // (quiz results, search demo) — see tour/tourScene.ts.
+      useTourScene.getState().setStepId(toId);
     },
     // Completed OR skipped → done either way; the tour must never auto-fire
-    // twice. Cleanup: close whatever the traversal opened. A completed tour
-    // ends on Progress (w8); an early skip returns Home.
+    // twice. Cleanup: close whatever the traversal opened, then ALWAYS return to
+    // Home — a completed tour used to strand the user on the Progress tab it
+    // happened to end on (Casey 2026-08-01), which is a dead end for someone who
+    // has just been told to go add their first word.
     onTourEnd: (completed) => {
       logEvent(completed ? 'walkthrough_completed' : 'walkthrough_skipped', { lastStep: lastStepIdRef.current });
       setWalkthroughDone(true);
       setSearchOpen(false);
       if (QUIZ_SCOPE.has(lastStepIdRef.current)) router.back(); // skip mid-quiz → dismiss it
-      if (!completed) router.navigate('/');
+      router.navigate('/');
+      useTourScene.getState().setStepId(null); // screens return to real data
     },
   };
 

@@ -6,7 +6,7 @@
 import type { TFunction } from 'i18next';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet as RNStyleSheet, useColorScheme, View } from 'react-native';
+import { Pressable, StyleSheet as RNStyleSheet, useColorScheme, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -34,9 +34,19 @@ import {
   MasteryCard,
   RawText,
   Screen,
+  ScrollIntoView,
+  ScrollIntoViewScrollView,
   Sheet,
+  TAB_BAR_FAB_OVERHANG,
   Tooltip,
 } from '@/ui';
+
+/** Bottom clearance for the scroll content. The nav's own height is already
+ *  reserved by the tabs layout's spacer, but the FAB floats above that and over
+ *  the scene, so the last card needs this much room to escape it. Used TWICE and
+ *  they must agree: as content padding (gives the scroll somewhere to go) and as
+ *  the reveal inset (stops a `ScrollIntoView` landing content under the FAB). */
+const BOTTOM_CLEARANCE = TAB_BAR_FAB_OVERHANG + 14;
 
 // Day/month names are localized (`date.days` / `date.months` arrays); the label shape
 // is its own key so word order can differ per language ("June 30" vs "30 de junio").
@@ -64,7 +74,11 @@ export function HomeScreen() {
   const tourActive = useWalkthroughActive();
   return (
     <Screen edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollIntoViewScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        revealInsetBottom={BOTTOM_CLEARANCE}
+      >
         <GreetingRow dateLabel={todayLabel(t)} streakDays={streakDays} subline={isEmpty ? t('home.firstDayOnMountain') : undefined} />
         {snapshot != null && (
           <>
@@ -94,7 +108,7 @@ export function HomeScreen() {
             {showEdu && <HowItWorksCard defaultOpen={isEmpty} dismissible={!isEmpty} />}
           </>
         )}
-      </ScrollView>
+      </ScrollIntoViewScrollView>
     </Screen>
   );
 }
@@ -311,6 +325,12 @@ function StatTiles({ mastered, addedToday, dueTomorrow }: { mastered: number; ad
 // teaser). The accordion content is the shared `HowItWorksList` (also served from
 // Settings → How Lexicamp works). Once the user has saved words it becomes
 // dismissible ("Got it") with the dismissal persisted (17 §H3).
+//
+// It is the LAST thing on Home, so opening it always reveals content below the
+// fold — hence the `ScrollIntoView`. `revealOnGrowth={false}`: it reveals once,
+// on open, and then hands off to the per-section `ScrollIntoView`s inside
+// `HowItWorksList`. Left on, this card grows whenever one of those sections
+// expands and would scroll back to the card instead of to the open section.
 function HowItWorksCard({ defaultOpen = false, dismissible = false }: { defaultOpen?: boolean; dismissible?: boolean }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
@@ -319,7 +339,7 @@ function HowItWorksCard({ defaultOpen = false, dismissible = false }: { defaultO
   // 18 §F2: guided-tour CTA inside the accordion; already on Home, so just flag it.
   const setWalkthroughRequested = useUiStore((s) => s.setWalkthroughRequested);
   return (
-    <View style={styles.eduCard}>
+    <ScrollIntoView enabled={open} revealOnGrowth={false} style={styles.eduCard}>
       <Pressable
         onPress={() => setOpen((o) => !o)}
         accessibilityRole="button"
@@ -356,7 +376,7 @@ function HowItWorksCard({ defaultOpen = false, dismissible = false }: { defaultO
           )}
         </Animated.View>
       )}
-    </View>
+    </ScrollIntoView>
   );
 }
 
@@ -442,7 +462,7 @@ const STUDY_NUM_GAP = Math.max(0, STUDY_GAP - STUDY_NUM_HALF_LEADING);
 const styles = StyleSheet.create((theme) => {
   const { color, fonts } = theme;
   return {
-    content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16, gap: 14 },
+    content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: BOTTOM_CLEARANCE, gap: 14 },
 
     greetRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
     greetText: { flex: 1 },

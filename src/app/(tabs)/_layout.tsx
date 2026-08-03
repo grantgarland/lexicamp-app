@@ -16,7 +16,7 @@ import { USE_SUPABASE } from '@/data';
 import { SearchView } from '@/screens/SearchScreen';
 import { useProfile, useQuizLengthSync } from '@/query/hooks';
 import { useUiStore } from '@/store/uiStore';
-import { TAB_BAR_CORE_HEIGHT, TabBar, type TabId } from '@/ui';
+import { TAB_BAR_CORE_HEIGHT, TAB_BAR_FAB_OVERHANG, TabBar, type TabId } from '@/ui';
 import { tourTargets, WalkthroughController, WalkthroughOverlayHost } from '@/tour/walkthrough';
 
 export default function TabsLayout() {
@@ -68,7 +68,9 @@ export default function TabsLayout() {
           exiting={SlideOutDown.duration(240)}
           style={[styles.overlay, { paddingTop: insets.top }]}
         >
-          <SearchView onClose={() => setSearchOpen(false)} />
+          {/* The overlay is full-bleed under the nav, so it must clear the bar
+              AND the FAB that floats above it. */}
+          <SearchView onClose={() => setSearchOpen(false)} bottomInset={TAB_BAR_CORE_HEIGHT + TAB_BAR_FAB_OVERHANG + insets.bottom} />
         </Animated.View>
       )}
 

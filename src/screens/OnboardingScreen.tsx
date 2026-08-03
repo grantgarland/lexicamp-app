@@ -5,11 +5,14 @@
 import { useRouter } from 'expo-router';
 import { type ComponentType, useMemo, useState, useEffect } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
+import { SvgXml } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { findLanguage, TRANSLATABLE_LANGUAGES } from '@/constants';
 import { useTranslation } from '@/i18n';
+import { BRAND_MARK_KNOCKOUT_XML } from '@/ui/brandMark';
 import { useLogEvent } from '@/query/hooks';
+import { requestPushPermission } from '@/notifications/push';
 import { useOnboardingStore } from '@/store/onboardingStore';
 import {
   Button,
@@ -19,8 +22,8 @@ import {
   ForgettingCurve,
   IconBell,
   IconChevronRight,
-  IconMountain,
   IntervalTrack,
+  Wordmark,
   LanguagePickerSheet,
   ProgressDots,
   RawText,
@@ -70,9 +73,17 @@ export function OnboardingScreen() {
   const back = () => setStep((s) => Math.max(s - 1, 0));
   // O-06 choice → buffer (with the O-05 pair) → written transactionally by
   // complete_onboarding after auth succeeds (03 onboarding data flow).
-  const finish = (notificationsEnabled: boolean) => {
+  const finish = async (notificationsEnabled: boolean) => {
     if (target != null) setTargetLang(target);
-    setNotificationsEnabled(notificationsEnabled);
+    // Raise the OS prompt HERE, in the screen that explains why — not silently
+    // after auth on the Home screen. The buffered flag still drives token
+    // registration post-auth; a denied prompt just means no token later.
+    if (notificationsEnabled) {
+      const granted = await requestPushPermission().catch(() => false);
+      setNotificationsEnabled(granted);
+    } else {
+      setNotificationsEnabled(false);
+    }
     router.replace('/auth');
   };
 
@@ -81,9 +92,12 @@ export function OnboardingScreen() {
       <Screen edges={['top', 'bottom']}>
         <View style={styles.welcome}>
           <View style={styles.welcomeHero}>
-            <IconMountain size={64} color={theme.color.textOnAccentCta} />
+            {/* Official brand mark (knockout) inside the accent disc. */}
+            <SvgXml xml={BRAND_MARK_KNOCKOUT_XML} width={64} height={64} />
           </View>
-          <RawText style={styles.wordmark}>Lexicamp</RawText>
+          <View style={styles.wordmarkWrap}>
+            <Wordmark width={216} />
+          </View>
           <RawText style={styles.welcomeTitle}>{t('onboarding.welcomeTitle')}</RawText>
           <RawText style={styles.welcomeSub}>{t('onboarding.welcomeSub')}</RawText>
           <View style={styles.welcomeCta}>
@@ -185,8 +199,8 @@ export function OnboardingScreen() {
         <RawText style={styles.notifBody}>{t('onboarding.notifBody')}</RawText>
       </View>
       <View style={styles.footer}>
-        <Button title={t('onboarding.enableNotif')} variant="primary" onPress={() => finish(true)} />
-        <Pressable onPress={() => finish(false)} style={({ pressed }) => [styles.maybeLater, pressed && { opacity: 0.6 }]} accessibilityRole="button">
+        <Button title={t('onboarding.enableNotif')} variant="primary" onPress={() => void finish(true)} />
+        <Pressable onPress={() => void finish(false)} style={({ pressed }) => [styles.maybeLater, pressed && { opacity: 0.6 }]} accessibilityRole="button">
           <RawText style={styles.maybeLaterText}>{t('onboarding.maybeLater')}</RawText>
         </Pressable>
       </View>
@@ -199,7 +213,7 @@ const styles = StyleSheet.create((theme) => {
   return {
     welcome: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
     welcomeHero: { width: 96, height: 96, borderRadius: 30, backgroundColor: color.accent, alignItems: 'center', justifyContent: 'center', marginBottom: 24, boxShadow: theme.shadow.accent },
-    wordmark: { fontFamily: fonts.sans.extra, fontSize: 30, letterSpacing: -0.6, color: color.brandStrong, marginBottom: 20 },
+    wordmarkWrap: { marginBottom: 20 },
     welcomeTitle: { fontFamily: fonts.serif.semibold, fontSize: 26, lineHeight: 33, color: color.brandStrong, textAlign: 'center' },
     welcomeSub: { fontFamily: fonts.sans.regular, fontSize: 14, lineHeight: 21, color: color.textMuted, textAlign: 'center', marginTop: 12 },
     welcomeCta: { alignSelf: 'stretch', position: 'absolute', bottom: 24, left: 32, right: 32 },
