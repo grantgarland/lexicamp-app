@@ -102,20 +102,12 @@ import { mockDataSource, SMOKE_FIXTURES } from '@/data/mock';
 import { toCardResult } from '@/screens/SearchScreen';
 import { ConfirmDialog, EmptyState, PortalHost, TranslationCard, WordRow } from '@/ui';
 
+import { maestroMatches } from './maestroMatch';
+
 const t = (k, o) => i18n.t(k, o);
 
-// ── Maestro's matcher, reimplemented from maestro.Filters.textMatches ────────
-// Kotlin: `regex.matches(text) || regex.pattern == text || regex.matches(nlText)
-//          || regex.pattern == nlText`  (nlText = text with '\n' → ' ')
-// Regex.matches() is a WHOLE-STRING match. Maestro is case-SENSITIVE; the `(?i)`
-// inline flag is JS-incompatible, so it is translated to the 'i' flag here.
-function maestroMatches(selector: string, text: string): boolean {
-  const ci = selector.startsWith('(?i)');
-  const body = ci ? selector.slice(4) : selector;
-  const re = new RegExp(`^(?:${body})$`, ci ? 'i' : '');
-  const nl = text.replace(/\n/g, ' ');
-  return re.test(text) || body === text || re.test(nl) || body === nl;
-}
+// Maestro's matcher now lives in ./maestroMatch so this suite and
+// maestroScreens.test.tsx cannot drift apart on the one rule that matters.
 
 /** Every string the rendered tree would expose to Maestro as an element `text`. */
 function renderedTexts(): string[] {

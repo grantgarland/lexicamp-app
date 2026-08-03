@@ -63,12 +63,17 @@ function parseFlow(file: string): { selectors: Selector[]; inputs: string[] } {
 
 // ── Candidate haystack: every string the app can actually render ─────────────
 type Tree = { [k: string]: string | string[] | Tree };
+type Leaf = { key: string; text: string };
 
-function leaves(tree: Tree, out: string[] = []): string[] {
-  for (const v of Object.values(tree)) {
-    if (typeof v === 'string') out.push(v);
-    else if (Array.isArray(v)) out.push(...v);
-    else leaves(v, out);
+// Key-AWARE walk (2026-08-03). The old version returned bare strings, which is
+// what let an orphaned leaf back a live flow selector — see the orphan-leaf
+// guard at the bottom of this file.
+function leaves(tree: Tree, prefix = '', out: Leaf[] = []): Leaf[] {
+  for (const [k, v] of Object.entries(tree)) {
+    const key = prefix ? `${prefix}.${k}` : k;
+    if (typeof v === 'string') out.push({ key, text: v });
+    else if (Array.isArray(v)) v.forEach((x, i) => out.push({ key: `${key}.${i}`, text: x }));
+    else leaves(v as Tree, key, out);
   }
   return out;
 }
@@ -96,9 +101,13 @@ function instantiate(template: string): string[] {
   return results;
 }
 
-function buildCandidates(inputs: string[]): string[] {
+// en.json leaves, templates instantiated, each still carrying its dotted key.
+const enLeaves: Leaf[] = leaves(en as Tree).flatMap(({ key, text }) => instantiate(text).map((x) => ({ key, text: x })));
+
+// Fixture-derived strings have no i18n key and are exempt from the orphan guard:
+// they come from data/mock.ts, which the flows exercise directly.
+function buildFixtureCandidates(inputs: string[]): string[] {
   const out: string[] = [];
-  for (const leaf of leaves(en as Tree)) out.push(...instantiate(leaf));
   // Mock lookup fixtures (see SMOKE_FIXTURES export in data/mock.ts).
   for (const w of SMOKE_FIXTURES.WORD_BANK) out.push(w.native, w.target);
   for (const s of SMOKE_FIXTURES.FLY_SENSES) {
@@ -119,7 +128,81 @@ function toRegex(raw: string): RegExp {
 
 const flows = flowFiles().map((f) => ({ file: f, ...parseFlow(f) }));
 const allInputs = flows.flatMap((f) => f.inputs);
-const candidates = buildCandidates(allInputs);
+const fixtureCandidates = buildFixtureCandidates(allInputs);
+const candidates = [...enLeaves.map((l) => l.text), ...fixtureCandidates];
+
+// ── Is the key still USED? (2026-08-03 — the "You are here" hole) ────────────
+// The failure this closes: the 2026-07-30 Progress redesign deleted the card
+// that rendered `progress.youAreHere` but left the leaf in en.json, so the guard
+// above found a match and passed while `.maestro/smoke.yaml` asserted a string
+// the app rendered NOWHERE. Existence in the locale file is not evidence of
+// renderability once copy is retired.
+//
+// Honest scope: this proves the key is still referenced from app source
+// SOMEWHERE. It does NOT prove the screen the flow taps to renders it — that
+// needs a render, which maestroScreens.test.tsx does for the smoke screens.
+const SRC_DIR = path.resolve(__dirname, '..');
+
+function sourceFiles(dir: string, out: string[] = []): string[] {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, e.name);
+    // Test code references retired keys on purpose (ProgressScreen.test.tsx
+    // asserts youAreHere is ABSENT) — counting it would defeat the guard.
+    if (e.isDirectory()) {
+      if (e.name !== '__tests__' && e.name !== 'test') sourceFiles(full, out);
+    } else if (/\.tsx?$/.test(e.name) && !/\.test\.tsx?$/.test(e.name)) out.push(full);
+  }
+  return out;
+}
+
+const SOURCE = sourceFiles(SRC_DIR)
+  .map((f) => fs.readFileSync(f, 'utf8'))
+  .join('\n');
+
+// Static form: t('a.b.c') / i18n.t("a.b.c"). `\bt\(` cannot match `format(`,
+// `assert(` or `it(` — those have a word char immediately before the `t`.
+const usedKeys = new Set([...SOURCE.matchAll(/\bt\(\s*['"]([\w.-]+)['"]/g)].map((m) => m[1]));
+// Dynamic form: t(`tier.${id}.name`). Only the static head is knowable, so the
+// whole subtree under it is treated as used.
+const usedPrefixes = [...SOURCE.matchAll(/\bt\(\s*`([\w.-]*?)\$\{/g)].map((m) => m[1]).filter((p) => p.length > 0);
+
+const PLURAL_SUFFIX = /_(zero|one|two|few|many|other)$/;
+
+function keyIsLive(key: string): boolean {
+  const base = key.replace(PLURAL_SUFFIX, ''); // t('x.subtitle', {count}) → x.subtitle_other
+  const parent = base.replace(/\.\d+$/, ''); // array leaves are read via their parent key
+  return usedKeys.has(key) || usedKeys.has(base) || usedKeys.has(parent) || usedPrefixes.some((p) => key.startsWith(p));
+}
+
+describe('flow selectors are backed by copy the app still renders', () => {
+  it('the key scanner actually found usage (guard is guarding)', () => {
+    expect(usedKeys.size).toBeGreaterThan(50);
+    expect(keyIsLive('progress.fullRoute')).toBe(true); // a key in live use
+    expect(keyIsLive('progress.youAreHere')).toBe(false); // the retired one
+  });
+
+  for (const { file, selectors } of flows) {
+    describe(file, () => {
+      for (const sel of selectors) {
+        it(`line ${sel.line}: ${JSON.stringify(sel.raw)} is not backed only by a retired key`, () => {
+          const re = toRegex(sel.raw);
+          // Fixture-backed selectors carry no i18n key; the guard above covers them.
+          if (fixtureCandidates.some((c) => re.test(c))) return;
+          const backing = enLeaves.filter((l) => re.test(l.text));
+          if (backing.length > 0 && !backing.some((l) => keyIsLive(l.key))) {
+            throw new Error(
+              `${JSON.stringify(sel.raw)} (${sel.flow}:${sel.line}) is backed ONLY by en.json ` +
+                `key(s) no app source references: ${JSON.stringify([...new Set(backing.map((l) => l.key))])}. ` +
+                `The copy was retired from the UI but left in the locale file — the flow asserts ` +
+                `a string nothing renders. Update the flow (and delete the dead key).`,
+            );
+          }
+          expect(backing.length === 0 || backing.some((l) => keyIsLive(l.key))).toBe(true);
+        });
+      }
+    });
+  }
+});
 
 describe('Maestro flow strings are backed by en.json / mock fixtures', () => {
   it('found flows and selectors (guard is actually guarding)', () => {

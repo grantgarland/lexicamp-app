@@ -35,9 +35,21 @@ appId: com.lexicamp.app
 - assertVisible: '(?i)My Words'
 
 # ── Progress ─────────────────────────────────────────────────────────────────
+# 2026-08-03: this asserted '(?i)You are here' and went red. The 2026-07-30
+# Progress redesign (cbc5e57) DELETED the "You are here" hero card — the ladder's
+# current row absorbed its content — but left the now-orphan `progress.youAreHere`
+# leaf in en.json, so maestroStrings.test.ts still found a "renderable" string and
+# stayed green. The string was rendered by nothing at all; this was never a
+# scroll/layout problem.
+#   Why `progress.fullRoute` and not `progress.title`: the tab bar prints
+#   "Progress" too (tabs.progress), so that selector would pass against a blank
+#   Route tab and stop catching the dead-screen class this flow exists for.
+#   "Full Route" is RouteTab's own section title and only renders once the tab has
+#   data (totalSaved === 0 renders the empty state instead), which is exactly the
+#   signal we want. It is not textTransform'd, but keep (?i) for consistency.
 - tapOn:
     id: 'tab-progress'
-- assertVisible: '(?i)You are here'
+- assertVisible: '(?i)Full Route'
 
 # ── Settings ─────────────────────────────────────────────────────────────────
 - tapOn:
