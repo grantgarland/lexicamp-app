@@ -28,6 +28,11 @@ export interface QuizCardContent {
   backPhonetic?: string;
   backPos?: string;
   backExample?: string;
+  /** The SAME sentence in the user's own language, rendered as a gloss under the
+   *  target line (Casey, 2026-08-03: the language being studied leads, the
+   *  translation supports). Optional — legacy cards and providers that yield no
+   *  paired sentence have only the target side. */
+  backExampleNative?: string;
 }
 
 export interface QuizCardItem {

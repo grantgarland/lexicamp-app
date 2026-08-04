@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
+import { authErrorKey } from '@/auth/errorMessages';
 import { updatePassword, useSession } from '@/auth/session';
 import { USE_SUPABASE } from '@/data';
 import { useTranslation } from '@/i18n';
@@ -52,7 +53,10 @@ export function ResetPasswordScreen() {
       // The recovery session IS a signed-in session — straight into the app.
       router.replace('/');
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('auth.genericError'));
+      // Route through the same mapper AuthScreen uses: GoTrue's raw English
+      // ("Password should be at least 6 characters") must never reach the UI,
+      // least of all a Spanish user's.
+      setError(t(authErrorKey(e instanceof Error ? e.message : null)));
     } finally {
       setBusy(false);
     }

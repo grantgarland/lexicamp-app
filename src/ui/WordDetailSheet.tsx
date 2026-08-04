@@ -63,6 +63,14 @@ export function WordDetailSheet({ word, onClose, onDelete, onToggleArchive, onEd
   // Target-side line, mirroring the search card's example pair.
   const exampleTranslation =
     word?.exampleTranslation || (fetched ? `${fetched.targetPrefix}${fetched.targetTerm}${fetched.targetSuffix}` : '');
+  // Display order is the REVERSE of the field order (Casey, 2026-08-03): the
+  // target-language sentence is what the user is here to study, so it leads and
+  // the native sentence glosses it. `example` is the SOURCE/native side and
+  // `exampleTranslation` the target side — see the two fallbacks above. Falls
+  // back to whichever exists, so a legacy row with only a source sentence still
+  // renders one line instead of none.
+  const exampleLead = exampleTranslation || example;
+  const exampleGloss = exampleTranslation !== '' ? example : '';
   return (
     <Sheet visible={word != null} onClose={onClose} scrollable>
       {word != null && tier != null && (
@@ -101,11 +109,11 @@ export function WordDetailSheet({ word, onClose, onDelete, onToggleArchive, onEd
                 say it; the hint below is the one line that earns the space. */}
             <Text style={[styles.memoryHint, { color: tier.text, borderTopColor: tier.border }]}>{t('wordList.memoryHint')}</Text>
           </View>
-          {example !== '' ? (
+          {exampleLead !== '' ? (
             <>
               <Text style={styles.sectionLabel}>{t('wordList.example')}</Text>
-              <Text style={[styles.example, exampleTranslation !== '' && styles.exampleTight]}>&ldquo;{example}&rdquo;</Text>
-              {exampleTranslation !== '' && <Text style={styles.exampleTranslation}>{exampleTranslation}</Text>}
+              <Text style={[styles.example, exampleGloss !== '' && styles.exampleTight]}>&ldquo;{exampleLead}&rdquo;</Text>
+              {exampleGloss !== '' && <Text style={styles.exampleTranslation}>{exampleGloss}</Text>}
             </>
           ) : needsFetch ? (
             <View style={styles.exampleReqWrap}>

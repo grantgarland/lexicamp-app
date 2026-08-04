@@ -227,7 +227,11 @@ export function useHomeData(): HomeData {
   const userState = useDevStore((s) => s.userState); // dev knob → query key
   const activeLang = useActiveLang(); // Phase D: language switch → key change → repaint
   const uid = useUserKey();
-  const deck = useQuery({ queryKey: ['deckCards', userState, activeLang, uid], queryFn: () => ds.getDeckCards(activeLang) });
+  const deck = useQuery({
+    queryKey: ['deckCards', userState, activeLang, uid],
+    queryFn: () => ds.getDeckCards(activeLang),
+    enabled: activeLang != null,
+  });
   const eng = useQuery({ queryKey: ['engagement', userState, uid], queryFn: () => ds.getEngagement() });
   const snapshot = deck.data != null ? homeSnapshot(deck.data.cards, deck.data.states) : null;
   return { snapshot, streakDays: eng.data?.streakDays ?? 0, isLoading: deck.isLoading || eng.isLoading };
@@ -245,8 +249,9 @@ export function useDueCards(limit: number, deckId?: string) {
   const q = useQuery({
     queryKey: ['dueCards', userState, limit, activeLang, uid, deckId ?? null],
     queryFn: () => ds.getDueCards(limit, activeLang, deckId),
+    enabled: activeLang != null,
   });
-  return { cards: q.data ?? [], isLoading: q.isLoading };
+  return { cards: q.data ?? [], isLoading: activeLang == null || q.isLoading };
 }
 
 // Stable empty fallbacks. `?? []` inline would allocate a fresh array on every
@@ -278,7 +283,11 @@ export function useProgressData(): ProgressData {
   const userState = useDevStore((s) => s.userState);
   const activeLang = useActiveLang();
   const uid = useUserKey();
-  const deck = useQuery({ queryKey: ['deckCards', userState, activeLang, uid], queryFn: () => ds.getDeckCards(activeLang) });
+  const deck = useQuery({
+    queryKey: ['deckCards', userState, activeLang, uid],
+    queryFn: () => ds.getDeckCards(activeLang),
+    enabled: activeLang != null,
+  });
   const eng = useQuery({ queryKey: ['engagement', userState, uid], queryFn: () => ds.getEngagement() });
   const stats = useQuery({ queryKey: ['progressStats', userState, uid], queryFn: () => ds.getProgressStats() });
   const snap = deck.data != null ? homeSnapshot(deck.data.cards, deck.data.states) : null;
@@ -297,13 +306,28 @@ export function useProgressData(): ProgressData {
   };
 }
 
-/** The user's saved words for the Word List (read). */
+/** The user's saved words for the Word List (read).
+ *
+ *  ⚠️ This and every other language-scoped read are gated on `activeLang != null`.
+ *  `activeLang` comes from the profile query, so it is UNDEFINED for the first
+ *  frames after mount and briefly around a language switch. Ungated, the query
+ *  fired with `undefined`, the DataSource fell back to resolving the language
+ *  SERVER-side (`lang ?? (await this.getProfile()).targetLang`), and the result
+ *  was cached under a `[…, undefined, …]` key. That slot outlives the switch and
+ *  re-serves the PREVIOUS language's rows whenever activeLang is momentarily
+ *  undefined — the stale Spanish-row-in-a-Russian-list flash (Casey 2026-08-02).
+ *  `isLoading` stays true while the language is unresolved too, otherwise the
+ *  screen paints its empty state for a frame before the real fetch begins. */
 export function useWords() {
   const userState = useDevStore((s) => s.userState); // dev knob → query key
   const activeLang = useActiveLang();
   const uid = useUserKey();
-  const q = useQuery({ queryKey: ['words', userState, activeLang, uid], queryFn: () => ds.getWords(activeLang) });
-  return { words: q.data ?? [], isLoading: q.isLoading };
+  const q = useQuery({
+    queryKey: ['words', userState, activeLang, uid],
+    queryFn: () => ds.getWords(activeLang),
+    enabled: activeLang != null,
+  });
+  return { words: q.data ?? [], isLoading: activeLang == null || q.isLoading };
 }
 
 /** Custom decks (Premium). */
@@ -311,8 +335,12 @@ export function useDecks() {
   const userState = useDevStore((s) => s.userState);
   const activeLang = useActiveLang();
   const uid = useUserKey();
-  const q = useQuery({ queryKey: ['decks', userState, activeLang, uid], queryFn: () => ds.getDecks(activeLang) });
-  return { decks: q.data ?? [], isLoading: q.isLoading };
+  const q = useQuery({
+    queryKey: ['decks', userState, activeLang, uid],
+    queryFn: () => ds.getDecks(activeLang),
+    enabled: activeLang != null,
+  });
+  return { decks: q.data ?? [], isLoading: activeLang == null || q.isLoading };
 }
 
 /** Words in ONE custom deck (2026-07-30). Disabled while `deckId` is null so the
@@ -326,9 +354,9 @@ export function useDeckWords(deckId: string | null) {
   const q = useQuery({
     queryKey: ['deckWords', userState, activeLang, uid, deckId],
     queryFn: () => ds.getDeckWords(deckId as string, activeLang),
-    enabled: deckId != null,
+    enabled: deckId != null && activeLang != null,
   });
-  return { words: q.data ?? [], isLoading: deckId != null && q.isLoading };
+  return { words: q.data ?? [], isLoading: deckId != null && (activeLang == null || q.isLoading) };
 }
 
 /** Which custom decks a card is in — the honest source for Add-to-Deck's

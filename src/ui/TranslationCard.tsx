@@ -126,25 +126,33 @@ export function TranslationCard({
 
       <Animated.View style={styles.accordion} layout={LinearTransition.duration(240)}>
         {result.translations.map((t, i) => (
-          /* The expanded sense is much taller than the collapsed row it replaces
+          /* The expanded item is much taller than the collapsed row it replaces
              — near the bottom of the list its Save button lands under the tab
-             bar. Reveal it (and any example sentence fetched into it later). */
-          <ScrollIntoView key={t.id} enabled={i === currentIdx} nodeRef={i === currentIdx ? expandedRef : undefined}>
-          <TranslationItem
-            translation={t}
-            isExpanded={i === currentIdx}
-            onExpand={() => onSetCurrent(i)}
-            buttonState={buttonState(t)}
-            saveable={t.saveable ?? true}
-            noticeText={t.noticeText}
-            onSave={() => onSave(i)}
-            onDelete={() => onDelete(i)}
-            canRequestExample={(t.saveable ?? true) && examplesSupported}
-            exampleLoading={exampleLoading}
-            /* Only the expanded sense can have an in-flight/settled fetch. */
-            exampleStatus={i === currentIdx ? exampleStatus : 'idle'}
-            onRequestExample={onRequestExample != null ? () => onRequestExample(i) : undefined}
-          />
+             bar. Reveal it (and any example sentence fetched into it later).
+             `layout` lives HERE, not on TranslationItem: this wrapper is the node
+             that moves when a sibling above it expands, so it is the one that has
+             to animate. */
+          <ScrollIntoView
+            key={t.id}
+            enabled={i === currentIdx}
+            nodeRef={i === currentIdx ? expandedRef : undefined}
+            layout={LinearTransition.duration(240)}
+          >
+            <TranslationItem
+              translation={t}
+              isExpanded={i === currentIdx}
+              onExpand={() => onSetCurrent(i)}
+              buttonState={buttonState(t)}
+              saveable={t.saveable ?? true}
+              noticeText={t.noticeText}
+              onSave={() => onSave(i)}
+              onDelete={() => onDelete(i)}
+              canRequestExample={(t.saveable ?? true) && examplesSupported}
+              exampleLoading={exampleLoading}
+              /* Only the expanded item can have an in-flight/settled fetch. */
+              exampleStatus={i === currentIdx ? exampleStatus : 'idle'}
+              onRequestExample={onRequestExample != null ? () => onRequestExample(i) : undefined}
+            />
           </ScrollIntoView>
         ))}
       </Animated.View>
@@ -184,10 +192,13 @@ function TranslationItem({
   // Local binding keeps TS narrowing inside the .map closure (drops the `!`).
   const details = translation.details;
 
-  // Layout-animated shell: height animates as the current word changes; the
-  // collapsed row and the expanded "current word" block crossfade in/out.
+  // Shell for the crossfade: the collapsed row and the expanded "current word"
+  // block fade in and out of the same slot. The LAYOUT transition (this row's
+  // height, and the rows below it sliding) is owned by the `ScrollIntoView`
+  // wrapper in TranslationCard — nesting a second one on the same geometry makes
+  // the two fight over the frame.
   return (
-    <Animated.View layout={LinearTransition.duration(240)}>
+    <View>
       {!isExpanded ? (
         <Animated.View key="collapsed" entering={FadeIn.duration(180)} exiting={FadeOut.duration(120)}>
           <Pressable onPress={onExpand} style={styles.collapsed} accessibilityRole="button">
@@ -304,7 +315,7 @@ function TranslationItem({
           </View>
         </Animated.View>
       )}
-    </Animated.View>
+    </View>
   );
 }
 

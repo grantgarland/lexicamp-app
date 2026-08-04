@@ -331,8 +331,18 @@ describe('updateProfile', () => {
 
 describe('logEvent', () => {
   it('drops event names outside the client allowlist without touching the network', async () => {
-    await supabaseDataSource.logEvent('quiz_completed'); // server-written name — client may not shadow it
-    expect(mockCalls).toHaveLength(0);
+    // The drop path deliberately console.warns in __DEV__ so a mistyped event
+    // name is loud during development. Spy on it rather than letting it print:
+    // the noise made every jest run look like it had a problem, AND the warning
+    // is part of the contract, so assert it instead of tolerating it.
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await supabaseDataSource.logEvent('quiz_completed'); // server-written name — client may not shadow it
+      expect(mockCalls).toHaveLength(0);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('quiz_completed'));
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('inserts allowlisted events under the signed-in user', async () => {

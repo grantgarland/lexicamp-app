@@ -216,6 +216,18 @@ describe('mapQuizItem', () => {
     expect(noEx.content.backExample).toBeUndefined();
   });
 
+  // The card renders backExample as the LEAD and backExampleNative as the gloss
+  // beneath it (Casey, 2026-08-03). Swapping the two sides here would silently
+  // put the user's own language on top, which is the whole thing being fixed —
+  // and nothing downstream could tell, since both are just strings.
+  it('pairs the target-side lead with the source-side gloss, in that order', () => {
+    const q = mapQuizItem(CARD, TR, FSRS, 'es');
+    expect(q.content.backExample).toBe('A fly in the soup.'); // target — leads
+    expect(q.content.backExampleNative).toBe('Una mosca en la sopa.'); // source — glosses
+    const noEx = mapQuizItem(CARD, { ...TR, examples: null }, FSRS, 'es');
+    expect(noEx.content.backExampleNative).toBeUndefined();
+  });
+
   it('sibling-sense card back shows ITS sense’s example (per-sense, 2026-07-17)', () => {
     const q = mapQuizItem({ ...CARD, custom_back: 'housefly' }, TR, FSRS, 'es');
     expect(q.content.backExample).toBe('The housefly is common.');

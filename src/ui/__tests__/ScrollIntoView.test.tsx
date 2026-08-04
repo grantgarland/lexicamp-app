@@ -1,8 +1,10 @@
 // Guards the scroll math behind ScrollIntoView. The measurement itself is a
 // native round-trip (`measureLayout`) that jest cannot exercise, so the geometry
-// is split into a pure function and pinned here — the part that can silently
-// scroll to the wrong place.
-import { revealOffset, type RevealGeometry } from '../ScrollIntoView';
+// lives in its own import-free module and is pinned here — the part that can
+// silently scroll to the wrong place. Import from `../revealOffset`, NOT from
+// `../ScrollIntoView`: the component pulls in reanimated, which needs a native
+// binary and dies at import time under jest.
+import { revealOffset, type RevealGeometry } from '../revealOffset';
 
 // An 800pt window over 3000pt of content, scrolled to the top.
 const base: RevealGeometry = {

@@ -23,6 +23,8 @@ import {
   IconBell,
   IconChevronRight,
   IntervalTrack,
+  OnboardingShot,
+  type OnboardingShotName,
   Wordmark,
   LanguagePickerSheet,
   ProgressDots,
@@ -36,7 +38,25 @@ import {
 const NATIVE_LANG = 'en';
 
 // Story beats O-02…O-07 → (title, two paragraphs, illustration).
-const STORY: { titleKey: string; aKey: string; bKey: string; Illustration: ComponentType }[] = [
+// `shot` names a captured in-app screenshot to show INSTEAD of the vector
+// illustration. NONE are set yet: no captures are committed, and
+// `OnboardingShotName` is derived from the files that actually exist, so naming
+// an uncommitted one is a TYPE ERROR rather than a broken bundle. That is
+// deliberate — Metro resolves `require()` at bundle time, so a missing asset
+// fails the build, not the render (see the note atop ui/OnboardingShot.tsx).
+//
+// Once .maestro/capture-onboarding-shots.yaml has been run and the PNGs are in
+// assets/images/onboarding/, add each to SHOTS and then set `shot:` here.
+// Planned mapping: s1 → 'home', s3 → 'quiz', s4 → 'progress', s5 → 'search'.
+// The abstract beats (forgetting curve, summit) keep their illustration — there
+// is no single screen to photograph.
+const STORY: {
+  titleKey: string;
+  aKey: string;
+  bKey: string;
+  Illustration: ComponentType;
+  shot?: OnboardingShotName;
+}[] = [
   { titleKey: 's1Title', aKey: 's1a', bKey: 's1b', Illustration: DailyPractice },
   { titleKey: 's2Title', aKey: 's2a', bKey: 's2b', Illustration: ForgettingCurve },
   { titleKey: 's3Title', aKey: 's3a', bKey: 's3b', Illustration: IntervalTrack },
@@ -118,7 +138,15 @@ export function OnboardingScreen() {
         <ScrollView contentContainerStyle={styles.storyScroll} showsVerticalScrollIndicator={false}>
           <ProgressDots count={STORY.length} index={i} style={styles.dots} />
           <RawText style={styles.storyTitle}>{t(`onboarding.${beat.titleKey}`)}</RawText>
-          <View style={styles.storyArt}><Illustration /></View>
+          <View style={styles.storyArt}>
+            {beat.shot != null ? (
+              <OnboardingShot name={beat.shot}>
+                <Illustration />
+              </OnboardingShot>
+            ) : (
+              <Illustration />
+            )}
+          </View>
           <RawText style={styles.storyPara}>{t(`onboarding.${beat.aKey}`)}</RawText>
           <RawText style={styles.storyPara}>{t(`onboarding.${beat.bKey}`)}</RawText>
         </ScrollView>

@@ -66,7 +66,7 @@ const CARD_JOIN =
   'id, deck_id, user_id, translation_id, user_note, custom_front, custom_back, suspended, created_at, ' +
   'decks!cards_deck_id_fkey!inner ( target_lang ), ' +
   'card_target_overrides ( target_text ), ' +
-  'translations_cache ( id, display_source, translation, pos_tag, prefix_word, examples, alt_translations, back_translations, provider ), ' +
+  'translations_cache ( id, display_source, translation, source_lang, target_lang, pos_tag, prefix_word, examples, alt_translations, back_translations, provider ), ' +
   'card_fsrs_state ( card_id, user_id, stability, difficulty, due_at, last_review_at, state, reps, lapses, learning_steps )';
 
 /** Due-queue variant: `!inner` makes the embedded filter actually EXCLUDE parent
@@ -358,7 +358,7 @@ export const supabaseDataSource: DataSource = {
       .order('created_at', { ascending: false });
     bail(error);
     const rows = (data ?? []) as unknown as JoinedCardRow[];
-    return rows.map((r) => mapWordListItem(r, r.translations_cache, r.card_fsrs_state, overrideText(r.card_target_overrides)));
+    return rows.map((r) => mapWordListItem(r, r.translations_cache, r.card_fsrs_state, overrideText(r.card_target_overrides), target));
   },
 
   async getCardDeckIds(cardId: string): Promise<string[]> {
@@ -405,7 +405,7 @@ export const supabaseDataSource: DataSource = {
       .order('created_at', { ascending: false });
     bail(error);
     const rows = (data ?? []) as unknown as JoinedCardRow[];
-    return rows.map((r) => mapWordListItem(r, r.translations_cache, r.card_fsrs_state, overrideText(r.card_target_overrides)));
+    return rows.map((r) => mapWordListItem(r, r.translations_cache, r.card_fsrs_state, overrideText(r.card_target_overrides), target));
   },
 
   async getDueCards(limit: number, lang?: string, deckId?: string): Promise<QuizCardItem[]> {

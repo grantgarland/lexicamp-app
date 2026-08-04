@@ -88,6 +88,12 @@ export interface TranslationJoin {
   id: string;
   display_source: string;
   translation: string | null;
+  /** Which way round this cached row was looked up. Needed because the row is
+   *  stored in SEARCH direction, while the word list always renders in LEARNING
+   *  direction — see mapWordListItem. Optional so older projections that don't
+   *  select them still type-check (they fall back to search order). */
+  source_lang?: string | null;
+  target_lang?: string | null;
   pos_tag: string | null;
   prefix_word: string | null;
   /** Full Azure sense list (D10) — source of the quiz pre-flip sense hints. */
@@ -203,14 +209,39 @@ export function overrideText(o: OverrideRow | OverrideRow[] | null | undefined):
  *  RENDERED target only. Sense resolution (cardSenseKey / senseExample) stays on
  *  custom_back on purpose: the override is display text, not a sense choice, and
  *  routing it through cardSenseKey would break per-sense example lookup. */
-export function mapWordListItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow, override?: string | null): WordListItem {
+export function mapWordListItem(
+  card: CardRow,
+  tr: TranslationJoin,
+  fsrs: FsrsRow,
+  override?: string | null,
+  /** The language being studied (the deck's target_lang). When supplied, the row
+   *  is oriented so the LEARNING language is always the headword. */
+  learningLang?: string | null,
+): WordListItem {
   const ex = senseExample(card, tr);
-  const originalTarget = card.custom_back ?? tr.translation ?? '';
+  // ⚠️ translations_cache rows are stored in SEARCH direction: look up "bath"
+  // EN→RU and display_source is English; look up "принимать" RU→EN and it is
+  // Russian. Rendering those raw made the word list flip orientation row by row
+  // depending on which way the user happened to search (Casey 2026-08-02).
+  // Orient by the LEARNING language instead so the studied word is always the
+  // headword. Falls back to search order when the langs aren't available.
+  const flip =
+    learningLang != null &&
+    tr.source_lang != null &&
+    tr.target_lang != null &&
+    tr.source_lang === learningLang &&
+    tr.target_lang !== learningLang;
+
+  const searchTarget = card.custom_back ?? tr.translation ?? '';
+  const searchNative = card.custom_front ?? tr.display_source;
+  // custom_front/custom_back stay bound to the SENSE (custom_back is the sense
+  // identity — see the card_custom_back memo), so they travel with their side.
+  const originalTarget = flip ? searchNative : searchTarget;
   return {
     id: card.id,
     translationId: tr.id,
     senseTarget: cardSenseKey(card, tr),
-    native: card.custom_front ?? tr.display_source,
+    native: flip ? searchTarget : searchNative,
     target: override ?? originalTarget,
     targetOverride: override ?? null,
     originalTarget,
@@ -282,7 +313,17 @@ export function mapQuizItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow, t
       // so it drives both the revealed back and the recall input's slot count.
       backWord: override ?? card.custom_back ?? tr.translation ?? '',
       ...(tr.pos_tag ? { backPos: i18n.t(`pos.${tr.pos_tag}`, { defaultValue: tr.pos_tag.toLowerCase() }) } : {}),
-      ...(ex != null ? { backExample: `${ex.targetPrefix}${ex.targetTerm}${ex.targetSuffix}` } : {}),
+      // Target line leads, source line glosses it. NOTE the overlap with
+      // `senseHint`: when a sense has no back-translations, the front's `frontSub`
+      // is already this same source sentence, so the two will match on those
+      // cards. That is repetition, not a leak — the answer only ever lives on the
+      // target side.
+      ...(ex != null
+        ? {
+            backExample: `${ex.targetPrefix}${ex.targetTerm}${ex.targetSuffix}`,
+            backExampleNative: `${ex.sourcePrefix}${ex.sourceTerm}${ex.sourceSuffix}`,
+          }
+        : {}),
     },
   };
 }

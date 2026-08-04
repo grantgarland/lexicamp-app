@@ -39,7 +39,9 @@ const QUIZ_CARD: QuizCardData = {
   backWord: 'mountain',
   backPhonetic: '/ˈmaʊntən/',
   backPos: 'noun',
-  backExample: 'The mountain is beautiful in winter.',
+  // Target line leads, native line glosses it (the shape mapQuizItem now emits).
+  backExample: 'La montaña es hermosa en invierno.',
+  backExampleNative: 'The mountain is beautiful in winter.',
 };
 
 const SAMPLE_RESULT: TranslationResult = {

@@ -30,6 +30,11 @@ export interface QuizCardData {
   backPhonetic?: string;
   backPos?: string;
   backExample?: string;
+  /** The SAME sentence in the user's own language, rendered as a gloss under the
+   *  target line (Casey, 2026-08-03: the language being studied leads, the
+   *  translation supports). Optional — legacy cards and providers that yield no
+   *  paired sentence have only the target side. */
+  backExampleNative?: string;
 }
 
 export type QuizMode = 'recognition' | 'recall';
@@ -173,7 +178,12 @@ export function QuizCardBack({ tier, card, style }: QuizCardBackProps) {
       <View style={styles.backDivider} />
 
       {card.backExample != null && (
-        <RNText style={styles.backExample}>&ldquo;{card.backExample}&rdquo;</RNText>
+        <>
+          <RNText style={[styles.backExample, card.backExampleNative != null && styles.backExampleTight]}>
+            &ldquo;{card.backExample}&rdquo;
+          </RNText>
+          {card.backExampleNative != null && <RNText style={styles.backExampleNative}>{card.backExampleNative}</RNText>}
+        </>
       )}
 
       <View style={[styles.echo, { backgroundColor: tr.bg }]}>
@@ -248,7 +258,12 @@ const styles = StyleSheet.create((theme) => {
     backWord: { fontFamily: fonts.serif.semibold, fontSize: 40, letterSpacing: -0.8, color: color.textStrong, marginBottom: 8 },
     backIpa: { fontFamily: fonts.mono.regular, fontSize: 13, marginBottom: 20 },
     backDivider: { height: 1, backgroundColor: color.divider, marginBottom: 16 },
-    backExample: { fontFamily: fonts.sans.regular, fontSize: 13, fontStyle: 'italic', color: color.textMuted, lineHeight: 21 },
+    // textBody, not textMuted: this is the target-language line and it now LEADS a
+    // pair, so it takes the weight and `backExampleNative` takes the muted gloss
+    // role. Mirrors WordDetailSheet's example/exampleTranslation ramp exactly.
+    backExample: { fontFamily: fonts.sans.regular, fontSize: 13, fontStyle: 'italic', color: color.textBody, lineHeight: 21 },
+    backExampleTight: { marginBottom: 4 },
+    backExampleNative: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted, lineHeight: 18 },
     echo: { marginTop: 16, paddingVertical: 10, paddingHorizontal: 14, borderRadius: radius.md },
     echoText: { fontFamily: fonts.sans.regular, fontSize: 13 },
     echoStrong: { fontFamily: fonts.sans.semibold },

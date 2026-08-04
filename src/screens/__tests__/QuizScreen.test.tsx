@@ -98,7 +98,11 @@ jest.mock('@/query/hooks', () => ({
 // drive directly) plus `useWalkthroughActive`, which needs a provider it will not have
 // here — mock the module and keep the overlay host inert.
 jest.mock('@/tour/walkthrough', () => ({
-  useWalkthroughActive: () => true,
+  // Derived from the scene store, NOT a bare `true`: a hardcoded true would put
+  // the two pre-existing tests on the tour path as well, quietly changing what
+  // they exercise. Reading `getState()` without subscribing is fine here — every
+  // test sets its step BEFORE render.
+  useWalkthroughActive: () => require('@/tour/tourScene').useTourScene.getState().stepId != null,
   WalkthroughOverlayHost: () => null,
   tourTargets: { quizGutter: { current: null } },
 }));

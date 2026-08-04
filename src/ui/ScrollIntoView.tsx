@@ -33,8 +33,9 @@
 // can observe the expansion — wrap the whole accordion item, not the body that
 // mounts and unmounts inside it.
 import { createContext, forwardRef, useCallback, useContext, useEffect, useImperativeHandle, useRef } from 'react';
-import type { RefObject } from 'react';
+import type { ComponentProps, RefObject } from 'react';
 import {
+  Keyboard,
   ScrollView,
   View,
   type LayoutChangeEvent,
@@ -43,6 +44,11 @@ import {
   type ScrollViewProps,
   type ViewProps,
 } from 'react-native';
+import Animated from 'react-native-reanimated';
+
+import { revealOffset, type RevealGeometry } from './revealOffset';
+
+export { revealOffset, type RevealGeometry };
 
 export interface ScrollIntoViewOptions {
   /** Breathing room kept above the revealed box (pt). */
@@ -52,54 +58,6 @@ export interface ScrollIntoViewOptions {
    *  TabBar, which the scroll view runs underneath. */
   insetBottom?: number;
   animated?: boolean;
-}
-
-/** Pure geometry, split out so the scroll math is unit-testable without a host
- *  tree. All values are in the scroll view's content coordinate space. */
-export interface RevealGeometry {
-  /** The box's top edge, as `measureLayout` reports it against the inner view. */
-  y: number;
-  height: number;
-  /** Current scroll position. */
-  offsetY: number;
-  /** Visible height of the scroll view. */
-  viewportH: number;
-  /** Total scrollable content height. */
-  contentH: number;
-  /** Requested breathing room around the box. */
-  insetTop: number;
-  insetBottom: number;
-  /** The scroll view's own `contentInset` — what the platform has reserved at
-   *  each edge. On Search this is the keyboard: `automaticallyAdjustKeyboardInsets`
-   *  pads the bottom by the keyboard's height, so the last `contentInsetBottom`
-   *  points of the frame are covered and the scrollable range grows by the same
-   *  amount. Ignoring it reveals things to a spot behind the keyboard, and clamps
-   *  the scroll short of where the content can actually go. */
-  contentInsetTop?: number;
-  contentInsetBottom?: number;
-}
-
-/** The minimum scroll offset that brings [y, y + height] fully into view —
- *  `block: 'nearest'`. Returns `offsetY` unchanged when the box already fits. */
-export function revealOffset(g: RevealGeometry): number {
-  const ciTop = g.contentInsetTop ?? 0;
-  const ciBottom = g.contentInsetBottom ?? 0;
-  const top = g.y - g.insetTop;
-  const bottom = g.y + g.height + g.insetBottom;
-  // The unobscured slice of the frame, in content coordinates.
-  const windowTop = g.offsetY + ciTop;
-  const windowBottom = g.offsetY + g.viewportH - ciBottom;
-  let delta = 0;
-  // Hanging off the bottom → scroll by exactly the overhang, no further.
-  if (bottom > windowBottom) delta = bottom - windowBottom;
-  // …but never at the cost of the top edge. Also covers a box sitting ABOVE the
-  // window (scroll up) and one taller than the window (align its top).
-  if (top - delta < windowTop) delta = top - windowTop;
-  const min = -ciTop;
-  const max = Math.max(min, g.contentH + ciBottom - g.viewportH);
-  // `+ 0` normalizes the -0 that a zero top inset produces. Harmless to
-  // scrollTo, but -0 fails a `toBe(0)` assertion and reads as a bug.
-  return Math.min(Math.max(g.offsetY + delta, min), max) + 0;
 }
 
 type RevealFn = (node: View | null, opts?: ScrollIntoViewOptions) => void;
@@ -149,12 +107,8 @@ export const ScrollIntoViewScrollView = forwardRef<ScrollView, ScrollIntoViewScr
 
     useImperativeHandle(ref, () => scrollRef.current as ScrollView, []);
 
-    const reveal = useCallback<RevealFn>(
-      (node, opts) => {
-        const inner = innerRef.current;
-        // viewportH is 0 until the first layout — measuring then would compute
-        // against an empty window and scroll to the wrong place.
-        if (node == null || inner == null || viewportH.current <= 0) return;
+    const measureAndScroll = useCallback(
+      (node: View, inner: View, opts: ScrollIntoViewOptions | undefined, ciBottom: number) => {
         node.measureLayout(
           inner,
           (_x, y, _w, height) => {
@@ -167,7 +121,7 @@ export const ScrollIntoViewScrollView = forwardRef<ScrollView, ScrollIntoViewScr
               insetTop: opts?.insetTop ?? revealInsetTop,
               insetBottom: opts?.insetBottom ?? revealInsetBottom,
               contentInsetTop: contentInsetTop.current,
-              contentInsetBottom: contentInsetBottom.current,
+              contentInsetBottom: ciBottom,
             });
             // Sub-point deltas are noise; animating them just costs a frame.
             if (Math.abs(next - offsetY.current) < 1) return;
@@ -179,6 +133,39 @@ export const ScrollIntoViewScrollView = forwardRef<ScrollView, ScrollIntoViewScr
         );
       },
       [revealInsetTop, revealInsetBottom],
+    );
+
+    const reveal = useCallback<RevealFn>(
+      (node, opts) => {
+        const inner = innerRef.current;
+        // viewportH is 0 until the first layout — measuring then would compute
+        // against an empty window and scroll to the wrong place.
+        if (node == null || inner == null || viewportH.current <= 0) return;
+
+        // `contentInsetBottom` is only refreshed by onScroll, and the keyboard can
+        // open WITHOUT producing one: `automaticallyAdjustKeyboardInsets` changes
+        // the inset, but if the content is short enough that contentOffset does
+        // not move, no scroll event fires. We would then reveal against a floor
+        // that is behind the keyboard — and worse, clamp to `contentH - viewportH`,
+        // which for short content is negative and makes the reveal a silent no-op,
+        // exactly when half the screen is covered. So ask the keyboard directly.
+        const kb = Keyboard.metrics();
+        if (kb == null || kb.height <= 0) {
+          measureAndScroll(node, inner, opts, contentInsetBottom.current);
+          return;
+        }
+        // The inner content view's window position pins content coords to screen
+        // coords: content point `c` sits at `innerY + c`. So the scroll view's own
+        // bottom edge is at `innerY + offsetY + viewportH`.
+        inner.measureInWindow((_x, innerY) => {
+          const viewportBottom = innerY + offsetY.current + viewportH.current;
+          const overlap = Math.max(0, viewportBottom - kb.screenY);
+          // max(), never sum: when iOS HAS applied the keyboard inset both numbers
+          // describe the same strip, and adding them would double it.
+          measureAndScroll(node, inner, opts, Math.max(contentInsetBottom.current, overlap));
+        });
+      },
+      [measureAndScroll],
     );
 
     const handleScroll = useCallback(
@@ -249,12 +236,22 @@ export interface ScrollIntoViewProps extends ViewProps, ScrollIntoViewOptions {
    *  anchor for anything else that needs to measure it — the walkthrough
    *  spotlights the open search result through this. */
   nodeRef?: (node: View | null) => void;
+  /** A Reanimated layout transition for the WRAPPER.
+   *
+   *  ⚠️ Pass this whenever the node you are wrapping had one of its own. Slipping
+   *  a plain View between an `Animated.View layout={…}` and its siblings kills the
+   *  transition: the child no longer moves relative to its new parent, so it has
+   *  nothing to animate, and the plain wrapper — which is what actually moves —
+   *  cannot. TranslationCard is the case: expanding one row used to slide the rows
+   *  below it, and wrapping the rows made them snap instead. */
+  layout?: ComponentProps<typeof Animated.View>['layout'];
 }
 
 export function ScrollIntoView({
   enabled = true,
   revealOnGrowth = true,
   nodeRef,
+  layout,
   insetTop,
   insetBottom,
   animated,
@@ -322,10 +319,17 @@ export function ScrollIntoView({
     onLayout?.(e);
   };
 
+  // collapsable={false} on both: Android's view flattening drops a plain View
+  // with no styling of its own, and measureLayout against a node that isn't in
+  // the native tree fails silently (same trap as the walkthrough anchors).
+  if (layout != null) {
+    return (
+      <Animated.View {...rest} ref={setNode} layout={layout} collapsable={false} onLayout={handleLayout}>
+        {children}
+      </Animated.View>
+    );
+  }
   return (
-    // collapsable={false}: Android's view flattening drops a plain View with no
-    // styling of its own, and measureLayout against a node that isn't in the
-    // native tree fails silently (same trap as the walkthrough anchors).
     <View {...rest} ref={setNode} collapsable={false} onLayout={handleLayout}>
       {children}
     </View>
