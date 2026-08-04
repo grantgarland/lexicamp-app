@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="supported-color-schemes" content="light dark" />
+    <title>Confirm your new Lexicamp email</title>
+  </head>
+  <body style="margin:0; padding:0; background-color:#f7f9fa; -webkit-font-smoothing:antialiased;">
+    <!-- Preheader: the grey line clients show next to the subject. Hidden in body. -->
+    <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:transparent; height:0; width:0;">
+      Confirm the new address for your account.
+    </div>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f7f9fa;">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px; background-color:#ffffff; border-radius:14px; border:1px solid #dde3e8;">
+
+            <!-- Wordmark -->
+            <tr>
+              <td align="center" style="padding:32px 32px 8px 32px;">
+                <span style="font-family:Georgia,'Times New Roman',serif; font-size:28px; font-weight:600; letter-spacing:-0.5px; color:#1f3d52;">Lexi</span><span style="font-family:Georgia,'Times New Roman',serif; font-size:28px; font-weight:600; letter-spacing:-0.5px; color:#e87722;">camp</span>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:16px 32px 0 32px;">
+                <h1 style="margin:0 0 12px 0; font-family:Georgia,'Times New Roman',serif; font-size:22px; line-height:28px; font-weight:600; color:#182026;">Confirm your new email</h1>
+                <p style="margin:0 0 24px 0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; font-size:15px; line-height:23px; color:#3e4951;">
+                  You asked to change the email on your Lexicamp account to this address. Tap below to confirm it. The link works once and expires in an hour.
+                </p>
+              </td>
+            </tr>
+
+            <!-- CTA -->
+            <tr>
+              <td align="center" style="padding:0 32px 8px 32px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td align="center" bgcolor="#e87722" style="border-radius:12px;">
+                      <a href="{{ .ConfirmationURL }}"
+                         style="display:inline-block; padding:14px 32px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; font-size:16px; font-weight:700; color:#ffffff; text-decoration:none; border-radius:12px;">
+                        Confirm this address
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Fallback URL: some clients strip anchors entirely. -->
+            <tr>
+              <td style="padding:16px 32px 0 32px;">
+                <p style="margin:0 0 6px 0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; font-size:12px; line-height:18px; color:#54616b;">
+                  Button not working? Copy this address into your browser:
+                </p>
+                <p style="margin:0 0 24px 0; font-family:'SF Mono',Menlo,Consolas,monospace; font-size:11px; line-height:17px; color:#2f5e7e; word-break:break-all;">
+                  {{ .ConfirmationURL }}
+                </p>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:0 32px 28px 32px; border-top:1px solid #dde3e8;">
+                <p style="margin:20px 0 0 0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; font-size:13px; line-height:20px; color:#54616b;">
+                  Didn't request this change? Ignore this email and your account keeps its current address. It's worth changing your password if you weren't expecting it.
+                </p>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Footer -->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;">
+            <tr>
+              <td align="center" style="padding:20px 32px 0 32px;">
+                <p style="margin:0 0 6px 0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; font-size:12px; line-height:18px; color:#71808b;">
+                  Vocabulary that sticks.
+                </p>
+                <p style="margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; font-size:12px; line-height:18px; color:#71808b;">
+                  <a href="https://lexicamp.com/support" style="color:#2f5e7e; text-decoration:underline;">Help</a>
+                  &nbsp;·&nbsp;
+                  <a href="https://lexicamp.com/legal/privacy" style="color:#2f5e7e; text-decoration:underline;">Privacy</a>
+                  &nbsp;·&nbsp;
+                  <a href="https://lexicamp.com/legal/terms" style="color:#2f5e7e; text-decoration:underline;">Terms</a>
+                </p>
+              </td>
+            </tr>
+          </table>
+
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

@@ -1,0 +1,18 @@
+<!-- LEXICAMP TRANSACTIONAL EMAIL — shared shell.
+     Not used directly: each template below is standalone (Supabase pastes ONE
+     blob per template, no includes). This file documents the shared decisions.
+
+     Constraints that drove the markup:
+     • Table-based layout + inline styles. Gmail strips <style> blocks in many
+       contexts and Outlook's Word renderer ignores most modern CSS.
+     • NO external images. A remote logo is blocked by default in most clients
+       and shows as a broken box; SVG is stripped almost everywhere. The wordmark
+       is therefore live text in a serif stack — Spectral is not a web-safe font
+       and will not load, so Georgia is the honest fallback and looks close.
+     • Two-tone wordmark preserved: "Lexi" #1f3d52, "camp" #e87722.
+     • Dark-mode: color-scheme meta + explicit backgrounds on every cell, so
+       Apple Mail's auto-invert doesn't produce dark-text-on-dark.
+     • The raw URL is printed under the button. Some corporate clients strip
+       <a href>, and a reset email with an unclickable button and no fallback is
+       a dead end.
+-->
