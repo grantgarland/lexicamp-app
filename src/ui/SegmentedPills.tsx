@@ -20,6 +20,11 @@ import { RawText as Text } from './Text';
 export interface SegmentedPill {
   id: string;
   label: string;
+  /** Optional Maestro hook. Not optional in practice for any pill a flow taps:
+   *  `accessibilityLabel` below collapses this Pressable into one iOS a11y
+   *  element carrying the a11yLabel, so the VISIBLE pill text ("Next camp") is
+   *  absent from the hierarchy Maestro reads — see src/test/a11yCollapse.ts. */
+  testID?: string;
   /** Optional VoiceOver label when `label` alone is ambiguous out of context. */
   a11yLabel?: string;
 }
@@ -40,6 +45,7 @@ export function SegmentedPills({ pills, active, onChange, style }: SegmentedPill
         return (
           <Pressable
             key={pill.id}
+            testID={pill.testID}
             onPress={() => onChange(pill.id)}
             style={[styles.pill, on && { backgroundColor: theme.color.surfaceCard }]}
             accessibilityRole="tab"

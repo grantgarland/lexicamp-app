@@ -1,0 +1,160 @@
+# Capture the in-app screenshots used as onboarding "instructional graphics".
+#
+# WHY a flow rather than hand-captured shots: onboarding art goes stale every
+# time the UI moves, and a stale instructional graphic is worse than none — it
+# teaches a screen that no longer exists. Re-running this re-cuts the whole set.
+#
+# NOT part of the smoke suite: this takes screenshots, it asserts nothing about
+# health. Run it by hand when the UI has changed.
+#
+# ⚠️ Run against a device signed into a scenario account WITH saved words
+# (dev-summit is the seeded one). Empty screens make useless teaching art.
+#
+# ⚠️ TURN THE DEV PILL OFF FIRST — tap ⚙ DEV → Screenshots → "Hide badge". It is
+# left-anchored over the Home header date, so otherwise it lands in the art. The
+# setting persists across relaunches (devStore), so this is a one-time step per
+# device, and the same corner stays tappable to bring the panel back.
+#
+#   maestro test .maestro/capture-onboarding-shots.yaml
+#
+# Shots land in the CWD you ran maestro from (repo root), as <name>.png — not in
+# ~/.maestro/tests/<run>/, which only holds the debug artifacts of a FAILED run.
+# Copy them into
+# assets/images/onboarding/ under the SAME names — src/ui/OnboardingShot.tsx
+# resolves them by name, and falls back to the existing vector illustration for
+# any that are missing, so a partial set is safe.
+#
+# Selector notes (see the maestro-selector-semantics + maestro-guard-layers memos):
+#  • testIDs over text wherever one exists — text selectors are whole-text regex
+#    and the guard suites police them against en.json.
+#  • A key existing in en.json is NOT enough (2026-08-04): if the text renders
+#    inside an element carrying an explicit accessibilityLabel, iOS collapses
+#    the subtree and the text node is never exposed. maestroA11yCollapse.test.ts
+#    now guards that; the answer is always a testID on the labelled node itself.
+appId: com.lexicamp.app
+---
+- launchApp:
+    clearState: false
+
+# 1. HOME — what's due today. The screen a returning user actually opens.
+- tapOn:
+    id: 'tab-home'
+- extendedWaitUntil:
+    visible: '(?i)Word Mastery'
+    timeout: 20000
+- takeScreenshot: onboarding-home
+
+# 2. SEARCH — a word with several meanings, mid-capture.
+- tapOn:
+    id: 'fab-search'
+- inputText: 'spring'
+# Live dictionary lookup behind a 600ms debounce; give it room on CI hardware.
+# ⚠️ WHOLE-TEXT regex (see maestro-selector-semantics): a bare '(?i)Save' does
+# NOT match the button, whose full label is "Save word" (translationCard.saveWord).
+- extendedWaitUntil:
+    visible: '(?i)Save word'
+    timeout: 20000
+# Blur BEFORE the shot: the software keyboard covers the lower half of the sheet,
+# which is where the senses and the Save word CTA the graphic is meant to teach
+# actually are.
+#
+# ⚠️ NOT `hideKeyboard` for this — it does more than blur. On Android it is an
+# unconditional BACK press (see the note in word-capture.yaml), and on this iOS
+# device it dismissed the whole search sheet, which is what the previous version
+# of this flow relied on to get back to the tabs. Either way it takes the screen
+# we are trying to photograph with it.
+#
+# `pressKey: Enter` blurs and nothing else: the field is single-line with
+# returnKeyType="search" and NO onSubmitEditing wired (SearchScreen), so RN's
+# default blurOnSubmit dismisses the keyboard without re-running the search.
+- pressKey: Enter
+- takeScreenshot: onboarding-search
+# Leaving the sheet by its own close control rather than a gesture — testID
+# exists (SearchScreen `search-close`) and it does not depend on which platform
+# maps hideKeyboard to what.
+- tapOn:
+    id: 'search-close'
+
+# 3. QUIZ — a card revealed, rating gutter visible. The core loop.
+#
+# ⚠️ BOTH selectors here are testIDs, and neither can go back to text:
+#  • studyCard — the card sets an explicit accessibilityLabel ("Study now. 50
+#    words ready for review. ..."), which collapses the whole subtree into ONE
+#    iOS accessibility element. The inner "Study now" text node does not exist
+#    in the hierarchy Maestro reads, so no text selector can reach it.
+#  • quizRevealButton — the label is mode-dependent ("Reveal" in recall,
+#    "Tap to reveal" in recognition) and Maestro matches WHOLE text.
+- tapOn:
+    id: 'tab-home'
+- extendedWaitUntil:
+    visible:
+      id: 'studyCard'
+    timeout: 20000
+- tapOn:
+    id: 'studyCard'
+- extendedWaitUntil:
+    visible:
+      id: 'quizRevealButton'
+    timeout: 20000
+- tapOn:
+    id: 'quizRevealButton'
+- takeScreenshot: onboarding-quiz
+# Leaving the quiz: RELAUNCH, don't tap out. Two tap-out routes were tried on
+# device and both failed:
+#   • `back` — Maestro's iOS back is a LEFT-EDGE SWIPE and quiz is a
+#     fullScreenModal (src/app/_layout.tsx), which ignores it. The 13:17 run
+#     never left the modal and then failed on `tab-progress`.
+#   • `tapOn: quizClose` then the exit-confirm sheet — the 13:31 run reported the
+#     × tap as SUCCESSFUL and the sheet still never appeared, so quizExitConfirm
+#     timed out. The React logic is proven in both card states by
+#     src/screens/__tests__/QuizScreen.test.tsx, so that is a native
+#     layering/hit-test problem, unresolved. (testIDs quizClose /
+#     quizExitConfirm are kept — they are correct and the flow may use them
+#     again once the × is understood.)
+# launchApp restarts into the tab tree unconditionally. The screenshot above is
+# already taken by this point, so there is nothing to preserve by tapping out.
+- launchApp:
+    clearState: false
+- extendedWaitUntil:
+    visible:
+      id: 'tab-progress'
+    timeout: 30000
+
+# 4. PROGRESS — the climb so far. Answers "why bother".
+- tapOn:
+    id: 'tab-progress'
+- extendedWaitUntil:
+    visible: '(?i)Full Route'
+    timeout: 20000
+- takeScreenshot: onboarding-progress
+
+# 5. PROJECTION (Next camp) — "when do I get there". The payoff screen: it turns
+# the ladder above into a date.
+#
+# ⚠️ Both selectors are testIDs by necessity, not preference. The pill Pressable
+# sets accessibilityLabel="Projection to your next camp" (SegmentedPills), which
+# collapses it into one iOS a11y element — the visible text "Next camp" is not
+# in the hierarchy Maestro reads.
+#
+# ⚠️ The "Next camp" pill only renders when the account HAS a next camp: at the
+# top of the mountain ladder `nextCamp` is null and ProjectionTab shows the
+# Summit view alone with no toggle (domain/projection.nextCampTarget). dev-summit
+# is nowhere near 3,000 mastered words, so the pill is there — but if this step
+# ever starts failing on a different account, that is the reason.
+- tapOn:
+    id: 'progressTabProjection'
+- extendedWaitUntil:
+    visible:
+      id: 'projPillNext'
+    timeout: 20000
+- tapOn:
+    id: 'projPillNext'
+# `projectionCard` and not the "Estimated time to" heading: the card renders a
+# different subtree for reached / low-recall / unreachable, and which one a real
+# account gets is data-dependent. Asserting the heading would make this step fail
+# on a perfectly good screen.
+- extendedWaitUntil:
+    visible:
+      id: 'projectionCard'
+    timeout: 20000
+- takeScreenshot: onboarding-projection

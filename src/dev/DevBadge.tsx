@@ -37,6 +37,8 @@ export function DevBadge() {
   const userState = useDevStore((s) => s.userState);
   const setPlan = useDevStore((s) => s.setPlan);
   const setUserState = useDevStore((s) => s.setUserState);
+  const badgeHidden = useDevStore((s) => s.badgeHidden);
+  const setBadgeHidden = useDevStore((s) => s.setBadgeHidden);
   const top = insets.top + 6;
 
   // Live mode: swap the whole session to a seeded scenario account, then drop
@@ -125,18 +127,43 @@ export function DevBadge() {
               <Chip label="Auth" active={false} onPress={() => { setOpen(false); router.push('/auth'); }} />
               <Chip label="Paywall" active={false} onPress={() => { setOpen(false); router.push('/paywall'); }} />
             </View>
+
+            <Text style={styles.label} allowFontScaling={false}>
+              Screenshots
+            </Text>
+            <View style={styles.rowWrap}>
+              {/* The pill overlaps the Home header date, so it lands in every
+                  instructional screenshot `.maestro/capture-onboarding-shots.yaml`
+                  takes. Hiding it PERSISTS across relaunches (devStore) — which is
+                  the only reason it is useful, since the capture flow relaunches
+                  the app. The invisible hit target below brings it back. */}
+              <Chip
+                label={badgeHidden ? '◉ Badge hidden' : '◎ Hide badge'}
+                active={badgeHidden}
+                onPress={() => {
+                  setBadgeHidden(!badgeHidden);
+                  setOpen(false);
+                }}
+              />
+            </View>
           </View>
         </>
       )}
 
-      {/* Badge — rendered last so it stays on top + tappable to toggle. */}
+      {/* Badge — rendered last so it stays on top + tappable to toggle.
+          When hidden it paints nothing but keeps its frame AND its alpha, so
+          tapping the same corner still opens the panel — "Hide badge" can never
+          strand you in a dev build with no way back to the scenario switcher.
+          See `badgeHidden` in the stylesheet for why alpha is load-bearing.
+          The target is the size of the pill it replaces, so what it can
+          intercept is unchanged (top-left overlaps header text only). */}
       <Pressable
         onPress={() => setOpen((o) => !o)}
-        style={[styles.badge, { top }]}
+        style={[styles.badge, { top }, badgeHidden && styles.badgeHidden]}
         accessibilityRole="button"
         accessibilityLabel="Dev state toggle"
       >
-        <Text style={styles.badgeText} allowFontScaling={false}>
+        <Text style={[styles.badgeText, badgeHidden && styles.badgeTextHidden]} allowFontScaling={false}>
           ⚙ DEV
         </Text>
       </Pressable>
@@ -162,6 +189,16 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
 
 const DARK = '#1b2329';
 const styles = StyleSheet.create({
+  // Hidden = DRAWS NOTHING, but keeps alpha 1. Do NOT reach for `opacity: 0`
+  // here (it was the first attempt and it did not work): UIKit's
+  // `-[UIView hitTest:withEvent:]` skips any view with `alpha < 0.01`, so an
+  // opacity-0 pill is still in the view hierarchy — an element inspector finds
+  // it — and is completely untappable. That strands a dev build with no route
+  // back to the scenario switcher. Transparent colors keep the view hit-testable
+  // while painting nothing. `display: 'none'` is wrong for the same reason,
+  // harder: it removes the layout box entirely.
+  badgeHidden: { backgroundColor: 'transparent', borderColor: 'transparent' },
+  badgeTextHidden: { color: 'transparent' },
   badge: {
     position: 'absolute',
     // Left-anchored: the top-right corner holds real controls (quiz close ×, toast dismiss),

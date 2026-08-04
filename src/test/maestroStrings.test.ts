@@ -27,6 +27,8 @@ import * as path from 'node:path';
 declare const __dirname: string;
 
 import { SMOKE_FIXTURES } from '@/data/mock';
+
+import { analyzeCollapse } from './a11yCollapse';
 import { senseDisplayWord } from '@/domain/translation';
 
 import en from '../i18n/locales/en.json';
@@ -159,12 +161,21 @@ const SOURCE = sourceFiles(SRC_DIR)
   .map((f) => fs.readFileSync(f, 'utf8'))
   .join('\n');
 
-// Static form: t('a.b.c') / i18n.t("a.b.c"). `\bt\(` cannot match `format(`,
-// `assert(` or `it(` — those have a word char immediately before the `t`.
-const usedKeys = new Set([...SOURCE.matchAll(/\bt\(\s*['"]([\w.-]+)['"]/g)].map((m) => m[1]));
+// Static form: t('a.b.c') / i18n.t("a.b.c") / translate('a.b.c').
+// `\b(?:translate|t)\(` cannot match `format(`, `assert(` or `it(` — those have a
+// word char immediately before the `t`.
+// ⚠️ `translate` is load-bearing, not decoration: src/ui/QuizCard.tsx (and any
+// component taking the translator as a prop) calls it under that name. Scanning
+// for `t(` alone marked every such key DEAD, which turned this guard into a
+// false-positive generator — it failed a flow for asserting "Reveal" while
+// quizCard.reveal was very much live (2026-08-04). If another alias appears,
+// add it here.
+const KEY_CALL = /\b(?:translate|t)\(\s*['"]([\w.-]+)['"]/g;
+const KEY_CALL_DYNAMIC = /\b(?:translate|t)\(\s*`([\w.-]*?)\$\{/g;
+const usedKeys = new Set([...SOURCE.matchAll(KEY_CALL)].map((m) => m[1]));
 // Dynamic form: t(`tier.${id}.name`). Only the static head is knowable, so the
 // whole subtree under it is treated as used.
-const usedPrefixes = [...SOURCE.matchAll(/\bt\(\s*`([\w.-]*?)\$\{/g)].map((m) => m[1]).filter((p) => p.length > 0);
+const usedPrefixes = [...SOURCE.matchAll(KEY_CALL_DYNAMIC)].map((m) => m[1]).filter((p) => p.length > 0);
 
 const PLURAL_SUFFIX = /_(zero|one|two|few|many|other)$/;
 
@@ -179,6 +190,8 @@ describe('flow selectors are backed by copy the app still renders', () => {
     expect(usedKeys.size).toBeGreaterThan(50);
     expect(keyIsLive('progress.fullRoute')).toBe(true); // a key in live use
     expect(keyIsLive('progress.youAreHere')).toBe(false); // the retired one
+    // Regression: keys reached through the `translate` alias (QuizCard) are live.
+    expect(keyIsLive('quizCard.reveal')).toBe(true);
   });
 
   for (const { file, selectors } of flows) {
@@ -239,6 +252,58 @@ describe('Maestro flow strings are backed by en.json / mock fixtures', () => {
             );
           }
           expect(hit).toBeTruthy();
+        });
+      }
+    });
+  }
+});
+
+
+// ── Is the text REACHABLE by a text selector? (2026-08-04) ───────────────────
+// The third way a live, rendered string can still be unassertable: it renders
+// inside an element that declares its own accessibilityLabel. iOS collapses
+// that subtree into ONE accessibility element carrying the declared label, so
+// the child text nodes — and any testID on them — are absent from the hierarchy
+// Maestro reads. `capture-onboarding-shots.yaml` burned a device run on
+// `'(?i)Study now'` for exactly this: the string is in en.json, referenced by
+// HomeScreen, and plainly visible in the screenshot of the failure.
+//
+// See src/test/a11yCollapse.ts for which elements collapse and why.
+const collapse = analyzeCollapse(SRC_DIR);
+
+describe('flow text selectors are not aimed at a11y-collapsed text', () => {
+  it('the collapse scan parsed the app (guard is guarding)', () => {
+    expect(collapse.keysSeen).toBeGreaterThan(50);
+    // The case that motivated the suite: HomeScreen's study card declares its
+    // own accessibilityLabel, so the "Study now" text inside it is unreachable.
+    // If this flips to false the analyzer has stopped seeing collapse and every
+    // assertion below is vacuously green.
+    expect(collapse.collapsedOnly.has('home.studyNow')).toBe(true);
+    // And the control: ordinary copy under no a11y label stays reachable.
+    expect(collapse.collapsedOnly.has('progress.fullRoute')).toBe(false);
+  });
+
+  for (const { file, selectors } of flows) {
+    describe(file, () => {
+      for (const sel of selectors) {
+        it(`line ${sel.line}: ${JSON.stringify(sel.raw)} targets text iOS actually exposes`, () => {
+          const re = toRegex(sel.raw);
+          if (fixtureCandidates.some((c) => re.test(c))) return; // fixture text, no key
+          const backing = [...new Set(enLeaves.filter((l) => re.test(l.text)).map((l) => l.key))];
+          if (backing.length === 0) return; // the existence guard owns this case
+          const unreachable = backing.filter((k) => collapse.collapsedOnly.has(k));
+          if (unreachable.length === backing.length) {
+            throw new Error(
+              `${JSON.stringify(sel.raw)} (${sel.flow}:${sel.line}) matches only key(s) ` +
+                `${JSON.stringify(unreachable)}, and EVERY render site of those keys sits inside an ` +
+                `element that declares its own accessibilityLabel ` +
+                `(${JSON.stringify(unreachable.flatMap((k) => collapse.collapsedOnly.get(k) ?? []))}). ` +
+                `On iOS that subtree collapses into one accessibility element, so no text selector ` +
+                `can ever match — the string is visible to a human and invisible to Maestro. ` +
+                `Put a testID on the LABELLED element itself and select it with \`id:\`.`,
+            );
+          }
+          expect(unreachable.length).toBeLessThan(backing.length);
         });
       }
     });

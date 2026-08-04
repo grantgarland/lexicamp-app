@@ -9,6 +9,9 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { RawText as Text } from './Text';
 
 export interface SegmentedTab {
+  /** Optional Maestro hook. Opt-in per call site rather than derived from `id`,
+   *  so two segmented controls on one screen cannot collide. */
+  testID?: string;
   id: string;
   label: string;
   /** Optional trailing chip (e.g. "PRO"). */
@@ -29,7 +32,7 @@ export function SegmentedTabs({ tabs, active, onChange, style }: SegmentedTabsPr
       {tabs.map((tab) => {
         const on = tab.id === active;
         return (
-          <Pressable key={tab.id} onPress={() => onChange(tab.id)} style={styles.tab} accessibilityRole="tab" accessibilityState={{ selected: on }}>
+          <Pressable key={tab.id} testID={tab.testID} onPress={() => onChange(tab.id)} style={styles.tab} accessibilityRole="tab" accessibilityState={{ selected: on }}>
             <View style={styles.labelRow}>
               <Text style={[styles.label, on && styles.labelOn]}>{tab.label}</Text>
               {tab.badge}

@@ -132,6 +132,22 @@ describe('Progress redesign (2026-07-30)', () => {
     expect(screen.queryByText('Words by Tier')).toBeNull();
   });
 
+  // The three hooks `.maestro/capture-onboarding-shots.yaml` selects by on this
+  // screen. Text selectors are NOT an option for the pill: SegmentedPills sets
+  // accessibilityLabel ("Projection to your next camp"), which collapses the
+  // Pressable into one iOS a11y element and hides the visible "Next camp" text
+  // from Maestro entirely. This asserts the ids exist on rendered elements —
+  // the failure mode it catches is someone dropping a testID prop while the
+  // screen still looks perfect.
+  it('exposes the projection testIDs the capture flow taps', () => {
+    render(<ProgressScreen />);
+    fireEvent.press(screen.getByTestId('progressTabProjection'));
+    expect(screen.getByTestId('projPillNext')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('projPillNext'));
+    // Status-independent: both ProjectionCard branches carry this id.
+    expect(screen.getByTestId('projectionCard')).toBeTruthy();
+  });
+
   it('Route drops the "You are here" hero but keeps its content on the ladder', () => {
     render(<ProgressScreen />);
     // The hero's own label is gone...

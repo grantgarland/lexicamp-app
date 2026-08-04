@@ -114,6 +114,10 @@ export function QuizRevealButton({ tier, mode = 'recognition', onPress, style }:
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
+        // Stable hook: the visible label differs by mode ("Reveal" in recall,
+        // "Tap to reveal" in recognition) and Maestro text selectors are
+        // WHOLE-text regex, so no single text selector covers both branches.
+        testID="quizRevealButton"
         style={({ pressed }) => [styles.revealSolid, { backgroundColor: tr.accent }, style, pressed && styles.pressedOpacity]}
       >
         <RNText style={styles.revealSolidText}>{translate('quizCard.reveal')}</RNText>
@@ -124,6 +128,7 @@ export function QuizRevealButton({ tier, mode = 'recognition', onPress, style }:
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
+      testID="quizRevealButton"
       style={({ pressed }) => [styles.revealOutline, { borderColor: tr.border }, style, pressed && styles.pressedScale]}
     >
       <RNText style={[styles.revealOutlineText, { color: tr.accent }]}>{translate('quizCard.tapToReveal')}</RNText>

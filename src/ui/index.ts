@@ -105,3 +105,4 @@ export {
   type QuizMode,
 } from './QuizCard';
 export { Wordmark } from './Wordmark';
+export { OnboardingShot, type OnboardingShotName } from './OnboardingShot';

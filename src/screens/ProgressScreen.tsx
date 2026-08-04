@@ -55,9 +55,9 @@ export function ProgressScreen() {
           active={tab}
           onChange={(id) => setTab(id as SubTab)}
           tabs={[
-            { id: 'route', label: t('progress.tabRoute') },
-            { id: 'projection', label: t('progress.tabProjection') },
-            { id: 'leaders', label: t('progress.tabLeaders') },
+            { id: 'route', label: t('progress.tabRoute'), testID: 'progressTabRoute' },
+            { id: 'projection', label: t('progress.tabProjection'), testID: 'progressTabProjection' },
+            { id: 'leaders', label: t('progress.tabLeaders'), testID: 'progressTabLeaders' },
           ]}
         />
       </View>
@@ -257,8 +257,8 @@ function ProjectionTab({ data, t }: TabProps) {
           active={view}
           onChange={(id) => setView(id as 'next' | 'summit')}
           pills={[
-            { id: 'next', label: t('progress.proj.viewNext'), a11yLabel: t('progress.proj.viewNextA11y') },
-            { id: 'summit', label: t('progress.proj.viewSummit'), a11yLabel: t('progress.proj.viewSummitA11y') },
+            { id: 'next', label: t('progress.proj.viewNext'), a11yLabel: t('progress.proj.viewNextA11y'), testID: 'projPillNext' },
+            { id: 'summit', label: t('progress.proj.viewSummit'), a11yLabel: t('progress.proj.viewSummitA11y'), testID: 'projPillSummit' },
           ]}
         />
       )}
@@ -315,7 +315,9 @@ function ProjectionCard({ projection, t }: { projection: ResolvedProjection; t: 
             ? t('progress.proj.unreachableTitle')
             : t('progress.projectionLocked');
     return (
-      <View style={[styles.projCard, { backgroundColor: tier.bg, borderColor: tier.border }]}>
+      // Same testID as the 'ok' branch below: which of the two renders depends on
+      // the account's data, and a screenshot flow only needs "the card is up".
+      <View testID="projectionCard" style={[styles.projCard, { backgroundColor: tier.bg, borderColor: tier.border }]}>
         <View style={styles.projLockedInner}>
           <IconMountain size={32} color={theme.color.borderStrong} />
           <RawText style={styles.projLockedTitle}>{title}</RawText>
@@ -332,7 +334,7 @@ function ProjectionCard({ projection, t }: { projection: ResolvedProjection; t: 
     : t('progress.proj.a11yPoint', { count: span.count, unit });
 
   return (
-    <View style={[styles.projCard, { backgroundColor: tier.bg, borderColor: tier.border }]}>
+    <View testID="projectionCard" style={[styles.projCard, { backgroundColor: tier.bg, borderColor: tier.border }]}>
       <View style={styles.projHead}>
         <IconMountain size={26} color={tier.color} />
         <View style={styles.projHeadBody}>

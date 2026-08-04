@@ -221,6 +221,11 @@ function StudyCard({
     <Pressable
       onPress={onStudy}
       accessibilityRole="button"
+      // Maestro hook. MUST live on THIS node, not on the inner `studyCtaButton`
+      // view: the explicit accessibilityLabel below makes this Pressable a single
+      // iOS accessibility element, so nothing inside it — text OR testID — is
+      // exposed in the hierarchy Maestro reads.
+      testID="studyCard"
       // The label carries the count and the backlog, because a screen reader
       // user gets one announcement for the whole card rather than reading the
       // number, the unit and the note as three separate stops.

@@ -379,6 +379,10 @@ export function QuizScreen({ deckId, deckName }: QuizScreenProps = {}) {
             <Button
               title={t('quiz.exitConfirm')}
               variant="destructive"
+              // Closing an in-progress session ALWAYS routes through this sheet
+              // (closeAttempt above), so any flow that taps quizClose must tap
+              // this too or it never leaves the modal.
+              testID="quizExitConfirm"
               onPress={() => {
                 setShowExit(false);
                 router.back();
@@ -407,7 +411,12 @@ export function QuizTopBar({ current, total, onClose }: { current: number; total
           {current}
           <RawText style={styles.counterTotal}> / {total}</RawText>
         </RawText>
-        <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel={t('quiz.closeQuiz')} style={styles.closeBtn}>
+        {/* testID, not text: the accessibilityLabel collapses this Pressable into
+            one iOS a11y element (see src/test/a11yCollapse.ts) and its only child
+            is an icon anyway. `.maestro/capture-onboarding-shots.yaml` needs this
+            to leave the quiz — quiz is a fullScreenModal, so Maestro's `back`
+            (a left-edge swipe) does nothing here. */}
+        <Pressable onPress={onClose} testID="quizClose" accessibilityRole="button" accessibilityLabel={t('quiz.closeQuiz')} style={styles.closeBtn}>
           <IconX size={16} color={theme.color.textMuted} />
         </Pressable>
       </View>
