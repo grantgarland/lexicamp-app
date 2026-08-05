@@ -13,16 +13,18 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { findLanguage } from '@/constants/languages';
 import type { LeaderboardEntry } from '@/data/DataSource';
 import { MOUNTAIN_TIERS, mountainTier } from '@/domain/derive';
-import { forecast, horizon, nextCampTarget, projectionBase, resolve, SUMMIT_TARGET, type Projection, type ProjectionBase } from '@/domain/projection';
+import { forecast, horizon, librarySpanDays, nextCampTarget, nextMilestone, projectionBase, resolve, SUMMIT_TARGET, type Projection, type ProjectionBase } from '@/domain/projection';
 import { formatUsername } from '@/domain/username';
 import { useTranslation } from '@/i18n';
 import { useActiveLang, useLeaderboard, useProgressData } from '@/query/hooks';
+import { LanguageIndicator } from '@/screens/shared/LanguageSwitcher';
 import { usePullToRefresh } from '@/query/usePullToRefresh';
 import { TOUR_FIXTURE_PROGRESS } from '@/tour/tourFixture';
 import { useWalkthroughActive } from '@/tour/walkthrough';
 import { useIsDark } from '@/theme/appearance';
 import { TIERS, tierView } from '@/theme/tiers';
-import { EmptyState, IconBook, IconChart, IconCheck, IconFire, IconInfo, IconLock, IconMountain, IconStar, RawText, Screen, ForecastChart, SegmentedPills, SegmentedTabs, Sheet, SkeletonRows, TAB_BAR_FAB_OVERHANG, Tooltip } from '@/ui';
+import { studyTimeParts } from '@/lib/studyTime';
+import { EmptyState, IconBook, IconCalendar, IconChart, IconCheck, IconClock, IconInfo, IconLock, IconMountain, IconRefresh, IconStar, RawText, Screen, ForecastChart, SegmentedPills, SegmentedTabs, Sheet, SkeletonRows, TAB_BAR_FAB_OVERHANG, Tooltip } from '@/ui';
 
 type SubTab = 'route' | 'projection' | 'leaders';
 type InfoKey = 'cefr';
@@ -60,7 +62,14 @@ export function ProgressScreen() {
   return (
     <Screen edges={['top']}>
       <View style={styles.header}>
-        <RawText style={styles.title}>{t('progress.title')}</RawText>
+        {/* Title left, language toggle LAST — the switcher holds the same
+            trailing slot on every screen (2026-08-04). Progress had no toggle
+            at all, so the active language was invisible on the one screen that
+            reports on it. */}
+        <View style={styles.titleRow}>
+          <RawText style={styles.title}>{t('progress.title')}</RawText>
+          <LanguageIndicator compact />
+        </View>
         <SegmentedTabs
           active={tab}
           onChange={(id) => setTab(id as SubTab)}
@@ -119,7 +128,6 @@ function RouteTab({ data, t, onInfo }: TabProps) {
   return (
     <View style={styles.pad}>
       <RawText style={styles.sectionTitle}>{t('progress.fullRoute')}</RawText>
-      <RawText style={styles.sectionSub}>{t('progress.fullRouteSub')}</RawText>
       <View style={styles.ladder}>
         {/* Connecting route line behind the nodes */}
         <View style={styles.ladderLine} />
@@ -158,7 +166,6 @@ function RouteTab({ data, t, onInfo }: TabProps) {
                     </RawText>
                     {tier.id === 'summit' && <IconStar size={13} color={theme.palette.amber[400]} />}
                     {current && <RawText style={styles.badgeCurrent}>{t('progress.current')}</RawText>}
-                    {completed && <RawText style={styles.badgeDone}>{t('progress.done')}</RawText>}
                     {current && (
                       <Pressable
                         onPress={() => onInfo?.('cefr')}
@@ -181,23 +188,22 @@ function RouteTab({ data, t, onInfo }: TabProps) {
                   </RawText>
 
                   {/* The current row is the ONLY one that renders progress — the
-                      former hero card's bar, folded in where it belongs. */}
-                  {current && (
+                      former hero card's bar, folded in where it belongs. And only
+                      when a NEXT tier exists: at Summit the bar had no upper
+                      bound to measure against, so it sat permanently full and
+                      measured nothing (Casey, 2026-08-05). */}
+                  {current && next != null && (
                     <>
                       <View style={[styles.ladderTrack, isDark && styles.ladderTrackDark]}>
                         <View style={[styles.ladderFill, { width: `${pctInTier}%`, backgroundColor: tier.color }]} />
                       </View>
-                      <RawText style={styles.ladderPct}>
-                        {next
-                          ? t('progress.toNext', { count: Math.max(0, curMax - mastered), tier: t(`tier.${next.id}.name`) })
-                          : t('progress.summitReached')}
-                      </RawText>
-                      {mastered === 0 && (
-                        <View style={[styles.ladderHint, isDark && styles.ladderHintDark, { borderColor: tier.border }]}>
-                          <RawText style={styles.ladderHintText}>{t('progress.masteredZeroHint')}</RawText>
-                        </View>
-                      )}
+                      <RawText style={styles.ladderPct}>{t('progress.toNext', { count: Math.max(0, curMax - mastered), tier: t(`tier.${next.id}.name`) })}</RawText>
                     </>
+                  )}
+                  {current && mastered === 0 && (
+                    <View style={[styles.ladderHint, isDark && styles.ladderHintDark, { borderColor: tier.border }]}>
+                      <RawText style={styles.ladderHintText}>{t('progress.masteredZeroHint')}</RawText>
+                    </View>
                   )}
                 </View>
               </View>
@@ -262,6 +268,11 @@ function ProjectionTab({ data, t }: TabProps) {
   // between — show the Summit view alone rather than a one-option control.
   const atSummit = model.nextCamp == null;
   const active = atSummit || view === 'summit' ? model.summit : model.nextCamp!;
+  // Past the mountain the CEFR ladder is exhausted, so the chart aims at the next
+  // ROUND NUMBER instead (5k, 7.5k, 10k…). Without it the curve floated with no
+  // threshold and no marker — a projection toward nothing (Casey, 2026-08-05).
+  const milestone = atSummit ? nextMilestone(model.base.mastered) : null;
+  const chartTarget = milestone ?? active.target;
 
   return (
     <View style={styles.pad}>
@@ -276,8 +287,65 @@ function ProjectionTab({ data, t }: TabProps) {
           ]}
         />
       )}
-      <ProjectionCard projection={active} t={t} />
-      <ForecastSection base={model.base} target={active.target} t={t} />
+      {atSummit ? (
+        <SummitJourneyCard base={model.base} cards={data.cards} now={now} t={t} />
+      ) : (
+        <ProjectionCard projection={active} t={t} />
+      )}
+      <ForecastSection base={model.base} target={chartTarget} milestoneLabel={milestone != null ? t('progress.proj.milestoneLine', { count: milestone.toLocaleString() }) : undefined} t={t} />
+    </View>
+  );
+}
+
+// ── Summit journey card (2026-08-05) ────────────────────────────────────────
+// Replaces the dead-end "Reached — you're at Summit, keep reviewing" panel,
+// which restated the tier the user could already see and offered nothing.
+//
+// Built from the SAME parts as ProjectionCard below — tier-tinted surface, mountain
+// icon, eyebrow + tier/CEFR row, one big tier-coloured number, one detail line —
+// because these two cards occupy the same slot and a summited user should not be
+// handed a plainer screen than everyone else (Casey, 2026-08-05).
+//
+// HONESTY NOTE: the schema never recorded WHEN a user crossed 3,000 mastered, so
+// "time to Summit" is not computable. The oldest card is the only start date
+// there is, so this says "climbing" — the span of the library — and never claims
+// to be the time it took to summit.
+function SummitJourneyCard({ base, cards, now, t }: { base: ProjectionBase; cards: TabProps['data']['cards']; now: Date; t: TFunction }) {
+  const isDark = useIsDark();
+  const tier = tierView(tierRegistry(TIERS.length - 1), isDark);
+  const cefr = MOUNTAIN_TIERS[MOUNTAIN_TIERS.length - 1]!.cefr;
+
+  const spanDays = librarySpanDays(cards, now);
+  const months = spanDays / 30.44;
+  const climbing = months >= 1 ? t('progress.proj.spanMonths', { count: Math.round(months) }) : t('progress.proj.spanDays', { count: Math.max(1, Math.round(spanDays)) });
+  // Per week, not per day: a summited learner masters a handful a week, and
+  // "0.7 a day" is a worse sentence than "5 a week".
+  const perWeek = spanDays > 0 ? (base.mastered / spanDays) * 7 : 0;
+
+  return (
+    <View testID="projectionCard" style={[styles.projCard, { backgroundColor: tier.bg, borderColor: tier.border }]}>
+      <View style={styles.projHead}>
+        <IconMountain size={26} color={tier.color} />
+        <View style={styles.projHeadBody}>
+          <RawText style={[styles.projSmall, { color: tier.labelColor }]}>{t('progress.proj.journeyEyebrow')}</RawText>
+          <View style={styles.projTierRow}>
+            <RawText style={[styles.projTier, { color: tier.text }]}>{t(`tier.${tier.id}.name`)}</RawText>
+            <RawText style={[styles.projCefr, { color: tier.color }]}>{t('progress.cefr', { level: cefr })}</RawText>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.projBig}>
+        <RawText style={[styles.projDays, { color: tier.color }]}>{base.mastered.toLocaleString()}</RawText>
+        <RawText style={styles.projDaysLabel}>{t('progress.proj.journeyBigLabel')}</RawText>
+      </View>
+
+      <RawText style={styles.projDetail}>
+        {t('progress.proj.journeyDetail', {
+          climbing,
+          pace: t('progress.proj.perWeek', { count: Math.max(1, Math.round(perWeek)) }),
+        })}
+      </RawText>
     </View>
   );
 }
@@ -389,14 +457,20 @@ function ProjectionCard({ projection, t }: { projection: ResolvedProjection; t: 
 // single target — and aimed at the SAME target the toggle selected, so
 // switching to Summit re-scales the curve instead of just relabelling it.
 // One series, so no legend: the section title names it.
-function ForecastSection({ base, target, t }: { base: ProjectionBase; target: number; t: TFunction }) {
+function ForecastSection({ base, target, milestoneLabel, t }: { base: ProjectionBase; target: number; milestoneLabel?: string; t: TFunction }) {
   const isDark = useIsDark();
   const f = useMemo(() => forecast(base, { target }), [base, target]);
 
   // Nothing to plot before the first review, or when the curve is flat.
   if (base.reviewsLogged === 0 || f.peak <= base.mastered) return null;
 
-  const camp = f.camps.find((c) => c.target === target) ?? null;
+  // Past Summit the target is a round-number milestone, not a camp, so
+  // `f.camps` has no entry for it — synthesise the threshold from the curve so
+  // the chart still draws a line and a marker to aim at.
+  const campFromLadder = f.camps.find((c) => c.target === target) ?? null;
+  const camp =
+    campFromLadder ??
+    (milestoneLabel == null ? null : { id: 'summit', target, day: resolve(base, target).days });
   const tierIdx = camp == null ? TIERS.length - 1 : TIERS.findIndex((x) => x.id === camp.id);
   const tier = tierView(tierRegistry(Math.max(0, tierIdx)), isDark);
 
@@ -423,9 +497,13 @@ function ForecastSection({ base, target, t }: { base: ProjectionBase; target: nu
                   day: camp.day,
                   axisLabel: t('progress.forecast.axisWords', { count: camp.target.toLocaleString() }),
                   caption:
-                    camp.day != null
-                      ? t('progress.forecast.campEta', { tier: t(`tier.${camp.id}.name`), span: fmt(camp.day) })
-                      : t('progress.forecast.campLine', { tier: t(`tier.${camp.id}.name`), count: camp.target.toLocaleString() }),
+                    milestoneLabel != null
+                      ? camp.day != null
+                        ? t('progress.forecast.milestoneEtaCaption', { count: camp.target.toLocaleString(), span: fmt(camp.day) })
+                        : milestoneLabel
+                      : camp.day != null
+                        ? t('progress.forecast.campEta', { tier: t(`tier.${camp.id}.name`), span: fmt(camp.day) })
+                        : t('progress.forecast.campLine', { tier: t(`tier.${camp.id}.name`), count: camp.target.toLocaleString() }),
                 }
           }
           startLabel={t('progress.forecast.today')}
@@ -442,30 +520,45 @@ function ForecastSection({ base, target, t }: { base: ProjectionBase; target: nu
   );
 }
 
-// ── All-time stats grid — Sessions · Avg accuracy · Current streak · Best streak ──
+// ── All-time stats grid — Reviews · Avg accuracy · Days active · Time invested ──
 // 18 §A5: each tile is pressable → an explainer tooltip (same whole-tile pattern as
 // the Home stat tiles). Copy rule: honest, sourced claims only — dynamic where cheap.
+//
+// Refactored 2026-08-05. The two streak tiles left: Home already carries a live
+// streak badge, so the grid was spending half its space restating it. What
+// replaced them is cumulative rather than fragile — a missed day dents a streak
+// but cannot take reviews, active days or hours away from you.
 function AllTimeGrid({ data, t }: TabProps) {
   const { theme } = useUnistyles();
-  const sessionsPerDay = data.daysActive > 0 ? data.sessionsTotal / data.daysActive : 0;
+  const reviewsPerDay = data.daysActive > 0 ? data.reviewsTotal / data.daysActive : 0;
+  // `time` is null below a minute — see lib/studyTime. An em dash is the honest
+  // render for "we have no timing for this account", which is every user whose
+  // sessions all predate duration recording. It is NOT rendered as "0m": we do
+  // not know is a different claim from you studied for zero minutes.
+  const time = studyTimeParts(data.timeInvestedMs);
+  const timeValue = time.key == null ? '—' : t(`progress.time.${time.key}`, { hours: time.hours, minutes: time.minutes });
   const tiles: { label: string; value: string; Icon: typeof IconBook; color: string; tip: string }[] = [
     {
-      label: t('progress.sessions'), value: String(data.sessionsTotal), Icon: IconChart, color: theme.palette.blue[500],
-      // Distributed-practice literature (Cepeda et al., 2006 meta-analysis): many
-      // short spaced sessions outperform fewer massed ones.
-      tip: sessionsPerDay > 0 ? t('progress.sessionsTipRate', { rate: sessionsPerDay.toFixed(1) }) : t('progress.sessionsTip'),
+      label: t('progress.reviews'), value: data.reviewsTotal > 0 ? data.reviewsTotal.toLocaleString() : '—',
+      Icon: IconRefresh, color: theme.palette.blue[500],
+      // Every rating is one retrieval attempt, and retrieval — not re-reading —
+      // is what the testing-effect literature finds does the work.
+      tip: reviewsPerDay >= 1 ? t('progress.reviewsTipRate', { rate: Math.round(reviewsPerDay) }) : t('progress.reviewsTip'),
     },
     {
       label: t('progress.avgAccuracy'), value: data.avgAccuracy > 0 ? `${data.avgAccuracy}%` : '—', Icon: IconCheck, color: theme.palette.green[600],
       tip: t('progress.accuracyTip'),
     },
     {
-      label: t('progress.currentStreak'), value: data.streakDays > 0 ? `${data.streakDays}d` : '—', Icon: IconFire, color: theme.color.accent,
-      tip: t('progress.currentStreakTip'),
+      label: t('progress.daysActive'), value: data.daysActive > 0 ? data.daysActive.toLocaleString() : '—',
+      Icon: IconCalendar, color: theme.color.accent,
+      // Deliberately NOT a streak: this counts every day you showed up, and
+      // missing today can never subtract from it.
+      tip: t('progress.daysActiveTip'),
     },
     {
-      label: t('progress.bestStreak'), value: data.bestStreak > 0 ? `${Math.max(data.bestStreak, data.streakDays)}d` : '—', Icon: IconStar, color: theme.palette.amber[500],
-      tip: t('progress.bestStreakTip'),
+      label: t('progress.timeInvested'), value: timeValue, Icon: IconClock, color: theme.palette.amber[500],
+      tip: t('progress.timeInvestedTip', { count: data.sessionsTotal }),
     },
   ];
   return (
@@ -649,8 +742,12 @@ function InfoSheet({ infoKey, t, onClose }: { infoKey: InfoKey | null; t: TFunct
 const styles = StyleSheet.create((theme) => {
   const { color, palette, fonts, radius } = theme;
   return {
-    header: { backgroundColor: color.surfaceCard, borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.border, paddingHorizontal: 16, paddingTop: 6 },
-    title: { fontFamily: fonts.sans.extra, fontSize: 22, letterSpacing: -0.3, color: color.textStrong, marginBottom: 8 },
+    // No backgroundColor on purpose — matches the Word List header, which sits
+    // directly on the screen background. surfaceCard read as a lighter slab
+    // floating above the page in dark mode (Casey, 2026-08-05).
+    header: { borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.border, paddingHorizontal: 16, paddingTop: 6 },
+    titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+    title: { fontFamily: fonts.sans.extra, fontSize: 22, letterSpacing: -0.3, color: color.textStrong },
 
     // + the FAB's overhang: the nav's height is spacer-reserved, the FAB is not.
     scroll: { paddingBottom: 20 + TAB_BAR_FAB_OVERHANG },

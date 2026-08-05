@@ -122,6 +122,9 @@ const mockProgressData = {
   avgAccuracy: 85,
   bestStreak: 9,
   daysActive: 20,
+  reviewsTotal: 384,
+  timeInvestedMs: 3 * 60 * 60 * 1000 + 25 * 60 * 1000,
+
   cards: mockLib.cards,
   states: mockLib.states,
   isLoading: false,
@@ -135,6 +138,13 @@ jest.mock('@/query/usePullToRefresh', () => ({
 }));
 
 jest.mock('@/query/hooks', () => ({
+  // Pulled in by the header's LanguageIndicator (2026-08-04), not by the screen.
+  useProfile: () => ({ nativeLang: 'en', targetLang: 'es' }),
+  useEntitlement: () => ({ entitlement: undefined, isPaid: true, isLoading: false }),
+  useLearningLanguages: () => ({ languages: ['es'], isLoading: false }),
+  useAddLanguage: () => ({ mutate: jest.fn(), isPending: false }),
+  useSwitchLanguage: () => ({ mutate: jest.fn(), isPending: false }),
+  useRemoveLanguage: () => ({ mutate: jest.fn(), isPending: false }),
   useProgressData: () => mockProgressData,
   useLeaderboard: () => ({ entries: [], isLoading: false }),
   useActiveLang: () => 'es',

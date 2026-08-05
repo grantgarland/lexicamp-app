@@ -13,6 +13,7 @@ import {
   languageName,
   MASTERY_STABILITY,
   MOUNTAIN_TIERS,
+  SOON_WINDOW_DAYS,
   mountainTier,
   wordLifecycle,
 } from '../derive';
@@ -327,5 +328,70 @@ describe('homeSnapshot due-queue split (drives the study-card backlog line)', ()
     const snap = homeSnapshot(cards, states, NOW);
     expect(snap.needRecallTotal).toBe(1);
     expect(snap.needRecallTotal - snap.needRecallToday).toBe(1);
+  });
+});
+
+// Home's stat row was retimed (Casey, 2026-08-05): Added today -> Added recently,
+// Due tomorrow -> Due soon, both on the Base Camp window. The two ORIGINAL fields
+// survive untouched because each has a non-display consumer that would break if
+// widened — that is what most of this block is guarding.
+describe('the rolling Home window', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const now = new Date('2026-08-05T12:00:00Z');
+  const card = (id: string, agoMs: number) => ({
+    id, deckId: 'd', userId: 'u', translationId: 't', userNote: null,
+    customFront: null, customBack: null, suspended: false,
+    createdAt: new Date(now.getTime() - agoMs),
+  });
+  const state = (cardId: string, dueInMs: number, stability = 5) => ({
+    cardId, userId: 'u', stability, difficulty: 5,
+    dueAt: new Date(now.getTime() + dueInMs), lastReviewAt: new Date(now.getTime() - DAY),
+    state: 2 as const, reps: 3, lapses: 0, learningSteps: 0,
+  });
+
+  it('mirrors the Base Camp band rather than hardcoding a number', () => {
+    // If Base Camp is ever retuned, the tiles follow it. This is the whole
+    // reason SOON_WINDOW_DAYS is not the literal 3.
+    expect(SOON_WINDOW_DAYS).toBe(TIERS[0].stMax);
+  });
+
+  it('counts words added inside the window and drops those outside it', () => {
+    const cards = [card('a', 0), card('b', 2 * DAY), card('c', 2.9 * DAY), card('d', 4 * DAY)];
+    expect(homeSnapshot(cards, [], now).addedRecently).toBe(3);
+  });
+
+  it('counts words due inside the window, including ones already overdue', () => {
+    // A word that came due yesterday is not less due than one due tomorrow.
+    const cards = ['a', 'b', 'c', 'd'].map((id) => card(id, 10 * DAY));
+    const states = [state('a', -2 * DAY), state('b', 0.5 * DAY), state('c', 2.9 * DAY), state('d', 5 * DAY)];
+    expect(homeSnapshot(cards, states, now).dueSoon).toBe(3);
+  });
+
+  it('leaves addedToday alone — the free-tier meter mirrors the server on it', () => {
+    // Widening this to the tile's window would silently hand free users extra
+    // daily saves in the UI while save_card kept refusing them.
+    const cards = [card('a', 1 * 60 * 60 * 1000), card('b', 2 * DAY)];
+    const snap = homeSnapshot(cards, [], now);
+    expect(snap.addedToday).toBe(1);
+    expect(snap.addedRecently).toBe(2);
+  });
+
+  it('leaves dueTomorrow alone — the Study and caught-up cards say "tomorrow"', () => {
+    const cards = ['a', 'b'].map((id) => card(id, 10 * DAY));
+    const states = [state('a', 0.5 * DAY), state('b', 2.5 * DAY)];
+    const snap = homeSnapshot(cards, states, now);
+    expect(snap.dueTomorrow).toBe(1);
+    expect(snap.dueSoon).toBe(2);
+  });
+
+  it('excludes archived words from due soon, like every other queue count', () => {
+    const cards = [{ ...card('a', 10 * DAY), suspended: true }, card('b', 10 * DAY)];
+    expect(homeSnapshot(cards, [state('a', DAY), state('b', DAY)], now).dueSoon).toBe(1);
+  });
+
+  it('reports zero rather than NaN for an empty library', () => {
+    const snap = homeSnapshot([], [], now);
+    expect(snap.addedRecently).toBe(0);
+    expect(snap.dueSoon).toBe(0);
   });
 });

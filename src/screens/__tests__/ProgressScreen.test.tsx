@@ -104,6 +104,9 @@ const mockProgressData = {
   avgAccuracy: 85,
   bestStreak: 9,
   daysActive: 20,
+  reviewsTotal: 384,
+  timeInvestedMs: 3 * 60 * 60 * 1000 + 25 * 60 * 1000,
+
   cards: mockLib.cards,
   states: mockLib.states,
   isLoading: false,
@@ -117,6 +120,13 @@ jest.mock('@/query/usePullToRefresh', () => ({
 }));
 
 jest.mock('@/query/hooks', () => ({
+  // Pulled in by the header's LanguageIndicator (2026-08-04), not by the screen.
+  useProfile: () => ({ nativeLang: 'en', targetLang: 'es' }),
+  useEntitlement: () => ({ entitlement: undefined, isPaid: true, isLoading: false }),
+  useLearningLanguages: () => ({ languages: ['es'], isLoading: false }),
+  useAddLanguage: () => ({ mutate: jest.fn(), isPending: false }),
+  useSwitchLanguage: () => ({ mutate: jest.fn(), isPending: false }),
+  useRemoveLanguage: () => ({ mutate: jest.fn(), isPending: false }),
   useProgressData: () => mockProgressData,
   useLeaderboard: () => ({ entries: [], isLoading: false }),
   useActiveLang: () => 'es',
@@ -253,5 +263,99 @@ describe('Progress redesign (2026-07-30)', () => {
     } finally {
       mockProgressData.totalSaved = 40;
     }
+  });
+});
+
+// A summited user used to be handed the plainest screen in the app: a "Reached —
+// keep reviewing" panel that restated the tier they could already see, and a Route
+// tab captioned "Summit at the top. Keep climbing." Both were removed (Casey,
+// 2026-08-05), and the journey card that replaced the panel is built from the SAME
+// parts as ProjectionCard so the two slots don't diverge again.
+describe('past the Summit', () => {
+  const saved = { ...mockProgressData };
+  beforeAll(() => {
+    // Stability 60 > MASTERY_STABILITY, and enough of them that no camp is left.
+    const lib = buildLibrary(3100, 60);
+    Object.assign(mockProgressData, {
+      tierCounts: [0, 0, 0, 0, 3100], totalSaved: 3100, totalMastered: 3100,
+      cards: lib.cards, states: lib.states,
+    });
+  });
+  afterAll(() => Object.assign(mockProgressData, saved));
+
+  const openProjection = () => {
+    render(<ProgressScreen />);
+    fireEvent.press(screen.getByText(t('progress.tabProjection')));
+  };
+
+  it('wears the same card treatment as ProjectionCard, not a plain word dump', () => {
+    openProjection();
+    // Same testID => same tinted, bordered surface both branches render into.
+    expect(screen.getByTestId('projectionCard')).toBeTruthy();
+    expect(screen.getByText(t('progress.proj.journeyEyebrow'))).toBeTruthy();
+    // The big tier-coloured number + unit label, mirroring the ETA slot.
+    expect(screen.getByText('3,100')).toBeTruthy();
+    expect(screen.getByText(t('progress.proj.journeyBigLabel'))).toBeTruthy();
+  });
+
+  it('drops the ETA sentence — the chart caption is where that number lives', () => {
+    openProjection();
+    expect(screen.queryByText(/At this pace/i)).toBeNull();
+    // ...and the dead "Reached" panel it replaced is gone with it.
+    expect(screen.queryByText(t('progress.proj.reachedTitle'))).toBeNull();
+  });
+
+  it('no longer captions the Route ladder', () => {
+    render(<ProgressScreen />);
+    expect(screen.getByText(t('progress.fullRoute'))).toBeTruthy();
+    expect(screen.queryByText(/Summit at the top/i)).toBeNull();
+  });
+});
+
+// All-Time grid refactor (Casey, 2026-08-05): Reviews · Avg accuracy · Days
+// active · Time invested. The two streak tiles left — Home already carries a
+// live streak badge, so the grid was spending half its space restating it.
+describe('All-Time grid', () => {
+  const saved = { ...mockProgressData };
+  afterEach(() => Object.assign(mockProgressData, saved));
+
+  it('shows the four metrics and no longer restates the streak', () => {
+    render(<ProgressScreen />);
+    expect(screen.getByText(t('progress.reviews'))).toBeTruthy();
+    expect(screen.getByText(t('progress.avgAccuracy'))).toBeTruthy();
+    expect(screen.getByText(t('progress.daysActive'))).toBeTruthy();
+    expect(screen.getByText(t('progress.timeInvested'))).toBeTruthy();
+    // Home owns the streak now. Sessions gave way to Reviews.
+    expect(screen.queryByText('Current Streak')).toBeNull();
+    expect(screen.queryByText('Best Streak')).toBeNull();
+    expect(screen.queryByText('Sessions')).toBeNull();
+  });
+
+  it('reports reviews and active days from the stats, thousands-separated', () => {
+    Object.assign(mockProgressData, { reviewsTotal: 18400, daysActive: 1024 });
+    render(<ProgressScreen />);
+    expect(screen.getByText('18,400')).toBeTruthy();
+    expect(screen.getByText('1,024')).toBeTruthy();
+  });
+
+  it('reports measured time plainly — no tilde, because nothing is inferred', () => {
+    // Time invested sums RECORDED durations only (2026-08-05). The earlier
+    // revision modelled untimed sessions from the user's median pace and had to
+    // mark the result approximate; that model is gone, so the number stands on
+    // its own.
+    Object.assign(mockProgressData, { timeInvestedMs: 3 * 60 * 60 * 1000 + 25 * 60 * 1000 });
+    render(<ProgressScreen />);
+    expect(screen.getByText('3h 25m')).toBeTruthy();
+    expect(screen.queryByText('~3h 25m')).toBeNull();
+  });
+
+  it('shows an em dash, never "0m", when there is no timing at all', () => {
+    // Every session predates duration recording. We know nothing — which is not
+    // the same claim as "you have studied for zero minutes".
+    Object.assign(mockProgressData, { timeInvestedMs: 0, reviewsTotal: 0 });
+    render(<ProgressScreen />);
+    expect(screen.queryByText('0m')).toBeNull();
+    expect(screen.queryByText('~0m')).toBeNull();
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
   });
 });

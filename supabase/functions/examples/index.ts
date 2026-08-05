@@ -104,8 +104,29 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify([{ Text: row.source_text, Translation: senseKey }]),
       },
     );
-    if (res.status === 429) return json({ error: 'examples service busy' }, 429);
-    if (!res.ok) return json({ error: 'examples service unavailable' }, 503);
+    // Same blind spot the translate function had (2026-08-05): a bare 429/503
+    // told the logs nothing about WHY Azure refused. This function shares
+    // AZURE_TRANSLATOR_KEY with translate, so a dead key takes both down at
+    // once — and the log line is what says so. Never logs headers: the
+    // subscription key is in them.
+    if (!res.ok) {
+      let code: unknown = null;
+      let message = '';
+      try {
+        const body = await res.clone().json();
+        code = body?.error?.code ?? null;
+        message = String(body?.error?.message ?? '').slice(0, 200);
+      } catch {
+        message = (await res.clone().text().catch(() => '')).slice(0, 200);
+      }
+      console.error(JSON.stringify({
+        at: 'azure', op: 'dictionary/examples',
+        kind: res.status === 429 ? 'busy' : 'error',
+        httpStatus: res.status, azureCode: code, azureMessage: message,
+      }));
+      if (res.status === 429) return json({ error: 'examples service busy' }, 429);
+      return json({ error: 'examples service unavailable' }, 503);
+    }
     const [entry] = await res.json();
     examples = (entry?.examples ?? []).slice(0, 5).map((e: Record<string, string>) => ({
       sourcePrefix: e.sourcePrefix ?? '',

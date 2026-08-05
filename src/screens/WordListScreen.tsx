@@ -9,7 +9,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { FlatList, Pressable, RefreshControl, ScrollView, TextInput, View } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, { FadeIn, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
@@ -31,6 +31,7 @@ import {
 import { usePullToRefresh } from '@/query/usePullToRefresh';
 import type { DeckSummary, WordListItem } from '@/data/DataSource';
 import { addedLabel } from '@/lib/relativeTime';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { useDeferredReady } from '@/lib/useDeferredReady';
 import { LanguageIndicator } from '@/screens/shared/LanguageSwitcher';
 import { useUiStore } from '@/store/uiStore';
@@ -136,9 +137,6 @@ export function WordListScreen() {
   const { isPaid } = useEntitlement();
 
   const [subTab, setSubTab] = useState<'words' | 'decks'>('words');
-  // Paint-first traversal: false on mount + for the frame after a tab switch,
-  // true once interactions settle — heavy lists render behind a skeleton.
-  const contentReady = useDeferredReady(subTab);
   const [query, setQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortSel>(DEFAULT_SORT);
   const [filterTiers, setFilterTiers] = useState<Set<TierId>>(new Set());
@@ -235,14 +233,55 @@ export function WordListScreen() {
   // renders words derives from this array — see `savedCount` for why.
   const present = useMemo(() => words.filter((w) => !removed.includes(w.id)), [words, removed]);
 
+  // ── Deferred filtering (perf, 2026-08-05) ──────────────────────────────────
+  // Filtering and sorting a 4,000-word library is real JS-thread work, and it
+  // used to run in the SAME commit as the tap that changed a filter — so the
+  // sheet's Apply, and the tab traversal into this screen, both froze until it
+  // finished. Nothing could paint in between, because `visible` recomputed
+  // before React could show a skeleton.
+  //
+  // Split the inputs in two: `query`/`sortBy`/`filterTiers`/`showArchived` are
+  // what the CONTROLS show and update instantly; `applied` is what the LIST
+  // computes from, and it only catches up once the frame has painted. The gap
+  // is the skeleton — so a filter change is now: tap → skeleton this frame →
+  // list next tick, instead of a stalled thread.
+  //
+  // SEARCH is debounced on top of that (2026-08-05). `query` was in this key, so
+  // every keystroke changed it, blanked the list to a skeleton and rebuilt —
+  // typing "mountain" flashed the skeleton eight times. The KEY now reads the
+  // settled term, so a burst of typing costs one rebuild at the end instead of
+  // one per character. The input below still binds to raw `query`, so the text
+  // field itself never lags a keypress.
+  const settledQuery = useDebouncedValue(query);
+  // True while the user is mid-word: results on screen are for an older term.
+  const searchPending = settledQuery.trim().toLowerCase() !== query.trim().toLowerCase();
+  const pendingKey = `${subTab}|${settledQuery.trim().toLowerCase()}|${sortBy.dim}${sortBy.dir}|${[...filterTiers].sort().join(',')}|${showArchived}`;
+  // False in the render where the key changes, true once interactions settle.
+  const contentReady = useDeferredReady(pendingKey);
+  const [applied, setApplied] = useState({ key: pendingKey, query: settledQuery, sortBy, filterTiers, showArchived });
+  // Render-adjust (the repo's no-setState-in-effect rule): adopt the pending
+  // inputs on the first ready render after they changed.
+  if (contentReady && applied.key !== pendingKey) {
+    setApplied({ key: pendingKey, query: settledQuery, sortBy, filterTiers, showArchived });
+  }
+
+  // While the debounce settles, the rows on screen answer the PREVIOUS term. Dim
+  // them rather than swapping in a skeleton: the list keeps its scroll position
+  // and its height, so nothing jumps, and the fade reads as "catching up" rather
+  // than "reloading". 120ms on the way out, 160ms back — quick to acknowledge
+  // the keystroke, unhurried on the way back so it never strobes mid-word.
+  const staleStyle = useAnimatedStyle(() => ({
+    opacity: withTiming(searchPending ? 0.45 : 1, { duration: searchPending ? 120 : 160 }),
+  }));
+
   const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = applied.query.trim().toLowerCase();
     const filtered = present
-      .filter((w) => w.suspended === showArchived) // E3: active list vs archived shelf
+      .filter((w) => w.suspended === applied.showArchived) // E3: active list vs archived shelf
       .filter((w) => q === '' || w.native.toLowerCase().includes(q) || w.target.toLowerCase().includes(q))
-      .filter((w) => filterTiers.size === 0 || filterTiers.has(getTierByStability(w.stability).id));
-    return sortWords(filtered, sortBy);
-  }, [present, query, filterTiers, sortBy, showArchived]);
+      .filter((w) => applied.filterTiers.size === 0 || applied.filterTiers.has(getTierByStability(w.stability).id));
+    return sortWords(filtered, applied.sortBy);
+  }, [present, applied]);
 
   // Count = ALL saved words, archived included (Casey ruling, post-E3): archiving
   // a mastered word removes it from lists/reviews, never from what you've earned —
@@ -265,11 +304,13 @@ export function WordListScreen() {
       <View style={styles.header}>
         <View style={styles.titleRow}>
           <RawText style={styles.title}>{t('wordList.title')}</RawText>
+          {/* Count first, toggle LAST — the language switcher holds the same
+              trailing slot on every screen (2026-08-04). */}
           <View style={styles.titleRight}>
-            <LanguageIndicator compact />
             <RawText style={styles.count}>
               {subTab === 'words' ? t('wordList.count', { count: savedCount }) : t('wordList.deckCount', { count: allDecks.length })}
             </RawText>
+            <LanguageIndicator compact />
           </View>
         </View>
         <SegmentedTabs
@@ -311,6 +352,9 @@ export function WordListScreen() {
           mounts right after interactions settle. */}
       {subTab === 'words' &&
         (wordsLoading || !contentReady ? (
+          // Skeleton is for genuinely heavy work — first load, tab traversal, a
+          // filter apply. NOT for typing: with the debounce above, a keystroke no
+          // longer reaches this branch, so the list stays put and merely dims.
           <SkeletonRows />
         ) : noneSaved && !showArchived ? (
           <EmptyState title={t('wordList.emptyTitle')} body={t('wordList.emptyBody')} style={styles.empty} />
@@ -322,6 +366,7 @@ export function WordListScreen() {
           // Virtualized (18 §2b perf guardrail): rows mount lazily instead of
           // all-at-once — a plain ScrollView built every swipeable row
           // synchronously, which is what made tab traversal feel stuck.
+          <Animated.View style={[styles.listFill, staleStyle]} pointerEvents={searchPending ? 'none' : 'auto'}>
           <FlatList
             data={visible}
             refreshControl={refreshControl}
@@ -343,6 +388,7 @@ export function WordListScreen() {
             maxToRenderPerBatch={12}
             windowSize={7}
           />
+          </Animated.View>
         ))}
 
       {/* Decks tab (W-04 / W-07) */}
@@ -389,6 +435,7 @@ export function WordListScreen() {
         filterTiers={filterTiers}
         showArchived={showArchived}
         onClose={() => setFilterOpen(false)}
+        applyDisabled={!contentReady}
         onApply={(s, tiers, archived) => {
           setSortBy(s);
           setFilterTiers(tiers);
@@ -632,6 +679,7 @@ function FilterSortSheet({
   onClose,
   onApply,
   onReset,
+  applyDisabled = false,
 }: {
   visible: boolean;
   sortBy: SortSel;
@@ -639,6 +687,10 @@ function FilterSortSheet({
   showArchived: boolean;
   onClose: () => void;
   onApply: (sortBy: SortSel, tiers: Set<TierId>, showArchived: boolean) => void;
+  /** True while a previous apply is still settling — the list is showing its
+   *  skeleton, and a second apply on top of it would queue more work behind the
+   *  one already running. */
+  applyDisabled?: boolean;
   onReset: () => void;
 }) {
   const { theme } = useUnistyles();
@@ -769,7 +821,7 @@ function FilterSortSheet({
       <ButtonRow
         style={styles.sheetActions}
         left={{ title: t('wordList.reset'), onPress: onReset }}
-        right={{ title: t('wordList.apply'), variant: 'primary', onPress: () => onApply(localSort, localTiers, localArchived) }}
+        right={{ title: t('wordList.apply'), variant: 'primary', disabled: applyDisabled, onPress: () => onApply(localSort, localTiers, localArchived) }}
       />
     </Sheet>
   );
@@ -1076,7 +1128,8 @@ const styles = StyleSheet.create((theme) => {
     searchUnderTabs: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: theme.borderWidth.thin, borderBottomColor: color.divider },
 
     // + the FAB's overhang: the nav's height is spacer-reserved, the FAB is not.
-    listContent: { paddingBottom: 16 + TAB_BAR_FAB_OVERHANG },
+    listFill: { flex: 1 },
+  listContent: { paddingBottom: 16 + TAB_BAR_FAB_OVERHANG },
     empty: { paddingTop: 64 },
     proBadge: { backgroundColor: color.accentSoft, borderRadius: 3, paddingHorizontal: 5, paddingVertical: 1 },
     proBadgeText: { fontFamily: fonts.sans.bold, fontSize: 9, letterSpacing: 0.3, color: color.accentStrong },

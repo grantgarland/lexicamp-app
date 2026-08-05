@@ -93,6 +93,9 @@ export const TOUR_FIXTURE_PROGRESS = {
   sessionsTotal: 5,
   avgAccuracy: 0.82,
   daysActive: 4,
+  reviewsTotal: 68,
+  timeInvestedMs: 7 * 60 * 1000,
+
 } as const;
 
 /** The word the walkthrough types into Search for w3/w3b. Chosen because it is

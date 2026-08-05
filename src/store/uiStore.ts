@@ -25,6 +25,14 @@ interface UiState {
   /** Settings → Replay walkthrough handshake (18 §F2): Settings sets it, the
    *  WalkthroughController (tabs layout) consumes it after navigating Home. */
   walkthroughRequested: boolean;
+  /** A quiz session holds UNSAVED ratings right now. Read by the root layout,
+   *  which defers its light↔dark rebuild while this is true: that rebuild
+   *  unmounts the navigator, and doing so mid-session ejects the user to Home
+   *  and silently discards the batch (ratings only persist on completion).
+   *  iOS "Automatic" appearance flips at sunset, so this is an evening-study
+   *  bug, not an edge case (verified on the simulator, 2026-08-04). */
+  quizInProgress: boolean;
+  setQuizInProgress: (v: boolean) => void;
   setSearchOpen: (v: boolean) => void;
   setWalkthroughRequested: (v: boolean) => void;
   toggleSearch: () => void;
@@ -37,6 +45,8 @@ interface UiState {
 export const useUiStore = create<UiState>((set) => ({
   searchOpen: false,
   walkthroughRequested: false,
+  quizInProgress: false,
+  setQuizInProgress: (v) => set({ quizInProgress: v }),
   setSearchOpen: (v) => set({ searchOpen: v }),
   setWalkthroughRequested: (v) => set({ walkthroughRequested: v }),
   toggleSearch: () => set((s) => ({ searchOpen: !s.searchOpen })),

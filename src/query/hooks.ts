@@ -279,6 +279,8 @@ export interface ProgressData {
   avgAccuracy: number;
   bestStreak: number;
   daysActive: number;
+  reviewsTotal: number;
+  timeInvestedMs: number;
   /** Raw cards + FSRS rows behind the aggregates above. The Progress
    *  projection (domain/projection.ts) forward-simulates these per card, which
    *  the aggregates cannot support. Already fetched for `homeSnapshot` — this
@@ -298,7 +300,11 @@ export function useProgressData(): ProgressData {
     enabled: activeLang != null,
   });
   const eng = useQuery({ queryKey: ['engagement', userState, uid], queryFn: () => ds.getEngagement() });
-  const stats = useQuery({ queryKey: ['progressStats', userState, uid], queryFn: () => ds.getProgressStats() });
+  const stats = useQuery({
+    queryKey: ['progressStats', userState, activeLang, uid],
+    queryFn: () => ds.getProgressStats(activeLang ?? undefined),
+    enabled: activeLang != null,
+  });
   const snap = deck.data != null ? homeSnapshot(deck.data.cards, deck.data.states) : null;
   return {
     cards: deck.data?.cards ?? NO_CARDS,
@@ -311,6 +317,8 @@ export function useProgressData(): ProgressData {
     avgAccuracy: stats.data?.avgAccuracy ?? 0,
     bestStreak: stats.data?.bestStreak ?? 0,
     daysActive: stats.data?.daysActive ?? 0,
+    reviewsTotal: stats.data?.reviewsTotal ?? 0,
+    timeInvestedMs: stats.data?.timeInvestedMs ?? 0,
     isLoading: deck.isLoading || stats.isLoading,
   };
 }

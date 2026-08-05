@@ -1,6 +1,4 @@
 -- Session pace: make the Home study card's time estimate a MEASURED number.
--- APPLIED to lexicamp-prod 2026-07-30 (Casey approved). This file mirrors the
--- SQL that was applied; keep them identical.
 --
 -- WHY NOT review_logs: commit_quiz_session inserts review_logs WITHOUT
 -- reviewed_at, so the column takes its `default now()` — evaluated inside one
@@ -21,8 +19,7 @@
 -- ("function is not unique"), which would break EVERY quiz commit from existing
 -- clients. Dropping first, in this same transaction, means there is no window
 -- where the function is missing and no ambiguity afterwards: the new 2-arg
--- version still satisfies old 1-arg callers via the default. (Verified against
--- prod after apply: a 1-arg call resolves into the 2-arg body.)
+-- version still satisfies old 1-arg callers via the default.
 drop function if exists public.commit_quiz_session(jsonb);
 
 create function public.commit_quiz_session(p_reviews jsonb, p_duration_ms bigint default null)
@@ -138,4 +135,4 @@ begin
 end $$;
 
 revoke execute on function public.get_session_pace() from public, anon;
-grant execute on function public.get_session_pace() to authenticated;
+grant execute on function public.get_session_pace() to authenticated;;

@@ -95,6 +95,45 @@ function azureHeaders(): HeadersInit {
   };
 }
 
+/**
+ * Log why Azure refused us, then classify the failure.
+ *
+ * WHY THIS EXISTS (2026-08-05): every non-429 Azure failure used to collapse
+ * into a bare `'error'` → our 503, so the edge logs showed `POST | 503` and
+ * nothing else. When the subscription key was invalidated, diagnosing it needed
+ * an out-of-band curl to Azure to discover it was a 401001. The upstream status
+ * and Azure's own error code are the two facts that make the next occurrence a
+ * read of the logs instead of an investigation:
+ *
+ *   401001 → key invalid/rotated, or the resource is disabled (billing)
+ *   403xxx → quota exhausted / resource suspended
+ *   429    → throttled; handled as 'busy' and NOT an error
+ *
+ * Deliberately does not log request text or any header: the subscription key
+ * lives in the headers, and this line goes to a log we read casually.
+ */
+async function azureFailure(res: Response, op: string): Promise<'error' | 'busy'> {
+  // Read the body defensively — an Azure 5xx or a gateway error is often HTML,
+  // and a parse throw here would mask the very status we came to record.
+  let code: unknown = null;
+  let message = '';
+  try {
+    const body = await res.clone().json();
+    code = body?.error?.code ?? null;
+    message = String(body?.error?.message ?? '').slice(0, 200);
+  } catch {
+    message = (await res.clone().text().catch(() => '')).slice(0, 200);
+  }
+  const kind = res.status === 429 ? 'busy' : 'error';
+  console.error(JSON.stringify({
+    at: 'azure', op, kind,
+    httpStatus: res.status,
+    azureCode: code,
+    azureMessage: message,
+  }));
+  return kind;
+}
+
 interface AzureSense {
   normalizedTarget: string;
   displayTarget: string;
@@ -116,8 +155,7 @@ async function dictionaryLookup(text: string, from: string, to: string): Promise
     headers: azureHeaders(),
     body: JSON.stringify([{ Text: text }]),
   });
-  if (res.status === 429) return 'busy';
-  if (!res.ok) return 'error';
+  if (!res.ok) return await azureFailure(res, 'dictionary/lookup');
   const [entry] = await res.json();
   const senses = ((entry?.translations ?? []) as AzureSense[]).sort((a, b) => b.confidence - a.confidence).slice(0, 5);
   return { displaySource: entry?.displaySource ?? text, senses };
@@ -129,10 +167,16 @@ async function mtTranslate(text: string, from: string, to: string): Promise<stri
     headers: azureHeaders(),
     body: JSON.stringify([{ Text: text }]),
   });
-  if (res.status === 429) return 'busy';
-  if (!res.ok) return 'error';
+  if (!res.ok) return await azureFailure(res, 'translate');
   const [entry] = await res.json();
-  return entry?.translations?.[0]?.text ?? 'error';
+  // A 200 with no usable translation is its own failure mode — worth a line, or
+  // it reads in the logs as an Azure outage when Azure answered fine.
+  const translated = entry?.translations?.[0]?.text;
+  if (translated == null) {
+    console.error(JSON.stringify({ at: 'azure', op: 'translate', kind: 'error', httpStatus: 200, azureCode: 'empty_translation', azureMessage: '' }));
+    return 'error';
+  }
+  return translated;
 }
 
 // ── Row ↔ response mapping ────────────────────────────────────────────────────

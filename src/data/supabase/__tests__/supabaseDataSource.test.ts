@@ -34,7 +34,7 @@ function mockMakeChain(rec: RecordedCall) {
       return chain;
     };
   const chain: Record<string, unknown> = {};
-  for (const m of ['select', 'eq', 'gt', 'lte', 'in', 'or', 'order', 'limit', 'update', 'upsert', 'insert', 'delete']) {
+  for (const m of ['select', 'eq', 'gt', 'lte', 'in', 'or', 'order', 'limit', 'range', 'update', 'upsert', 'insert', 'delete']) {
     chain[m] = record(m);
   }
   chain.maybeSingle = () => {
@@ -142,11 +142,22 @@ describe('getDecks', () => {
         { id: 'travel', name: 'Travel', created_at: '2026-06-10T00:00:00Z', deck_cards: [{ count: 12 }] },
         { id: 'biz', name: 'Business', created_at: '2026-06-20T00:00:00Z', deck_cards: [] },
       ]),
+      // get_deck_stats — per-deck review counts (2026-08-05).
+      ok({
+        travel: { reviews: 6, last_reviewed_at: '2026-08-05T17:47:23Z' },
+        biz: { reviews: 0, last_reviewed_at: null },
+      }),
     );
     const decks = await supabaseDataSource.getDecks('es');
     expect(decks.map((d) => d.id)).toEqual(['travel', 'biz']);
     expect(decks[0]!.wordCount).toBe(12);
     expect(decks[1]!.wordCount).toBe(0); // empty count array → 0, not a crash
+    // Reviews/lastReviewedAt were hardcoded 0/null behind a TODO until
+    // 2026-08-05, so a studied deck reported "REVIEWS 0 / LAST REVIEWED Never".
+    expect(decks[0]!.reviews).toBe(6);
+    expect(decks[0]!.lastReviewedAt).toEqual(new Date('2026-08-05T17:47:23Z'));
+    expect(decks[1]!.reviews).toBe(0);
+    expect(decks[1]!.lastReviewedAt).toBeNull();
     // 2026-07-30: the count MUST come from deck_cards (membership), never from
     // cards(count). Every card in a language points at that language's MAIN
     // deck, so cards(count) reported the whole library for one deck and 0 for
@@ -158,7 +169,46 @@ describe('getDecks', () => {
     const deckCall = mockCalls.find((c) => c.table === 'decks')!;
     expect(deckCall.ops).toContainEqual(['order', ['created_at', { ascending: true }]]);
   });
+
+  it('still lists decks when the stats RPC fails', async () => {
+    // The list is useful without its counters; a stats outage must degrade to
+    // zeros, not blank the Custom Decks tab.
+    mockQueue.push(
+      ok([
+        { id: 'main', name: 'My words', created_at: '2026-06-01T00:00:00Z', deck_cards: [{ count: 4 }] },
+        { id: 'travel', name: 'Travel', created_at: '2026-06-10T00:00:00Z', deck_cards: [{ count: 12 }] },
+      ]),
+      { data: null, error: { message: 'boom' } },
+    );
+    const decks = await supabaseDataSource.getDecks('es');
+    expect(decks.map((d) => d.id)).toEqual(['travel']);
+    expect(decks[0]!.reviews).toBe(0);
+    expect(decks[0]!.lastReviewedAt).toBeNull();
+  });
 });
+
+describe('getProgressStats', () => {
+  it('scopes the stats to one language', async () => {
+    // The grid used to aggregate EVERY language, so selecting a language the
+    // user had never studied still showed the whole account's history — 116
+    // reviews and a 15-day streak on an untouched language (Casey, 2026-08-05).
+    mockQueue.push(ok({ reviews_total: 116, avg_accuracy: 89, days_active: 15, best_streak: 15, sessions_total: 4, time_invested_ms: 120000 }));
+    const stats = await supabaseDataSource.getProgressStats('ru');
+    expect(mockRpcCalls).toContainEqual(['get_study_stats', { p_lang: 'ru' }]);
+    expect(stats.reviewsTotal).toBe(116);
+    expect(stats.daysActive).toBe(15);
+  });
+
+  it('degrades a pre-migration payload to zeros rather than NaN', async () => {
+    // A client can outrun the migration that adds these keys.
+    mockQueue.push(ok({ avg_accuracy: 70, days_active: 3, best_streak: 2, sessions_total: 1 }));
+    const stats = await supabaseDataSource.getProgressStats('es');
+    expect(stats.reviewsTotal).toBe(0);
+    expect(stats.timeInvestedMs).toBe(0);
+    expect(Number.isNaN(stats.timeInvestedMs)).toBe(false);
+  });
+});
+
 
 describe('deck membership (2026-07-30)', () => {
   it('getDeckWords inner-joins deck_cards and scopes by BOTH deck and language', async () => {
@@ -251,6 +301,57 @@ describe('getDueCards — deck-scoped session (2026-07-30)', () => {
     await supabaseDataSource.getDueCards(1, 'es');
     const select = String(mockCalls.at(-1)!.ops.find(([op]) => op === 'select')![1][0]);
     expect(select).not.toContain('deck_cards');
+  });
+});
+
+// PostgREST caps every response at the project's `max-rows` (1000 by default)
+// and says nothing about it — a truncated page is indistinguishable from a
+// complete one. A 4,000-card library rendered as "1000 saved / 100 mastered",
+// with the tier counts summing to exactly 1000 (Casey, 2026-08-04). Every read
+// that can return a whole library now pages.
+describe('whole-library reads page past the PostgREST row cap', () => {
+  const page = (n: number, prefix: string) =>
+    Array.from({ length: n }, (_, i) => ({ ...CARD_ROW(`${prefix}${i}`), card_fsrs_state: FSRS_ROW(`${prefix}${i}`, '2026-07-20T00:00:00Z') }));
+
+  it('getWords keeps fetching until a short page comes back', async () => {
+    mockQueue.push(ok(page(1000, 'a')));
+    mockQueue.push(ok(page(1000, 'b')));
+    mockQueue.push(ok(page(250, 'c')));
+
+    const words = await supabaseDataSource.getWords('es');
+    expect(words).toHaveLength(2250);
+
+    // Three requests, walking a 1000-row window.
+    const calls = mockCalls.filter((c) => c.table === 'cards');
+    expect(calls).toHaveLength(3);
+    expect(calls[0]!.ops).toContainEqual(['range', [0, 999]]);
+    expect(calls[1]!.ops).toContainEqual(['range', [1000, 1999]]);
+    expect(calls[2]!.ops).toContainEqual(['range', [2000, 2999]]);
+  });
+
+  it('getDeckCards pages too — Home and Progress derive from the WHOLE set', async () => {
+    mockQueue.push(ok(page(1000, 'a')));
+    mockQueue.push(ok(page(7, 'b')));
+    const { cards, states } = await supabaseDataSource.getDeckCards('es');
+    expect(cards).toHaveLength(1007);
+    expect(states).toHaveLength(1007);
+  });
+
+  it('orders every paged read, or the window can repeat and skip rows', async () => {
+    // Postgres guarantees no ordering across separate LIMIT/OFFSET statements.
+    // An unordered paged read is WORSE than the truncation it replaces, because
+    // duplicates and holes still look like a plausible library.
+    mockQueue.push(ok([]));
+    await supabaseDataSource.getDeckCards('es');
+    const ops = mockCalls.find((c) => c.table === 'cards')!.ops;
+    expect(ops.some(([op]) => op === 'order')).toBe(true);
+  });
+
+  it('stops at the first short page rather than requesting forever', async () => {
+    mockQueue.push(ok(page(3, 'a')));
+    const words = await supabaseDataSource.getWords('es');
+    expect(words).toHaveLength(3);
+    expect(mockCalls.filter((c) => c.table === 'cards')).toHaveLength(1);
   });
 });
 

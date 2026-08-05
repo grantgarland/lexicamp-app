@@ -73,6 +73,23 @@ export function DevBadge() {
       setBusy(null);
     }
   };
+  // Rebuild the signed-in dev account's library from the dev_seed_words fixture
+  // (4,000 mocked ru pairs). Casey's ask: after exercising the delete-account
+  // flow, or whenever a scenario's data has drifted, get back to a known library
+  // without leaving the app. The RPC seeds auth.uid() and is is_dev-gated
+  // server-side, so this only ever touches the account you are signed into.
+  const reseedLibrary = async () => {
+    setBusy('reseed');
+    try {
+      const { error } = await supabase.rpc('seed_dev_veteran');
+      if (!error) {
+        queryClient.clear();
+        router.replace('/');
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
   const resetScenario = async () => {
     setBusy('reset');
     try {
@@ -111,10 +128,11 @@ export function DevBadge() {
               {USE_SUPABASE ? 'Scenario account' : 'User'}
             </Text>
             <View style={styles.rowWrap}>
-              {/* Mock-only scenarios have no seeded account to sign into, so in
-                  live mode they are hidden rather than offered as a chip that
-                  can only fail (see USER_STATE_LABELS). */}
-              {USER_STATE_LABELS.filter((o) => !(USE_SUPABASE && o.mockOnly)).map((o) => (
+              {/* No filtering: every scenario now has BOTH a mock fixture and a
+                  seeded dev-<scenario>@lexicamp.app account, so each chip works
+                  in either mode. `veteran` was the lone exception until
+                  2026-08-05 — see USER_STATE_LABELS for why it stopped being one. */}
+              {USER_STATE_LABELS.map((o) => (
                 <Chip
                   key={o.value}
                   label={busy === o.value ? '…' : o.label}
@@ -131,6 +149,7 @@ export function DevBadge() {
             {USE_SUPABASE && (
               <View style={styles.rowWrap}>
                 <Chip label={busy === 'reset' ? '…' : '↺ Reset scenario'} active={false} onPress={() => void resetScenario()} />
+                <Chip label={busy === 'reseed' ? '…' : '⛰ Reseed 4k library'} active={false} onPress={() => void reseedLibrary()} />
               </View>
             )}
 

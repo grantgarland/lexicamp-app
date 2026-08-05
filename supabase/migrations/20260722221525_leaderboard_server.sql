@@ -80,3 +80,4 @@ $fn$;
 
 revoke all on function public.get_leaderboard(text, text, int) from public, anon;
 grant execute on function public.get_leaderboard(text, text, int) to authenticated;
+;

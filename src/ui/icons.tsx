@@ -362,3 +362,42 @@ export function IconRefresh({ size = 18, color = STROKE }: IconProps) {
     </Svg>
   );
 }
+
+/** Pencil — "edit this text". Feather's `edit-2`, matching the stroke set. */
+export function IconPencil({ size = 18, color = STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+    </Svg>
+  );
+}
+
+/** Monitor — "follow the system". Feather's `monitor`. */
+export function IconMonitor({ size = 18, color = STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+      <Path d="M8 21h8" />
+      <Path d="M12 17v4" />
+    </Svg>
+  );
+}
+
+/** Sun — light appearance. Feather's `sun`. */
+export function IconSun({ size = 18, color = STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="12" cy="12" r="4" />
+      <Path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+    </Svg>
+  );
+}
+
+/** Moon — dark appearance. Feather's `moon`. */
+export function IconMoon({ size = 18, color = STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+    </Svg>
+  );
+}

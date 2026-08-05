@@ -42,6 +42,38 @@ function bail(error: { message: string } | null): void {
   if (error) throw new Error(error.message);
 }
 
+/** PostgREST caps every response at the project's `max-rows` (1000 by default),
+ *  SILENTLY — a truncated page looks exactly like a complete one. A 4,000-card
+ *  library therefore rendered as 1,000 saved / 100 mastered, with the tier
+ *  counts summing to exactly 1000 (Casey, 2026-08-04). Any read that can return
+ *  a whole library has to page. */
+const PAGE_SIZE = 1000;
+/** Runaway guard: 200 pages is 200k cards, far past any real library. */
+const MAX_PAGES = 200;
+
+/**
+ * Fetch every row of a query, a page at a time.
+ *
+ * `page(from, to)` MUST apply a deterministic ORDER BY. Postgres gives no
+ * ordering guarantee across separate LIMIT/OFFSET statements, so an unordered
+ * paged read can hand back the same row twice and skip another — which is worse
+ * than the truncation it replaces, because it looks plausible.
+ */
+async function fetchAllPages<T>(page: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<T[]> {
+  const out: T[] = [];
+  for (let i = 0; i < MAX_PAGES; i += 1) {
+    const from = i * PAGE_SIZE;
+    const { data, error } = await page(from, from + PAGE_SIZE - 1);
+    bail(error);
+    const rows = (data ?? []) as T[];
+    out.push(...rows);
+    // A short page is the last page. An exactly-full one may or may not be, so
+    // it costs one more round trip to find out.
+    if (rows.length < PAGE_SIZE) return out;
+  }
+  return out;
+}
+
 /** 20 §3 v2: set_username errors carry the machine token in DETAIL (errcode
  *  P0004) — surface THAT, so callers match on the same contract as
  *  free_word_cap. Engine/transport errors pass through. */
@@ -295,12 +327,16 @@ export const supabaseDataSource: DataSource = {
     // Home/Progress/Settings totals disagree with the Words header and the
     // server cap by the archived count). homeSnapshot excludes suspended from
     // the due-queue numbers only.
-    const { data, error } = await supabase
-      .from('cards')
-      .select(CARD_JOIN)
-      .eq('decks.target_lang', target);
-    bail(error);
-    const rows = (data ?? []) as unknown as JoinedCardRow[];
+    const rows = await fetchAllPages<JoinedCardRow>((from, to) =>
+      supabase
+        .from('cards')
+        .select(CARD_JOIN)
+        .eq('decks.target_lang', target)
+        // Ordered ONLY so the paging is stable — nothing downstream depends on
+        // it (Home/Progress derive from the whole set).
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
     const cards: Card[] = rows.map(mapCard);
     const states: CardFsrsState[] = rows.map((r) => mapFsrsState(r.card_fsrs_state));
     return { cards, states };
@@ -313,15 +349,26 @@ export const supabaseDataSource: DataSource = {
     return { streakDays: s.streak_days ?? 0 };
   },
 
-  async getProgressStats(): Promise<ProgressStats> {
-    const { data, error } = await supabase.rpc('get_study_stats');
+  async getProgressStats(lang?: string): Promise<ProgressStats> {
+    // Language-scoped (2026-08-05): the grid used to aggregate every language,
+    // so an untouched language still showed the account's whole history.
+    const target = lang ?? (await this.getProfile()).targetLang;
+    const { data, error } = await supabase.rpc('get_study_stats', { p_lang: target });
     bail(error);
-    const s = data as { sessions_total: number; avg_accuracy: number; best_streak: number; days_active: number };
+    const s = data as {
+      sessions_total: number; avg_accuracy: number; best_streak: number; days_active: number;
+      reviews_total?: number; time_invested_ms?: number;
+    };
     return {
       sessionsTotal: s.sessions_total ?? 0,
       avgAccuracy: Number(s.avg_accuracy ?? 0),
       bestStreak: s.best_streak ?? 0,
       daysActive: s.days_active ?? 0,
+      // Optional-chained on purpose: a client can outrun the migration that adds
+      // these (TestFlight builds don't upgrade in lockstep with the database),
+      // and a missing key must degrade to an em-dash tile, not NaN.
+      reviewsTotal: Number(s.reviews_total ?? 0),
+      timeInvestedMs: Number(s.time_invested_ms ?? 0),
     };
   },
 
@@ -338,17 +385,32 @@ export const supabaseDataSource: DataSource = {
       .order('id', { ascending: true }); // tie-break, so .slice(1) is deterministic
     bail(error);
     type Row = { id: string; name: string; created_at: string; deck_cards?: { count: number }[] };
+
+    // Per-deck review counts (2026-08-05). These were hardcoded to 0/null behind
+    // a TODO, so a studied deck reported "REVIEWS 0 / LAST REVIEWED Never" while
+    // the word rows in the same sheet showed their real counts. One RPC for the
+    // whole list, not one call per deck.
+    //
+    // Non-fatal on purpose: the deck list is useful without its stats, and a
+    // failure here should degrade to the old zeros rather than blank the screen.
+    const { data: statsData, error: statsErr } = await supabase.rpc('get_deck_stats');
+    if (statsErr) console.warn('get_deck_stats failed; deck stats will read 0', statsErr.message);
+    const stats = (statsData ?? {}) as Record<string, { reviews?: number; last_reviewed_at?: string | null }>;
+
     // 18 §E1: the OLDEST deck per language is the hidden main deck (same rule
     // getActiveDeck uses) — reachable only via Home "Study now". Custom Decks
     // lists user-created decks only.
-    return ((data ?? []) as Row[]).slice(1).map((d) => ({
-      id: d.id,
-      name: d.name,
-      wordCount: d.deck_cards?.[0]?.count ?? 0,
-      reviews: 0, // TODO(analytics): per-deck study counts
-      createdAt: new Date(d.created_at),
-      lastReviewedAt: null,
-    }));
+    return ((data ?? []) as Row[]).slice(1).map((d) => {
+      const st = stats[d.id];
+      return {
+        id: d.id,
+        name: d.name,
+        wordCount: d.deck_cards?.[0]?.count ?? 0,
+        reviews: Number(st?.reviews ?? 0),
+        createdAt: new Date(d.created_at),
+        lastReviewedAt: st?.last_reviewed_at ? new Date(st.last_reviewed_at) : null,
+      };
+    });
   },
 
   async getDeckWords(deckId: string, lang?: string): Promise<WordListItem[]> {
@@ -356,14 +418,18 @@ export const supabaseDataSource: DataSource = {
     // deck already belongs to one language, but a stale deck id from a previous
     // language must resolve to empty rather than to another language's words.
     const target = lang ?? (await this.getProfile()).targetLang;
-    const { data, error } = await supabase
-      .from('cards')
-      .select(DECK_MEMBER_JOIN)
-      .eq('decks.target_lang', target)
-      .eq('deck_cards.deck_id', deckId)
-      .order('created_at', { ascending: false });
-    bail(error);
-    const rows = (data ?? []) as unknown as JoinedCardRow[];
+    // Paged for the same reason as the library reads: a deck can hold as many
+    // words as the library does, and PostgREST truncates at max-rows silently.
+    const rows = await fetchAllPages<JoinedCardRow>((from, to) =>
+      supabase
+        .from('cards')
+        .select(DECK_MEMBER_JOIN)
+        .eq('decks.target_lang', target)
+        .eq('deck_cards.deck_id', deckId)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
     return rows.map((r) => mapWordListItem(r, r.translations_cache, r.card_fsrs_state, overrideText(r.card_target_overrides), target));
   },
 
@@ -404,13 +470,17 @@ export const supabaseDataSource: DataSource = {
 
   async getWords(lang?: string): Promise<WordListItem[]> {
     const target = lang ?? (await this.getProfile()).targetLang;
-    const { data, error } = await supabase
-      .from('cards')
-      .select(CARD_JOIN)
-      .eq('decks.target_lang', target)
-      .order('created_at', { ascending: false });
-    bail(error);
-    const rows = (data ?? []) as unknown as JoinedCardRow[];
+    const rows = await fetchAllPages<JoinedCardRow>((from, to) =>
+      supabase
+        .from('cards')
+        .select(CARD_JOIN)
+        .eq('decks.target_lang', target)
+        .order('created_at', { ascending: false })
+        // Tie-break: seeded rows share a created_at, and equal keys leave the
+        // page boundary free to reshuffle between requests.
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
     return rows.map((r) => mapWordListItem(r, r.translations_cache, r.card_fsrs_state, overrideText(r.card_target_overrides), target));
   },
 

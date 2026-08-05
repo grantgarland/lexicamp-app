@@ -181,4 +181,4 @@ grant execute on function public.set_username(text) to authenticated;
 revoke all on function public.check_username(text) from public, anon, authenticated;
 revoke all on function public.generate_username() from public, anon, authenticated;
 -- (username_reserved stays for the generator's namespace; set_username v2's
--- decomposition rule supersedes it as a save-path check.)
+-- decomposition rule supersedes it as a save-path check.);

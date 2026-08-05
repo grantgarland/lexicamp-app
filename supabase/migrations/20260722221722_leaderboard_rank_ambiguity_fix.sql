@@ -1,12 +1,3 @@
--- Fix for 20260722221525_leaderboard_server: `returns table (rank int,
--- username text, lang_code text, mastered int, is_self boolean)` creates
--- PL/pgSQL variables with those exact names, which collided with the CTE's
--- own `lang_code`/`username`/`mastered` columns (42702 "ambiguous column
--- reference") the moment the function was actually called. CTE output
--- columns renamed to uname/lcode/mcount/agg_user_id/rnk so nothing shares a
--- name with an OUT parameter — RETURN QUERY binds the final SELECT to the
--- RETURNS TABLE columns by POSITION, not name, so this is purely a rename
--- of internal working columns; the public RPC surface is unchanged.
 create or replace function public.get_leaderboard(
   p_scope text,               -- 'global' | 'language'
   p_lang text default null,   -- required when p_scope = 'language'
@@ -75,3 +66,4 @@ $fn$;
 
 revoke all on function public.get_leaderboard(text, text, int) from public, anon;
 grant execute on function public.get_leaderboard(text, text, int) to authenticated;
+;

@@ -1,25 +1,3 @@
--- 20-D follow-up (2026-07-22): dev-preview lens for get_leaderboard.
---
--- Problem: this project has no separate dev/staging Supabase project (00 —
--- solo, cost-capped), so the only way to see what a POPULATED leaderboard
--- looks like is either (a) seed fake rival profiles into lexicamp-prod, which
--- pollutes the real database, or (b) let a dev account see the OTHER seeded
--- dev-scenario accounts (dev-bc/abc/hc/sr/summit), which already carry real,
--- distinct mastered-word counts from being used for whole-app dogfood testing.
--- (b) needs zero new data and zero prod pollution, so that's what this ships.
---
--- Change: `where not p.is_dev` becomes `where (not p.is_dev) or v_caller_is_dev`,
--- where v_caller_is_dev is looked up for the CALLING user only. A real
--- (non-dev) caller's v_caller_is_dev is always false, so their view is
--- UNCHANGED — dev accounts stay fully invisible to every real user, exactly as
--- before. Only a dev account itself can ever flip this bit, and only for its
--- own read.
---
--- Rehearsed (throwaway 2 dev + 1 real account, real prod, rolled back):
--- dev caller sees both other dev accounts AND the real account (3/3 visible,
--- is_self correct) ✓ · real caller sees ONLY itself, both dev accounts stay
--- invisible (1/1 visible) ✓ · residue zero ✓. Advisors: only the
--- pre-existing intentional WARN class, nothing new.
 create or replace function public.get_leaderboard(
   p_scope text,
   p_lang text default null,
@@ -99,3 +77,4 @@ $fn$;
 
 revoke all on function public.get_leaderboard(text, text, int) from public, anon;
 grant execute on function public.get_leaderboard(text, text, int) to authenticated;
+;

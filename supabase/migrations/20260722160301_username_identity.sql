@@ -187,4 +187,4 @@ end;
 $fn$;
 
 revoke all on function public.set_username(text) from public, anon;
-grant execute on function public.set_username(text) to authenticated;
+grant execute on function public.set_username(text) to authenticated;;

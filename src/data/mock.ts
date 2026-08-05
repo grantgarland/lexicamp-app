@@ -320,16 +320,16 @@ function buildWords(userState: DevUserState): WordListItem[] {
 
 // All-time study stats per scenario (mock; real values derive from study_events later).
 const PROGRESS_STATS: Record<DevUserState, ProgressStats> = {
-  empty: { sessionsTotal: 0, avgAccuracy: 0, bestStreak: 0, daysActive: 0 },
-  bc: { sessionsTotal: 4, avgAccuracy: 71, bestStreak: 3, daysActive: 4 },
-  abc: { sessionsTotal: 12, avgAccuracy: 76, bestStreak: 7, daysActive: 10 },
-  hc: { sessionsTotal: 24, avgAccuracy: 80, bestStreak: 10, daysActive: 18 },
-  sr: { sessionsTotal: 33, avgAccuracy: 82, bestStreak: 12, daysActive: 24 },
-  summit: { sessionsTotal: 42, avgAccuracy: 85, bestStreak: 14, daysActive: 30 },
+  empty: { sessionsTotal: 0, avgAccuracy: 0, bestStreak: 0, daysActive: 0, reviewsTotal: 0, timeInvestedMs: 0 },
+  bc: { sessionsTotal: 4, avgAccuracy: 71, bestStreak: 3, daysActive: 4, reviewsTotal: 52, timeInvestedMs: 360000 },
+  abc: { sessionsTotal: 12, avgAccuracy: 76, bestStreak: 7, daysActive: 10, reviewsTotal: 168, timeInvestedMs: 1200000 },
+  hc: { sessionsTotal: 24, avgAccuracy: 80, bestStreak: 10, daysActive: 18, reviewsTotal: 361, timeInvestedMs: 2580000 },
+  sr: { sessionsTotal: 33, avgAccuracy: 82, bestStreak: 12, daysActive: 24, reviewsTotal: 502, timeInvestedMs: 3540000 },
+  summit: { sessionsTotal: 42, avgAccuracy: 85, bestStreak: 14, daysActive: 30, reviewsTotal: 648, timeInvestedMs: 4560000 },
   // Three years of near-daily study. daysActive/sessionsTotal drive the
   // projection's confidence banding, so a veteran must read as HIGH confidence
   // — a 3,000-word library still labelled "rough estimate" is its own bug.
-  veteran: { sessionsTotal: 1180, avgAccuracy: 91, bestStreak: 214, daysActive: 1024 },
+  veteran: { sessionsTotal: 1180, avgAccuracy: 91, bestStreak: 214, daysActive: 1024, reviewsTotal: 18400, timeInvestedMs: 129600000 },
 };
 
 // Custom decks (Premium). Membership is REAL in the mock as of 2026-07-30 —
@@ -580,7 +580,10 @@ export const mockDataSource: DataSource = {
   async getEngagement(): Promise<Engagement> {
     return { streakDays: STREAK[scenario().userState] };
   },
-  async getProgressStats(): Promise<ProgressStats> {
+  async getProgressStats(lang?: string): Promise<ProgressStats> {
+    // A scenario models ONE language, so there is nothing to scope; the
+    // parameter exists to keep the mock honest against the live contract.
+    if (lang != null && lang !== mockActiveLang) return PROGRESS_STATS.empty;
     return PROGRESS_STATS[scenario().userState];
   },
   async getDecks(lang): Promise<DeckSummary[]> {

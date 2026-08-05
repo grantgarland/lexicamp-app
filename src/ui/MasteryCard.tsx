@@ -17,7 +17,15 @@ import { InfoDot, Tooltip } from './Tooltip';
 export interface MasteryCardProps {
   /** Word counts per tier, in registry order [bc, abc, hc, sr, summit]. */
   tierCounts?: number[];
+  /** ALL saved words, archived included (Casey, 2026-08-05). The subtitle counts
+   *  this rather than the tier sum: words saved but never reviewed have no
+   *  stability and so land in no tier, which made the header read 74 while the
+   *  library held 77. Archived words were never the gap — they are already in
+   *  the tier counts (07-17c ruling) — unreviewed ones were. */
   wordsSaved?: number;
+  /** Saved words not yet mastered (stability < MASTERY_STABILITY), archived
+   *  included. Replaces the old "saved" stat, which restated the subtitle. */
+  memoriesForming?: number;
   isEmpty?: boolean;
   onTierPress?: (tierId: TierId) => void;
   style?: ViewStyle;
@@ -26,6 +34,7 @@ export interface MasteryCardProps {
 export function MasteryCard({
   tierCounts = [0, 0, 0, 0, 0],
   wordsSaved = 0,
+  memoriesForming = 0,
   isEmpty = false,
   onTierPress,
   style,
@@ -33,7 +42,8 @@ export function MasteryCard({
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const [active, setActive] = useState<number | null>(null);
-  const total = tierCounts.reduce((a, b) => a + b, 0);
+  // Subtitle total = the whole library, not the tier sum (see wordsSaved above).
+  const total = wordsSaved;
   const mastered = tierCounts[4] ?? 0;
 
   // Open/close a tier's tooltip drives the active highlight; opening also fires onTierPress.
@@ -128,9 +138,9 @@ export function MasteryCard({
         <View style={styles.stat}>
           <IconBook size={13} color={isEmpty ? theme.color.borderStrong : theme.color.textMuted} />
           <RNText style={[styles.statValue, { color: isEmpty ? theme.color.textFaint : theme.color.textStrong }]}>
-            {isEmpty ? 0 : wordsSaved}
+            {isEmpty ? 0 : memoriesForming}
           </RNText>
-          <RNText style={styles.statLabel}>{t('masteryCard.saved')}</RNText>
+          <RNText style={styles.statLabel}>{t('masteryCard.forming')}</RNText>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.stat}>

@@ -1,6 +1,7 @@
 // Lexicamp UI kit — primitives. Compose these everywhere; never hardcode tokens.
 // Grows through P2 (Sheet, TabBar, icons…).
 export { Text, RawText, FONT_SCALE_MAX, type TextProps, type TextVariant } from './Text';
+export { SaveWithEditSheet } from './SaveWithEditSheet';
 export { Screen, SCREEN_MAX_WIDTH, type ScreenProps } from './Screen';
 export { Tooltip, InfoDot, type TooltipProps } from './Tooltip';
 export { Confetti, type ConfettiProps } from './Confetti';
@@ -73,11 +74,15 @@ export {
   IconBell,
   IconMail,
   IconStar,
+  IconSun,
   IconGlobe,
   IconInfinity,
   IconRefresh,
   IconUser,
+  IconMonitor,
+  IconMoon,
   IconMoreVertical,
+  IconPencil,
   type IconProps,
 } from './icons';
 export { PRESS_OPACITY, pressableOpacity } from './pressable';
@@ -104,5 +109,5 @@ export {
   type QuizCardData,
   type QuizMode,
 } from './QuizCard';
-export { Wordmark } from './Wordmark';
+export { BrandMark, Wordmark } from './Wordmark';
 export { OnboardingShot, type OnboardingShotName } from './OnboardingShot';

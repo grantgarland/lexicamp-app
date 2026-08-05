@@ -12,6 +12,15 @@ import type { Card, CardFsrsState, LanguageCode, Profile, SearchDirection, WordL
 /** Summit-stability threshold (days) = "mastered" (03). */
 export const MASTERY_STABILITY = 30;
 
+/** The "soon"/"recently" horizon for Home's stat tiles (days).
+ *
+ *  SOURCED from the Base Camp band rather than written as 3 (Casey, 2026-08-05):
+ *  Base Camp is stability < 3d, so a word due inside this window and a word
+ *  saved inside it are both living in the same stretch of the mountain the tile
+ *  row describes. If that band is ever retuned, the tiles follow it instead of
+ *  quietly disagreeing with the tier they were meant to mirror. */
+export const SOON_WINDOW_DAYS = TIERS[0].stMax;
+
 // ── DF-9 v2 free tier (spec 19 rev, Casey correction 2026-07-22) ─────────────
 // MIRROR of the save_card cap rule in migration `daily_free_save_allowance`:
 // a 50-card STARTER allotment at any pace, then at most 5 saves per day —
@@ -142,10 +151,19 @@ export interface HomeSnapshot {
   needRecallTotal: number;
   /** Need Recall — today (Study Card headline). */
   needRecallToday: number;
-  /** Due in the next 24h (stat tile #3). */
+  /** Due in the next 24h. Still powers the Study card's "1 more comes due
+   *  tomorrow" and the caught-up card — both of which say "tomorrow" in so many
+   *  words, so they cannot be widened to the tile's window. */
   dueTomorrow: number;
-  /** Cards saved today (stat tile #2). */
+  /** Cards saved today. Load-bearing beyond display: the free-tier daily meter
+   *  reads this and MIRRORS the save_card server cap (see FREE_DAILY_SAVES
+   *  above). It is deliberately NOT the tile's window. */
   addedToday: number;
+  /** Saved within the last SOON_WINDOW_DAYS days — "Added recently" tile. */
+  addedRecently: number;
+  /** Due within the next SOON_WINDOW_DAYS days — "Due soon" tile. Includes
+   *  what is already overdue: a word that came due yesterday is not less due. */
+  dueSoon: number;
   /** No saved words yet → new-user home variant. */
   isEmpty: boolean;
 }
@@ -153,6 +171,9 @@ export interface HomeSnapshot {
 export function homeSnapshot(cards: Card[], states: CardFsrsState[], now: Date = new Date()): HomeSnapshot {
   const sod = startOfDay(now);
   const in24 = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const soonMs = SOON_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  const soonEnd = now.getTime() + soonMs;
+  const recentStart = now.getTime() - soonMs;
 
   // 07-17c ruling: archived words stay in EARNED counts (wordsSaved, tiers,
   // mastered, addedToday) but leave the review queue — so only the due
@@ -165,6 +186,7 @@ export function homeSnapshot(cards: Card[], states: CardFsrsState[], now: Date =
   let needRecallTotal = 0;
   let needRecallToday = 0;
   let dueTomorrow = 0;
+  let dueSoon = 0;
 
   for (const s of states) {
     if (s.reps > 0) {
@@ -182,11 +204,18 @@ export function homeSnapshot(cards: Card[], states: CardFsrsState[], now: Date =
       } else if (s.dueAt.getTime() <= in24.getTime()) {
         dueTomorrow += 1;
       }
+      // Rolling window, counted independently of the branches above so the
+      // already-overdue are included rather than falling into needRecall alone.
+      if (s.dueAt.getTime() <= soonEnd) dueSoon += 1;
     }
   }
 
   let addedToday = 0;
-  for (const c of cards) if (c.createdAt.getTime() >= sod.getTime()) addedToday += 1;
+  let addedRecently = 0;
+  for (const c of cards) {
+    if (c.createdAt.getTime() >= sod.getTime()) addedToday += 1;
+    if (c.createdAt.getTime() >= recentStart) addedRecently += 1;
+  }
 
   return {
     tierCounts,
@@ -196,6 +225,8 @@ export function homeSnapshot(cards: Card[], states: CardFsrsState[], now: Date =
     needRecallToday,
     dueTomorrow,
     addedToday,
+    addedRecently,
+    dueSoon,
     isEmpty: cards.length === 0,
   };
 }

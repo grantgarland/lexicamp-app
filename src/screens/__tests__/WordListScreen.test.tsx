@@ -45,7 +45,10 @@ jest.mock('react-native-reanimated', () => {
     FadeInDown: builder(),
     FadeOut: builder(),
     ZoomIn: builder(),
-    Easing: { out: () => () => 0, in: () => () => 0, cubic: () => 0 },
+    // SkeletonRows shimmers with withRepeat + Easing.inOut(Easing.quad); the
+    // deferred-filtering tests actually render it, unlike the earlier suites.
+    Easing: { out: () => () => 0, in: () => () => 0, inOut: () => () => 0, cubic: () => 0, quad: () => 0 },
+    withRepeat: (v) => v,
     useSharedValue: (v) => ({ value: v }),
     // WordRow's swipe tray is a ReanimatedSwipeable — it reaches for these.
     useAnimatedRef: () => ({ current: null }),
@@ -79,7 +82,11 @@ jest.mock('expo-router', () => ({ useRouter: () => ({ back: jest.fn(), push: jes
 
 // The heavy-mount gate would otherwise hold the list behind a skeleton for the
 // whole test (requestIdleCallback never settles under fake timers).
-jest.mock('@/lib/useDeferredReady', () => ({ useDeferredReady: () => true }));
+// Controllable: the screen now keys this on the FILTER inputs, not just the
+// sub-tab, so a test can hold the list in its skeleton the way a real device
+// does for the frame after a filter change.
+let mockReady = true;
+jest.mock('@/lib/useDeferredReady', () => ({ useDeferredReady: () => mockReady }));
 
 const DAY = 24 * 60 * 60 * 1000;
 // Name MUST start with `mock`: babel-plugin-jest-hoist lifts jest.mock() above
@@ -168,6 +175,7 @@ const deleteWord = (target) => {
 };
 
 beforeEach(() => {
+  mockReady = true;
   mockRows = [mockWord('c1', 'the sugar', 'el azúcar'), mockWord('c2', 'the salt', 'la sal')];
 });
 
@@ -252,5 +260,65 @@ describe('Word List — sort dimensions (rename 2026-08-04)', () => {
 
     const rows = screen.getAllByText(/el azúcar|la sal/);
     expect(rows.map((r) => r.props.children)).toEqual(['el azúcar', 'la sal']);
+  });
+});
+
+// Filtering and sorting a 4,000-word library is real JS-thread work, and it used
+// to run in the same commit as the tap that changed a filter — so Apply, and the
+// traversal into this screen, froze until it finished (Casey, 2026-08-05). The
+// list now computes from `applied` inputs that lag the controls by a frame, and
+// the gap is the skeleton.
+describe('Word List — deferred filtering (perf 2026-08-05)', () => {
+  const tree = () => (
+    <>
+      <WordListScreen />
+      <PortalHost />
+    </>
+  );
+
+  it('holds the previous list behind the skeleton while a filter change settles', () => {
+    mockRows = [mockWord('c1', 'the sugar', 'el azúcar'), mockWord('c2', 'the salt', 'la sal')];
+    const { rerender } = renderScreen();
+    expect(screen.getByText('el azúcar')).toBeTruthy();
+
+    // Apply is pressed while the screen is idle...
+    fireEvent.press(screen.getByLabelText(t('common.filter')));
+    fireEvent.press(screen.getByText(t('wordList.sortDimDue')));
+    fireEvent.press(screen.getByText(t('wordList.apply')));
+
+    // ...and THAT is the frame where the filter key changes, so the gate closes.
+    mockReady = false;
+    rerender(tree());
+
+    // The list is gone for that frame — which is the point: the heavy filter and
+    // sort did not run in the commit that handled the tap.
+    expect(screen.queryByText('el azúcar')).toBeNull();
+  });
+
+  it('adopts the new filter once the frame has painted', () => {
+    mockRows = [mockWord('c1', 'the sugar', 'el azúcar'), mockWord('c2', 'the salt', 'la sal')];
+    const { rerender } = renderScreen();
+
+    fireEvent.press(screen.getByLabelText(t('common.filter')));
+    fireEvent.press(screen.getByText(t('wordList.sortDimDue')));
+    fireEvent.press(screen.getByText(t('wordList.apply')));
+
+    mockReady = false;
+    rerender(tree());
+    mockReady = true;
+    rerender(tree());
+
+    // Back, computed from the newly applied inputs.
+    expect(screen.getByText('el azúcar')).toBeTruthy();
+    expect(screen.getByText('la sal')).toBeTruthy();
+  });
+
+  it('disables Apply while a previous apply is still settling', () => {
+    // Queuing a second pass on top of the one already running only makes the
+    // stall longer.
+    mockReady = false;
+    renderScreen();
+    fireEvent.press(screen.getByLabelText(t('common.filter')));
+    expect(screen.getByText(t('wordList.apply'))).toBeDisabled();
   });
 });

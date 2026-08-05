@@ -19,7 +19,7 @@ import { type LookupResult, posTagI18nKey, qualityReasonI18nKey, senseDisplayWor
 import type { Profile, SearchDirection } from '@/domain/types';
 import { useTranslation } from '@/i18n';
 import { resolveSenseCardId } from '@/lib/senseCardId';
-import { useDeleteCard, useExamples, useLookup, useProfile, useSaveCard, useWords } from '@/query/hooks';
+import { useDeleteCard, useEntitlement, useExamples, useLookup, useProfile, useSaveCard, useSetCardTargetOverride, useWords } from '@/query/hooks';
 import { LanguageIndicator } from '@/screens/shared/LanguageSwitcher';
 import { usePrefsStore } from '@/store/prefsStore';
 import {
@@ -32,6 +32,7 @@ import {
   IconX,
   RawText,
   Screen,
+  SaveWithEditSheet,
   ScrollIntoViewScrollView,
   TranslationCard,
   type TranslationResult,
@@ -311,9 +312,15 @@ export function SearchView({ onClose, bottomInset = 0 }: { onClose: () => void; 
     return set;
   }, [saved, locallyRemoved, outcome, result, words]);
 
+  const { isPaid } = useEntitlement();
   const saveCard = useSaveCard();
+  const setTargetOverride = useSetCardTargetOverride();
   const deleteCard = useDeleteCard();
-  const save = (i: number) => {
+  /** @param editedTarget Premium save-time correction. The card must exist
+   *  before an override can reference it (card_target_overrides is keyed by card
+   *  id), so this saves first and applies the edit to the returned id — see
+   *  SaveWithEditSheet for why it cannot be one write. */
+  const save = (i: number, editedTarget?: string) => {
     if (result == null || outcome?.status !== 'found' || result.translations[i]?.saveable === false) return;
     const tid = outcome.result.translationId;
     const id = result.translations[i].id;
@@ -333,7 +340,14 @@ export function SearchView({ onClose, bottomInset = 0 }: { onClose: () => void; 
       { translationId: tid, custom: i > 0 ? { back: result.translations[i].word } : undefined },
       {
         onSuccess: (cardId) => {
-          if (cardId != null) setSessionCardIds((m) => new Map(m).set(id, cardId));
+          if (cardId == null) return; // mock mode has no card id to override
+          setSessionCardIds((m) => new Map(m).set(id, cardId));
+          // Only when the user actually changed something — an untouched editor
+          // is still a plain save, and a no-op override would burn a round trip
+          // and mark the word "edited" for nothing.
+          if (editedTarget != null && editedTarget !== result.translations[i].word) {
+            setTargetOverride.mutate({ cardId, target: editedTarget });
+          }
         },
         onError: (e) => {
           setSaved((s) => {
@@ -350,6 +364,11 @@ export function SearchView({ onClose, bottomInset = 0 }: { onClose: () => void; 
       },
     );
   };
+  // Save-time edit (Premium, 2026-08-04). Holds the sense INDEX so the confirm
+  // handler runs the ordinary save path with a corrected target.
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const editingSense = editingIdx != null && result != null ? result.translations[editingIdx] : null;
+
   // Delete-from-results goes through the SAME confirmation as every other delete
   // surface (shared ConfirmDialog + wordList.delete* copy): a saved word carries
   // study history, so un-saving it is destructive, not a toggle.
@@ -448,6 +467,9 @@ export function SearchView({ onClose, bottomInset = 0 }: { onClose: () => void; 
               savedIds={savedIds}
               justSavedId={justSaved}
               onSave={save}
+              // Premium only — the override RPC is server-gated, so showing the
+              // pencil to a free user would be an affordance that can only fail.
+              onSaveWithEdit={isPaid ? setEditingIdx : undefined}
               onDelete={setPendingUnsave}
               onRequestExample={(index) => {
                 const id = result?.translations[index]?.id;
@@ -505,6 +527,19 @@ export function SearchView({ onClose, bottomInset = 0 }: { onClose: () => void; 
         destructive
         onConfirm={confirmUnsave}
         onClose={() => setPendingUnsave(null)}
+      />
+
+      {/* Save-time translation edit (Premium). Confirm runs the ordinary save
+          path with the corrected target — see `save`. */}
+      <SaveWithEditSheet
+        word={editingSense == null ? null : { headword: result?.sourceText ?? '', target: editingSense.word, pos: editingSense.pos }}
+        isSaving={saveCard.isPending}
+        onClose={() => setEditingIdx(null)}
+        onConfirm={(target) => {
+          const i = editingIdx;
+          setEditingIdx(null);
+          if (i != null) save(i, target);
+        }}
       />
     </View>
   );

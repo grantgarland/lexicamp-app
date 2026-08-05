@@ -85,3 +85,4 @@ end $$;
 
 revoke execute on function public.set_card_target_override(uuid, text) from public, anon;
 grant execute on function public.set_card_target_override(uuid, text) to authenticated;
+;

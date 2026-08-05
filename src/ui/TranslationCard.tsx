@@ -9,7 +9,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { useTranslation } from '@/i18n';
 import { Card } from './Card';
 import { ScrollIntoView } from './ScrollIntoView';
-import { IconArrowRight, IconBook, IconCheck, IconChevronDown, IconInfo, IconLock, IconTrash } from './icons';
+import { IconArrowRight, IconBook, IconCheck, IconChevronDown, IconInfo, IconLock, IconPencil, IconTrash } from './icons';
 import { RawText as RNText } from './Text';
 
 export interface TranslationExample {
@@ -49,6 +49,9 @@ export interface TranslationCardProps {
   /** Translation id that was just saved (shows the "Saved!" confirmation). */
   justSavedId?: string | null;
   onSave: (i: number) => void;
+  /** Premium save-time edit. Omit to hide the pencil entirely — the CTA then
+   *  renders exactly as it did before the split. */
+  onSaveWithEdit?: (i: number) => void;
   onDelete: (i: number) => void;
   /** Short language-pair chip labels (e.g. 'EN' / 'ES'), resolved by the caller
    *  from the user's profile + search direction. Presentational only. */
@@ -88,6 +91,7 @@ export function TranslationCard({
   savedIds,
   justSavedId,
   onSave,
+  onSaveWithEdit,
   onDelete,
   sourceLang,
   targetLang,
@@ -146,6 +150,7 @@ export function TranslationCard({
               saveable={t.saveable ?? true}
               noticeText={t.noticeText}
               onSave={() => onSave(i)}
+              onSaveWithEdit={onSaveWithEdit == null ? undefined : () => onSaveWithEdit(i)}
               onDelete={() => onDelete(i)}
               canRequestExample={(t.saveable ?? true) && examplesSupported}
               exampleLoading={exampleLoading}
@@ -168,6 +173,7 @@ function TranslationItem({
   saveable,
   noticeText,
   onSave,
+  onSaveWithEdit,
   onDelete,
   canRequestExample,
   exampleLoading,
@@ -181,6 +187,7 @@ function TranslationItem({
   saveable: boolean;
   noticeText?: string;
   onSave: () => void;
+  onSaveWithEdit?: () => void;
   onDelete: () => void;
   canRequestExample: boolean;
   exampleLoading?: boolean;
@@ -294,11 +301,31 @@ function TranslationItem({
             )}
             {saveable && buttonState === 'save' && (
               /* Maestro action-state ids: only the EXPANDED sense renders its
-                 action block, so at most one of these exists at a time. */
-              <Pressable onPress={onSave} style={[styles.action, styles.actionSave]} accessibilityRole="button" testID="result-save">
-                <IconBook size={16} color={theme.color.textOnAccentCta} />
-                <RNText style={styles.actionTextOnAccent}>{t('translationCard.saveWord')}</RNText>
-              </Pressable>
+                 action block, so at most one of these exists at a time.
+                 SPLIT CTA (Premium, 2026-08-04): the bar still reads as one
+                 button — tapping the wide part saves exactly as before. The
+                 trailing pencil opens the save-time editor, for when the
+                 dictionary hands back an inflected form («годы» for "year")
+                 and the user would otherwise hesitate to save at all. Rendered
+                 only when the caller says the user is entitled, so it is never
+                 a dead affordance. */
+              <View style={styles.saveSplit}>
+                <Pressable onPress={onSave} style={[styles.action, styles.actionSave, onSaveWithEdit != null && styles.actionSaveSplit]} accessibilityRole="button" testID="result-save">
+                  <IconBook size={16} color={theme.color.textOnAccentCta} />
+                  <RNText style={styles.actionTextOnAccent}>{t('translationCard.saveWord')}</RNText>
+                </Pressable>
+                {onSaveWithEdit != null && (
+                  <Pressable
+                    onPress={onSaveWithEdit}
+                    style={[styles.action, styles.actionSave, styles.actionSaveEdit]}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('saveWithEdit.a11y')}
+                    testID="result-save-edit"
+                  >
+                    <IconPencil size={16} color={theme.color.textOnAccentCta} />
+                  </Pressable>
+                )}
+              </View>
             )}
             {saveable && buttonState === 'saved' && (
               <Animated.View key="saved" entering={FadeIn.duration(200)} style={[styles.action, styles.actionSaved]} testID="result-saved">
@@ -438,6 +465,9 @@ const styles = StyleSheet.create((theme) => {
       borderWidth: theme.borderWidth.base,
       borderColor: 'transparent',
     },
+    saveSplit: { flexDirection: 'row', gap: 2 },
+    actionSaveSplit: { flex: 1, borderTopRightRadius: 0, borderBottomRightRadius: 0 },
+    actionSaveEdit: { flexGrow: 0, paddingHorizontal: 18, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
     actionSave: { backgroundColor: color.accentCta, boxShadow: theme.shadow.accent },
     actionSaved: { backgroundColor: palette.green[500] },
     actionDelete: { backgroundColor: color.dangerSoft, borderColor: color.dangerSoft },

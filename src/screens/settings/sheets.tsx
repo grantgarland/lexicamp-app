@@ -21,6 +21,7 @@ import { LEGAL_URLS, SUPPORT_EMAIL, SUPPORT_URLS } from '@/constants/legal';
 import { appVersionLabel } from '@/constants/appInfo';
 import { BRAND_MARK_KNOCKOUT_XML, BRAND_MARK_XML } from '@/ui/brandMark';
 import { useAccountIdentity, useNotificationPrefs, useSetUsername, useUpdateNotificationPrefs, useUpdateProfile } from '@/query/hooks';
+import { APPEARANCE_MODES, useAppearanceStore } from '@/store/appearanceStore';
 import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
 import { useUiStore } from '@/store/uiStore';
 import {
@@ -32,7 +33,10 @@ import {
   IconInfo,
   IconLock,
   IconMail,
+  IconMonitor,
+  IconMoon,
   IconRefresh,
+  IconSun,
   ListItem,
   RawText,
   Sheet,
@@ -221,6 +225,12 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
 
         <FieldLabel>{t('settings.nativeLanguage')}</FieldLabel>
         <ReadOnlyField value={languageName((profile?.nativeLang ?? 'en') as LanguageCode)} note={t('settings.nativeNote')} />
+
+        {/* Appearance (2026-08-04). Deliberately NOT dirty-gated behind Save:
+            the whole value of an appearance switch is seeing it, so it applies
+            the instant it is tapped and persists itself. */}
+        <FieldLabel>{t('settings.appearance')}</FieldLabel>
+        <AppearancePicker />
 
         <View style={styles.saveWrap}>
           <Button title={t('settings.save')} variant="primary" disabled={!dirty || !canCycle || setUsername.isPending} onPress={save} />
@@ -686,6 +696,45 @@ export function AboutSheet({ visible, onClose }: { visible: boolean; onClose: ()
 function FieldLabel({ children }: { children: ReactNode }) {
   return <RawText style={styles.fieldLabel}>{children}</RawText>;
 }
+/** Monitor / sun / moon — the platform-conventional trio, so the row is
+ *  readable before the labels are. */
+const APPEARANCE_ICON = { system: IconMonitor, light: IconSun, dark: IconMoon } as const;
+
+/** System / Light / Dark. Writes straight to `appearanceStore`; theme/appearance
+ *  subscribes and applies it, so there is nothing to save and nothing to undo. */
+function AppearancePicker() {
+  const { theme } = useUnistyles();
+  const { t } = useTranslation();
+  const mode = useAppearanceStore((s) => s.mode);
+  const setMode = useAppearanceStore((s) => s.setMode);
+  return (
+    <View style={styles.readOnlyWrap}>
+      <View style={styles.appearanceRow} accessibilityRole="radiogroup">
+        {APPEARANCE_MODES.map((m) => {
+          const sel = mode === m;
+          const Icon = APPEARANCE_ICON[m];
+          return (
+            <Pressable
+              key={m}
+              onPress={() => setMode(m)}
+              testID={`appearance-${m}`}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: sel }}
+              accessibilityLabel={t(`settings.appearance_${m}`)}
+              style={[styles.appearanceOption, { borderColor: sel ? theme.color.brand : theme.color.border, backgroundColor: sel ? theme.color.brandTint : 'transparent' }]}
+            >
+              {/* The icon carries the meaning at a glance; the label disambiguates. */}
+              <Icon size={17} color={sel ? theme.color.brand : theme.color.textMuted} />
+              <RawText style={[styles.appearanceLabel, { color: sel ? theme.color.brand : theme.color.textStrong }]}>{t(`settings.appearance_${m}`)}</RawText>
+            </Pressable>
+          );
+        })}
+      </View>
+      <RawText style={styles.readOnlyNote}>{t('settings.appearanceNote')}</RawText>
+    </View>
+  );
+}
+
 function ReadOnlyField({ value, note }: { value: string; note?: string }) {
   return (
     <View style={styles.readOnlyWrap}>
@@ -755,6 +804,9 @@ const styles = StyleSheet.create((theme) => {
 
     // quiz length
     quizIntro: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 19, color: color.textMuted, marginBottom: 14 },
+    appearanceRow: { flexDirection: 'row', gap: 8 },
+    appearanceOption: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: 10, borderRadius: radius.md, borderWidth: 1.5 },
+    appearanceLabel: { fontFamily: fonts.sans.semibold, fontSize: 14 },
     quizOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 13, paddingHorizontal: 16, borderRadius: radius.md, borderWidth: 1.5, marginBottom: 6 },
     quizOptionText: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
     quizN: { fontFamily: fonts.sans.bold, fontSize: 16 },

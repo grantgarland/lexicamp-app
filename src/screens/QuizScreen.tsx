@@ -20,6 +20,7 @@ import { useTranslation } from '@/i18n';
 import { dueLabel } from '@/lib/relativeTime';
 import { useCommitQuizSession, useDueCards, useEntitlement, useHomeData } from '@/query/hooks';
 import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
+import { useUiStore } from '@/store/uiStore';
 import { tourFixtureCards } from '@/tour/tourFixture';
 import { isQuizResultsStep, isQuizRevealStep, useTourScene } from '@/tour/tourScene';
 import { tourTargets, useWalkthroughActive, WalkthroughOverlayHost } from '@/tour/walkthrough';
@@ -132,6 +133,15 @@ export function QuizScreen({ deckId, deckName }: QuizScreenProps = {}) {
   const [autoRating, setAutoRating] = useState<UiRating | null>(null);
   const [ratings, setRatings] = useState<BufferedRating[]>([]);
   const [showExit, setShowExit] = useState(false);
+
+  // Tell the root layout a session is holding unsaved work, so a light↔dark
+  // change defers its rebuild instead of unmounting the navigator underneath us
+  // and discarding the batch (uiStore.quizInProgress).
+  const setQuizInProgress = useUiStore((st) => st.setQuizInProgress);
+  useEffect(() => {
+    setQuizInProgress(ratings.length > 0 && phase === 'quiz');
+    return () => setQuizInProgress(false);
+  }, [ratings.length, phase, setQuizInProgress]);
 
   // SNAPSHOT the session's cards once the queue arrives (render-adjust pattern).
   // Committing invalidates the dueCards query and the refetch may come back

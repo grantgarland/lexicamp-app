@@ -6,12 +6,14 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
+import { SvgXml } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { FREE_DAILY_SAVES } from '@/domain/derive';
 import { useTranslation } from '@/i18n';
 import { useLogEvent } from '@/query/hooks';
-import { Button, IconChart, IconCheck, IconFolderPlus, IconGlobe, IconInfinity, IconStar, IconX, RawText, Screen } from '@/ui';
+import { BRAND_MARK_KNOCKOUT_XML } from '@/ui/brandMark';
+import { Button, IconChart, IconCheck, IconFolderPlus, IconGlobe, IconInfinity, IconX, RawText, Screen } from '@/ui';
 
 type Plan = 'annual' | 'monthly';
 
@@ -48,7 +50,7 @@ export function PaywallScreen() {
       <Screen edges={['top', 'bottom']}>
         <View style={styles.successWrap}>
           <View style={styles.successBadge}>
-            <IconStar size={40} color={theme.color.textOnAccentCta} />
+            <SvgXml xml={BRAND_MARK_KNOCKOUT_XML} width={44} height={44} />
           </View>
           <RawText style={styles.successTitle}>{t('paywall.successTitle')}</RawText>
           <RawText style={styles.successBody}>{t('paywall.successBody')}</RawText>
@@ -69,8 +71,11 @@ export function PaywallScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {/* The Lexicamp mark, knocked out on the accent crest. A generic star
+            said "premium" in the abstract; the brand says whose premium it is,
+            and it is the same mark the session-milestone screen now wears. */}
         <View style={styles.crest}>
-          <IconStar size={30} color={theme.color.textOnAccentCta} />
+          <SvgXml xml={BRAND_MARK_KNOCKOUT_XML} width={34} height={34} />
         </View>
         <RawText style={styles.heading}>{t(isPace ? 'paywall.paceHeading' : 'paywall.heading')}</RawText>
         <RawText style={styles.sub}>

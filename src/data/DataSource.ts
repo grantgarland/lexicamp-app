@@ -77,7 +77,14 @@ export interface ProgressStats {
   sessionsTotal: number;
   avgAccuracy: number; // 0–100
   bestStreak: number; // days
-  daysActive: number;
+  daysActive: number; // distinct local days with at least one review
+  /** Individual card reviews all-time — NOT sessions. */
+  reviewsTotal: number;
+  /** Total study time — the sum of RECORDED session durations, never inferred
+   *  (2026-08-05). Sessions predating duration recording contribute nothing, so
+   *  0 means "we have no timing", not "no time spent": the UI shows an em dash
+   *  rather than a zero. */
+  timeInvestedMs: number;
 }
 
 /** 20 §3.1: the read-only Account block in Edit Profile. `provider` is the
@@ -159,7 +166,9 @@ export interface DataSource {
   getDeckCards(lang?: string): Promise<DeckCards>;
   getEngagement(): Promise<Engagement>;
   /** All-time study stats for the Progress screen. */
-  getProgressStats(): Promise<ProgressStats>;
+  /** All-time study signals, scoped to one learning language (2026-08-05).
+   *  Omitting `lang` returns the whole account. */
+  getProgressStats(lang?: string): Promise<ProgressStats>;
   /** Custom decks (Premium feature). */
   getDecks(lang?: string): Promise<DeckSummary[]>;
   /** Words in ONE custom deck (newest first), resolved through the `deck_cards`

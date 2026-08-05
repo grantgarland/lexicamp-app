@@ -38,18 +38,24 @@ jest.mock('react-native-safe-area-context', () => ({
   SafeAreaProvider: (props) => props.children,
 }));
 
-import React from 'react';
-import { Text as RNText } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
 import { darkTheme, lightTheme } from '@/theme/theme';
+import { useAppearanceStore } from '@/store/appearanceStore';
 import { Wordmark } from '@/ui/Wordmark';
-import { Screen } from '@/ui/Screen';
+
+/** Move the app to a scheme the way `applyScheme` does: the Unistyles theme AND
+ *  the store's `resolved` are two halves of one switch. */
+const applyScheme = (scheme) => {
+  mockTheme = scheme === 'dark' ? darkTheme : lightTheme;
+  useAppearanceStore.getState().setResolved(scheme);
+};
 
 beforeEach(() => {
-  mockTheme = lightTheme;
+  applyScheme('light');
+  useAppearanceStore.setState({ mode: 'system' });
 });
 
 describe('useIsDark', () => {
@@ -66,7 +72,7 @@ describe('useIsDark', () => {
     const { rerender } = render(<Wordmark width={200} />);
     const lightXml = screen.UNSAFE_getByType(require('react-native-svg').SvgXml).props.xml;
 
-    mockTheme = darkTheme;
+    applyScheme('dark');
     rerender(<Wordmark width={200} />);
     const darkXml = screen.UNSAFE_getByType(require('react-native-svg').SvgXml).props.xml;
 
@@ -74,11 +80,11 @@ describe('useIsDark', () => {
   });
 
   it('flips back on the return trip', () => {
-    mockTheme = darkTheme;
+    applyScheme('dark');
     const { rerender } = render(<Wordmark width={200} />);
     const darkXml = screen.UNSAFE_getByType(require('react-native-svg').SvgXml).props.xml;
 
-    mockTheme = lightTheme;
+    applyScheme('light');
     rerender(<Wordmark width={200} />);
     expect(screen.UNSAFE_getByType(require('react-native-svg').SvgXml).props.xml).not.toBe(darkXml);
   });
@@ -103,55 +109,37 @@ describe('no second source of truth for the color scheme', () => {
   });
 });
 
-// Unistyles applies theme changes by writing to native ShadowNodes rather than by
-// re-rendering, so any node missing from its ShadowRegistry never repaints — no
-// matter how many times React renders it. Reproduced on the simulator
-// (2026-08-04): after a cold launch in light mode, flipping to dark left the Home
-// greeting and the How-it-works title rendering light-mode near-black ink on the
-// dark canvas while everything around them switched. The only reliable cure is a
-// REMOUNT, which re-registers every node — hence `Screen` keying its body on the
-// theme. This test is what stops that key being "cleaned up" later.
-describe('Screen remounts its body on a theme flip', () => {
-  function Probe({ onMount }) {
-    React.useEffect(() => onMount(), [onMount]);
-    return <RNText>probe</RNText>;
-  }
-
-  it('rebuilds the subtree when light↔dark changes', () => {
-    const onMount = jest.fn();
-    // A FRESH element each time: React bails out of re-rendering a referentially
-    // identical one, and the mocked `useUnistyles` is not real context, so it
-    // would never notice the theme moved.
-    const tree = () => (
-      <Screen>
-        <Probe onMount={onMount} />
-      </Screen>
-    );
-
-    const { rerender } = render(tree());
-    expect(onMount).toHaveBeenCalledTimes(1);
-
-    mockTheme = darkTheme;
-    rerender(tree());
-    expect(onMount).toHaveBeenCalledTimes(2); // remounted, not merely re-rendered
-
-    mockTheme = lightTheme;
-    rerender(tree());
-    expect(onMount).toHaveBeenCalledTimes(3);
+// Unistyles applies theme changes by writing to native ShadowNodes rather than
+// re-rendering, and it misses nodes: after a light↔dark flip some rows kept the
+// previous canvas and some titles the previous ink. The cure is a REMOUNT, and
+// the BOUNDARY was found by experiment on the simulator (2026-08-04):
+//
+//   ui/Screen (per-screen body) ....... did NOT fix it
+//   (tabs)/_layout <Tabs> ............. did NOT fix it
+//   app/_layout, above the Stack ...... fixed it, both directions
+//
+// So the key in app/_layout.tsx is load-bearing and is NOT a stylistic choice.
+// This guard exists because it looks exactly like the kind of line someone
+// "cleans up", and the two cheaper-looking places have already been tried.
+describe('the theme remount boundary stays at the root', () => {
+  it('keys the root layout on the applied scheme', () => {
+    const src = readFileSync(join(__dirname, '../../app/_layout.tsx'), 'utf8');
+    expect(src).toMatch(/useAppliedScheme\(\)/);
+    expect(src).toMatch(/key=\{rebuildKey\}/);
   });
 
-  it('does NOT remount on an unrelated re-render', () => {
-    // The key must track the theme and nothing else, or every render churns the
-    // screen and loses scroll position.
-    const onMount = jest.fn();
-    const tree = () => (
-      <Screen>
-        <Probe onMount={onMount} />
-      </Screen>
-    );
-    const { rerender } = render(tree());
-    rerender(tree());
-    rerender(tree());
-    expect(onMount).toHaveBeenCalledTimes(1);
+  it('defers the rebuild while a quiz holds unsaved ratings', () => {
+    // Verified on the simulator: flipping appearance mid-session unmounted the
+    // navigator, ejected the user to Home and discarded the batch (ratings only
+    // persist on completion). iOS "Automatic" flips at sunset, so an evening
+    // study session would lose its answers.
+    const src = readFileSync(join(__dirname, '../../app/_layout.tsx'), 'utf8');
+    expect(src).toMatch(/quizInProgress/);
+    expect(src).toMatch(/!quizBusy && rebuildKey !== scheme/);
+  });
+
+  it('does not re-add a key on Screen, which was measured not to work', () => {
+    const src = readFileSync(join(__dirname, '../../ui/Screen.tsx'), 'utf8');
+    expect(src).not.toMatch(/key=/);
   });
 });

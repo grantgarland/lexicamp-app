@@ -9,7 +9,7 @@
 import type { ReactNode } from 'react';
 import { View, type ViewStyle } from 'react-native';
 import { type Edge, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { StyleSheet, useUnistyles } from 'react-native-unistyles';
+import { StyleSheet } from 'react-native-unistyles';
 
 /** Content column cap (pt). Phones are narrower than this, so it only engages on
  *  tablets / large or rotated devices. */
@@ -29,35 +29,10 @@ export interface ScreenProps {
 
 export function Screen({ children, edges = ['top', 'bottom'], background, style, contentStyle }: ScreenProps) {
   const insets = useSafeAreaInsets();
-  const { theme } = useUnistyles();
   const has = (e: Edge) => edges.includes(e);
   return (
     <View style={[styles.safe, background != null && { backgroundColor: background }, style]}>
       <View
-        // REMOUNT THE SCREEN BODY ON A LIGHT↔DARK FLIP (Casey, 2026-08-04).
-        //
-        // Unistyles applies theme changes by writing to native ShadowNodes, not
-        // by re-rendering — so a node that is missing from its ShadowRegistry
-        // never repaints, no matter how many times React renders it. Some nodes
-        // are reliably missed (reproduced on the simulator: after a cold launch
-        // in light, flipping to dark left "Tuesday, August 4" and the How-it-
-        // works title rendering light-mode near-black ink on the dark canvas
-        // while everything around them switched). That is why the workaround
-        // everyone finds is "leave the screen and come back" — a REMOUNT
-        // re-registers every node and re-applies styles from scratch.
-        //
-        // Keying on the theme name does exactly that, and does it here rather
-        // than at the navigator so the navigation stack, route params and
-        // history all survive: only the current screen's body is rebuilt. It
-        // fires solely when the OS appearance actually changes, which is rare
-        // and already a visible, full-screen repaint — so the remount is
-        // invisible inside it.
-        //
-        // Cost, stated plainly: component state INSIDE a screen resets on that
-        // flip (an open sheet closes, a half-typed search box clears). Accepted
-        // over shipping a half-painted UI. Remove the key the day Unistyles
-        // registers every node reliably — nothing else depends on it.
-        key={theme.isDark ? 'dark' : 'light'}
         style={[
           styles.inner,
           {

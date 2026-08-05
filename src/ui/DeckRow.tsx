@@ -50,14 +50,15 @@ export function DeckRow({ deck, wordCount, onPress, onStudy, onDelete }: DeckRow
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t('deckRow.deleteA11y')}
-        style={[styles.action, { backgroundColor: theme.color.danger }]}
+        // Same pinned tray fill + white ink as WordRow — see the note there.
+        style={[styles.action, { backgroundColor: theme.palette.red[600] }]}
         onPress={() => {
           ref.current?.close();
           onDelete?.();
         }}
       >
-        <IconTrash size={18} color={theme.color.textOnDanger} />
-        <Text variant="label" style={[styles.actionLabel, { color: theme.color.textOnDanger }]}>
+        <IconTrash size={18} color="#fff" />
+        <Text variant="label" style={styles.actionLabel}>
           {t('deckRow.delete')}
         </Text>
       </Pressable>

@@ -10,7 +10,7 @@
 //
 // `resolve` now bisects `masteredAt`, so the two cannot diverge by construction.
 // These tests pin that, and the statuses that must survive it.
-import { forecast, masteredAt, projectionBase, resolve, type ProjectionBase } from '@/domain/projection';
+import { forecast, librarySpanDays, masteredAt, nextMilestone, POST_SUMMIT_MILESTONES, projectionBase, resolve, SUMMIT_TARGET, type ProjectionBase } from '@/domain/projection';
 
 const MIX = { again: 0.05, almost: 0.15, gotIt: 0.8 };
 
@@ -131,5 +131,61 @@ describe('resolve() agrees with the curve it is drawn against', () => {
     const crossing = curveCrossing(base, 100);
     if (days == null || crossing == null) return; // nothing to compare
     expect(Math.abs(days - crossing)).toBeLessThanOrEqual(1);
+  });
+});
+
+// Past Summit the CEFR ladder is exhausted, so the Projection tab had nothing to
+// aim at: the curve floated with no threshold and the card said "Reached" and
+// stopped (Casey, 2026-08-05). These round numbers are the continuation — and
+// they are explicitly NOT tiers, so nothing here may leak CEFR or camp language.
+describe('post-summit milestones', () => {
+  it('hands back the next round number above where you are', () => {
+    expect(nextMilestone(3_099)).toBe(5_000);
+    expect(nextMilestone(5_000)).toBe(7_500);
+    expect(nextMilestone(7_499)).toBe(7_500);
+    expect(nextMilestone(9_000)).toBe(10_000);
+  });
+
+  it('is strictly ABOVE the current count, never equal', () => {
+    // Equal would render a milestone the user has already passed, with a
+    // threshold line sitting under the curve's starting point. (The LAST rung
+    // has no successor — that is the next test's job, not a violation here.)
+    for (const m of POST_SUMMIT_MILESTONES.slice(0, -1)) expect(nextMilestone(m)).toBeGreaterThan(m);
+  });
+
+  it('runs out rather than inventing a target', () => {
+    expect(nextMilestone(POST_SUMMIT_MILESTONES[POST_SUMMIT_MILESTONES.length - 1]!)).toBeNull();
+    expect(nextMilestone(1_000_000)).toBeNull();
+  });
+
+  it('starts past the Summit target, so the ladder never doubles back', () => {
+    expect(POST_SUMMIT_MILESTONES[0]).toBeGreaterThan(SUMMIT_TARGET);
+    const sorted = [...POST_SUMMIT_MILESTONES].sort((a, b) => a - b);
+    expect(sorted).toEqual([...POST_SUMMIT_MILESTONES]);
+  });
+});
+
+// "Time to Summit" is not in the schema — we never recorded the crossing. The
+// oldest card is the only start date there is, so the card says "climbing for".
+describe('librarySpanDays', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const card = (daysAgo: number) => ({
+    id: `c${daysAgo}`, deckId: 'd', userId: 'u', translationId: 't',
+    userNote: null, customFront: null, customBack: null, suspended: false,
+    createdAt: new Date(Date.now() - daysAgo * DAY),
+  });
+
+  it('measures from the OLDEST card, not the newest', () => {
+    const now = new Date();
+    expect(librarySpanDays([card(10), card(200), card(3)], now)).toBeCloseTo(200, 0);
+  });
+
+  it('is zero for an empty library rather than Infinity', () => {
+    expect(librarySpanDays([], new Date())).toBe(0);
+  });
+
+  it('never goes negative on a clock skew', () => {
+    const past = new Date(Date.now() - 5 * DAY);
+    expect(librarySpanDays([card(1)], past)).toBeGreaterThanOrEqual(0);
   });
 });

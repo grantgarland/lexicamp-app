@@ -3,7 +3,6 @@
 // the "Ready to review" study CTA, the quick-stat tiles). Reads from the app store:
 // `useHomeData()` (TanStack Query over the DataSource) returns a snapshot DERIVED
 // from real card fixtures, so the DevBadge scenario drives the screen variant.
-import type { TFunction } from 'i18next';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Pressable, RefreshControl, StyleSheet as RNStyleSheet, View } from 'react-native';
@@ -11,6 +10,7 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { SOON_WINDOW_DAYS } from '@/domain/derive';
 import { useIsDark } from '@/theme/appearance';
 import { lh } from '@/theme/theme';
 import { useTranslation } from '@/i18n';
@@ -22,9 +22,10 @@ import { useUiStore } from '@/store/uiStore';
 import { tourTargets, useWalkthroughActive } from '@/tour/walkthrough';
 
 import {
+  BrandMark,
   HowItWorksList,
   IconArrowRight,
-  IconBook,
+  IconArrowUp, IconBook,
   IconCalendar,
   IconCheck,
   IconChevronDown,
@@ -49,15 +50,6 @@ import {
  *  they must agree: as content padding (gives the scroll somewhere to go) and as
  *  the reveal inset (stops a `ScrollIntoView` landing content under the FAB). */
 const BOTTOM_CLEARANCE = TAB_BAR_FAB_OVERHANG + 14;
-
-// Day/month names are localized (`date.days` / `date.months` arrays); the label shape
-// is its own key so word order can differ per language ("June 30" vs "30 de junio").
-function todayLabel(t: TFunction) {
-  const d = new Date();
-  const days = t('date.days', { returnObjects: true }) as string[];
-  const months = t('date.months', { returnObjects: true }) as string[];
-  return t('date.todayLabel', { weekday: days[d.getDay()], month: months[d.getMonth()], day: d.getDate() });
-}
 
 /** Every query this screen renders (prefixes — see usePullToRefresh). */
 const HOME_REFRESH_KEYS = ['deckCards', 'progressStats', 'engagement', 'sessionPace'] as const;
@@ -90,10 +82,10 @@ export function HomeScreen() {
         revealInsetBottom={BOTTOM_CLEARANCE}
         refreshControl={<RefreshControl refreshing={refresh.refreshing} onRefresh={refresh.onRefresh} tintColor={theme.color.textMuted} />}
       >
-        <GreetingRow dateLabel={todayLabel(t)} streakDays={streakDays} subline={isEmpty ? t('home.firstDayOnMountain') : undefined} />
+        <GreetingRow streakDays={streakDays} subline={isEmpty ? t('home.firstDayOnMountain') : undefined} />
         {snapshot != null && (
           <>
-            <MasteryCard tierCounts={snapshot.tierCounts} wordsSaved={snapshot.wordsSaved} isEmpty={isEmpty} />
+            <MasteryCard tierCounts={snapshot.tierCounts} wordsSaved={snapshot.wordsSaved} memoriesForming={Math.max(0, snapshot.wordsSaved - snapshot.masteredCount)} isEmpty={isEmpty} />
             {isEmpty && !tourActive ? (
               <AddFirstWordCard onAdd={() => setSearchOpen(true)} />
             ) : (
@@ -113,7 +105,7 @@ export function HomeScreen() {
                     <CaughtUpCard dueTomorrow={snapshot.dueTomorrow} onStudyAhead={() => router.push('/quiz')} />
                   )}
                 </View>
-                <StatTiles mastered={snapshot.masteredCount} addedToday={snapshot.addedToday} dueTomorrow={snapshot.dueTomorrow} />
+                <StatTiles almostMastered={snapshot.tierCounts[3] ?? 0} addedRecently={snapshot.addedRecently} dueSoon={snapshot.dueSoon} />
               </>
             )}
             {showEdu && <HowItWorksCard defaultOpen={isEmpty} dismissible={!isEmpty} />}
@@ -124,44 +116,67 @@ export function HomeScreen() {
   );
 }
 
-function GreetingRow({ dateLabel, streakDays, subline }: { dateLabel: string; streakDays: number; subline?: string }) {
+function GreetingRow({ streakDays, subline }: { streakDays: number; subline?: string }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const [streakOpen, setStreakOpen] = useState(false);
+  // Measured, not hardcoded: the brand mark is specified as "same height as the
+  // streak badge", and the badge's height comes from its padding + type. A
+  // literal would silently drift the first time either changes.
+  const [badgeHeight, setBadgeHeight] = useState(0);
   // bestStreak rides the already-cached progress-stats query (17 §H4).
   const { bestStreak } = useProgressData();
   const isDark = useIsDark();
-  const hot = streakDays > 1;
+  // A streak of ONE is still a streak (Casey, 2026-08-04): the badge used to go
+  // brand only above 1, so a user's first day — the day the habit is most
+  // fragile — got the same disabled grey as no streak at all.
+  const hot = streakDays > 0;
   const fg = hot ? theme.color.accentStrong : theme.palette.slate[500];
   return (
-    <View style={styles.greetRow}>
-      <View style={styles.greetText}>
-        <RawText style={styles.date}>{dateLabel}</RawText>
-        {subline != null && <RawText style={styles.subline}>{subline}</RawText>}
-      </View>
-      {/* Phase D: global active-language indicator (18 §D5) */}
-      <View style={styles.greetLang}>
-        <LanguageIndicator />
-      </View>
-      <Pressable
-        onPress={() => setStreakOpen(true)}
-        accessibilityRole="button"
-        accessibilityLabel={t('home.dayStreakA11y', { count: streakDays })}
-        style={({ pressed }) => [
-          styles.streak,
-          {
-            backgroundColor: hot ? theme.color.accentTint : theme.color.surfaceSunken,
-            borderColor: hot ? theme.color.accentSoft : theme.color.border,
-          },
-          pressed && { opacity: 0.7 },
-        ]}
-      >
-        <View style={styles.streakTop}>
-          <IconFire size={18} color={hot ? theme.color.accent : theme.palette.slate[400]} />
-          <RawText style={[styles.streakNum, { color: fg }]}>{streakDays}</RawText>
+    // App-wide header shape (2026-08-04): the language toggle is ALWAYS the last
+    // element of the header flex, on every screen. Here that meant giving up the
+    // date — it was the widest thing in the row and shoved the toggle around as
+    // the weekday name changed length — and promoting the streak badge into its
+    // place, with the brand mark centred between them. Three cells: the outer
+    // two flex evenly, so the mark sits on the true centre line whatever the
+    // side widths do.
+    <View>
+      <View style={styles.greetRow}>
+        <View style={styles.greetSide}>
+          <Pressable
+            onLayout={(e) => setBadgeHeight(e.nativeEvent.layout.height)}
+            onPress={() => setStreakOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t('home.dayStreakA11y', { count: streakDays })}
+            style={({ pressed }) => [
+              styles.streak,
+              {
+                backgroundColor: hot ? theme.color.accentTint : theme.color.surfaceSunken,
+                borderColor: hot ? theme.color.accentSoft : theme.color.border,
+              },
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <View style={styles.streakTop}>
+              <IconFire size={18} color={hot ? theme.color.accent : theme.palette.slate[400]} />
+              <RawText style={[styles.streakNum, { color: fg }]}>{streakDays}</RawText>
+            </View>
+            <RawText style={[styles.streakLabel, { color: fg }]}>{t('home.dayStreak')}</RawText>
+          </Pressable>
         </View>
-        <RawText style={[styles.streakLabel, { color: fg }]}>{t('home.dayStreak')}</RawText>
-      </Pressable>
+
+        {/* 0 until the badge reports its height — render nothing rather than
+            flash a wrong-sized mark on the first frame. */}
+        {badgeHeight > 0 && <BrandMark size={badgeHeight} />}
+
+        <View style={[styles.greetSide, styles.greetSideEnd]}>
+          {/* Phase D: global active-language indicator (18 §D5) */}
+          <LanguageIndicator />
+        </View>
+      </View>
+      {/* First-run line. It used to sit under the date; with the date gone it
+          takes its own centred row rather than crowding the header flex. */}
+      {subline != null && <RawText style={styles.subline}>{subline}</RawText>}
 
       <Sheet visible={streakOpen} onClose={() => setStreakOpen(false)} title={t('home.streakTitle')}>
         <View style={styles.streakStatsRow}>
@@ -288,23 +303,29 @@ function StudyCard({
 }
 
 // Tile trio (17 §H2): Added today · Due tomorrow · Mastered. "Need recall" was cut —
-// its number now IS the StudyCard hero (X1) — and Mastered ties the daily glance to
-// the mountain goal, mirroring Progress.
-function StatTiles({ mastered, addedToday, dueTomorrow }: { mastered: number; addedToday: number; dueTomorrow: number }) {
+// its number now IS the StudyCard hero (X1). The row reads as one horizon: what you
+// added in the last few days, what falls due in the next few, and what is about to
+// tip over into mastered — all sharing the Base Camp window (SOON_WINDOW_DAYS).
+function StatTiles({ almostMastered, addedRecently, dueSoon }: { almostMastered: number; addedRecently: number; dueSoon: number }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const tiles = [
     {
-      label: t('home.statAddedToday'), value: addedToday, icon: <IconBook size={15} color={theme.color.brand} />, bg: theme.color.brandTint, border: theme.color.brandSoft,
-      tip: t('home.statAddedTodayTip'),
+      label: t('home.statAddedRecently'), value: addedRecently, icon: <IconBook size={15} color={theme.color.brand} />, bg: theme.color.brandTint, border: theme.color.brandSoft,
+      tip: t('home.statAddedRecentlyTip', { count: SOON_WINDOW_DAYS }),
     },
     {
-      label: t('home.statDueTomorrow'), value: dueTomorrow, icon: <IconCalendar size={15} color={theme.color.textMuted} />, bg: theme.color.surfaceSunken, border: theme.color.border,
-      tip: t('home.statDueTomorrowTip'),
+      label: t('home.statDueSoon'), value: dueSoon, icon: <IconCalendar size={15} color={theme.color.textMuted} />, bg: theme.color.surfaceSunken, border: theme.color.border,
+      tip: t('home.statDueSoonTip', { count: SOON_WINDOW_DAYS }),
     },
     {
-      label: t('home.statMastered'), value: mastered, icon: <IconMountain size={15} color={theme.color.evergreen} />, bg: theme.color.evergreenTint, border: theme.color.evergreenSoft,
-      tip: t('home.statMasteredTip'),
+      // Was Mastered, which the Word Mastery card directly above already reports
+      // (Casey, 2026-08-05) — the same number twice on one screen. Summit Ridge
+      // is the cohort ONE good review away from mastered, so the tile now points
+      // forward instead of restating an achievement. Arrow, not mountain: these
+      // words are climbing, not arrived.
+      label: t('home.statAlmostMastered'), value: almostMastered, icon: <IconArrowUp size={15} color={theme.color.evergreen} />, bg: theme.color.evergreenTint, border: theme.color.evergreenSoft,
+      tip: t('home.statAlmostMasteredTip'),
     },
   ];
   return (
@@ -481,10 +502,9 @@ const styles = StyleSheet.create((theme) => {
     content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: BOTTOM_CLEARANCE, gap: 14 },
 
     greetRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-    greetText: { flex: 1 },
-    greetLang: { alignSelf: 'flex-start', marginTop: 2 },
-    date: { fontFamily: fonts.serif.semibold, fontSize: 24, lineHeight: 28, letterSpacing: -0.2, color: color.textStrong },
-    subline: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted, marginTop: 3 },
+    greetSide: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+    greetSideEnd: { justifyContent: 'flex-end' },
+    subline: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted, marginTop: 8, textAlign: 'center' },
     streak: { alignItems: 'center', gap: 1, borderWidth: theme.borderWidth.base, borderRadius: 14, paddingVertical: 8, paddingHorizontal: 12 },
     streakTop: { flexDirection: 'row', alignItems: 'center', gap: 3 },
     streakNum: { fontFamily: fonts.mono.bold, fontSize: 18 },

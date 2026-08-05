@@ -118,15 +118,23 @@ export function WordRow({ word, onPress, onDelete, onAddToDeck, onToggleArchive,
           // Maestro tap target — trays only mount while swiped open, so at most
           // one row's actions exist at a time and the ids stay unique.
           testID="word-row-delete"
-          style={[styles.action, { backgroundColor: theme.color.danger }]}
+          // Swipe-tray fill is pinned to the saturated red (palette.red[600] —
+          // the LIGHT theme's danger) in BOTH themes, with white ink. The
+          // `danger`/`textOnDanger` pair is correct for danger text on a CANVAS,
+          // where dark mode lightens the red and darkens the ink — but on a
+          // full-bleed action tile that read as near-black-on-pink next to a
+          // white-inked sibling action (Casey, 2026-08-04). Pinning the fill
+          // keeps white legible at 6:1 rather than the 4.4:1 the lighter red
+          // would give, so this is the accessible way to get the white the tray
+          // wants.
+          style={[styles.action, { backgroundColor: theme.palette.red[600] }]}
           onPress={() => {
             ref.current?.close();
             onDelete?.();
           }}
         >
-          {/* danger flips to a light red in dark mode → icon/label follow textOnDanger */}
-          <IconTrash size={18} color={theme.color.textOnDanger} />
-          <Text variant="label" style={[styles.actionLabel, { color: theme.color.textOnDanger }]}>
+          <IconTrash size={18} color="#fff" />
+          <Text variant="label" style={styles.actionLabel}>
             {t('wordRow.delete')}
           </Text>
         </Pressable>

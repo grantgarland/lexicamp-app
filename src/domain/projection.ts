@@ -453,6 +453,33 @@ export function nextCampTarget(mastered: number): { id: string; cefr: string; ta
  *  and will move again. */
 export const SUMMIT_TARGET = MOUNTAIN_TIERS[MOUNTAIN_TIERS.length - 1]!.masteredMin;
 
+/** Round numbers to keep aiming at after the mountain runs out.
+ *
+ *  Deliberately UNOFFICIAL: the CEFR ladder tops out at Summit/C2, so these are
+ *  not tiers and must never be presented as camps — no badge, no CEFR level, no
+ *  "you have unlocked" language. They exist because a summited user's Projection
+ *  tab otherwise had nothing to project toward: the curve floated with no
+ *  threshold and the card said "Reached" and stopped (Casey, 2026-08-05). */
+export const POST_SUMMIT_MILESTONES = [5_000, 7_500, 10_000, 15_000, 20_000, 30_000] as const;
+
+/** The next round number above `mastered`, or null past the last one. */
+export function nextMilestone(mastered: number): number | null {
+  return POST_SUMMIT_MILESTONES.find((m) => m > mastered) ?? null;
+}
+
+/** How long the user has been building this library, in days — measured from the
+ *  OLDEST card, which is the only "when did you start" the schema records.
+ *
+ *  It is a proxy, and an honest one: we never stored the moment a user crossed
+ *  3,000 mastered, so "time to Summit" cannot be computed exactly. Copy that
+ *  uses this must say "climbing for", not "reached the Summit in". */
+export function librarySpanDays(cards: readonly Card[], now: Date = new Date()): number {
+  if (cards.length === 0) return 0;
+  let earliest = Infinity;
+  for (const c of cards) earliest = Math.min(earliest, c.createdAt.getTime());
+  return Math.max(0, (now.getTime() - earliest) / DAY_MS);
+}
+
 export interface Projections {
   nextCamp: (Projection & { tierId: string; cefr: string }) | null;
   summit: Projection;

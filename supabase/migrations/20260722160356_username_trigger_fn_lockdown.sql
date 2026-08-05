@@ -2,4 +2,4 @@
 -- function — it must not be callable via /rest/v1/rpc by any client role.
 -- Trigger firing does not require EXECUTE on the function, so revoking all
 -- is safe.
-revoke all on function public.set_default_username() from public, anon, authenticated;
+revoke all on function public.set_default_username() from public, anon, authenticated;;

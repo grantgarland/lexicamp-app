@@ -143,9 +143,11 @@ describe('Home study card (primary CTA)', () => {
 
   it('hides the time estimate until the server has a measured pace', () => {
     // Null pace must render NOTHING — not "0 min", not a guessed constant.
+    // Anchored to a NUMBER + "min": a bare /min/ also matched the Mastery card's
+    // "memories forming" (2026-08-05), so it would have failed on unrelated copy.
     mockPace.value = null;
     render(<HomeScreen />);
-    expect(screen.queryByText(/min/)).toBeNull();
+    expect(screen.queryByText(/\d+\s*min/)).toBeNull();
   });
 
   it('shows a measured estimate once pace is available', () => {

@@ -20,7 +20,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { useUnistyles } from 'react-native-unistyles';
@@ -28,7 +28,8 @@ import { useUnistyles } from 'react-native-unistyles';
 import { useRecoveryLink } from '@/auth/useRecoveryLink';
 import { DevBadge } from '@/dev/DevBadge';
 import { queryClient } from '@/query/queryClient';
-import { startAppearanceSync } from '@/theme/appearance';
+import { startAppearanceSync, useAppliedScheme } from '@/theme/appearance';
+import { useUiStore } from '@/store/uiStore';
 import { PortalHost, Toast } from '@/ui';
 import { WalkthroughProvider } from '@/tour/walkthrough';
 
@@ -44,6 +45,15 @@ export default function RootLayout() {
   // Adaptive-theme aware: the nav scene background follows the canvas token so
   // transitions / behind-modal areas don't flash white in dark mode.
   const { theme } = useUnistyles();
+  const scheme = useAppliedScheme();
+  // Defer the rebuild below while a quiz holds unsaved ratings — see uiStore's
+  // `quizInProgress`. The THEME still switches immediately (Unistyles handles
+  // that natively); only the remount waits, so at worst a few nodes in the quiz
+  // keep the old ink until the session ends, instead of the session being
+  // thrown away mid-answer.
+  const quizBusy = useUiStore((s) => s.quizInProgress);
+  const [rebuildKey, setRebuildKey] = useState(scheme);
+  if (!quizBusy && rebuildKey !== scheme) setRebuildKey(scheme);
   const [fontsLoaded] = useFonts({
     Spectral: Spectral_400Regular,
     'Spectral-Medium': Spectral_500Medium,
@@ -68,7 +78,27 @@ export default function RootLayout() {
         <SafeAreaProvider initialMetrics={initialWindowMetrics}>
           {/* `style="auto"` flips status-bar glyphs to light in dark mode. */}
           <StatusBar style="auto" />
-          <BottomSheetModalProvider>
+          {/* REBUILD THE APP TREE ON A LIGHT↔DARK CHANGE (Casey, 2026-08-04).
+              Unistyles applies theme changes by writing to native ShadowNodes
+              rather than re-rendering, and it misses nodes: after a flip, some
+              rows kept the previous canvas and some titles the previous ink,
+              while everything around them switched. The workaround everyone
+              finds — leave the screen and come back — is a REMOUNT, which
+              registers every node afresh.
+
+              The boundary is load-bearing and was found by experiment, not
+              taste. Keying each screen's body (ui/Screen) did NOT fix it.
+              Keying the Tabs navigator did NOT fix it. Keying HERE, above the
+              Stack, repaints cleanly — verified on the simulator by cold
+              launching in light and flipping to dark. Do not "optimise" this
+              down the tree; it has already been tried twice.
+
+              It fires only when the applied scheme changes — a rare, already
+              full-screen repaint — so the rebuild is invisible inside it. Cost:
+              in-screen state resets, and an open sheet closes (PortalHost is
+              inside the key deliberately, so portalled content repaints too).
+              Delete the key the day Unistyles registers every node reliably. */}
+          <BottomSheetModalProvider key={rebuildKey}>
             {/* Walkthrough context at the ROOT: the quiz fullScreenModal mounts its
                 own overlay host and must share the tabs layout's tour state. */}
             <WalkthroughProvider>

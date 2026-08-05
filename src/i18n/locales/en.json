@@ -100,10 +100,6 @@
     "ready": "Due now",
     "studySub": "Scheduled right before you'd forget, when recall sticks.",
     "studyNow": "Study now",
-    "statAddedToday": "Added today",
-    "statAddedTodayTip": "A few words a day adds up faster than it looks.",
-    "statDueTomorrow": "Due tomorrow",
-    "statDueTomorrowTip": "Tomorrow's queue. Reviewing words as they come due is what makes the spacing work.",
     "statInfoA11y": "{{label}}, more info",
     "emptyTitle": "Add your first word to start climbing",
     "emptyBody": "Search for a word you want to remember, and save it.",
@@ -122,9 +118,7 @@
       "dismissA11y": "Hide the \"How Lexicamp works\" card. You can review it anytime from Settings."
     },
     "wordsReady": "words ready for review",
-    "statMastered": "Mastered",
     "wordTilesHeader": "Your words",
-    "statMasteredTip": "Mastered words hold for 30+ days without review. They've left your queue and count toward your mountain rank.",
     "caughtUpTitle": "All caught up!",
     "caughtUpTomorrow_one": "No reviews needed right now. {{count}} word becomes due tomorrow. You can always study ahead.",
     "caughtUpTomorrow_other": "No reviews needed right now. {{count}} words become due tomorrow. You can always study ahead.",
@@ -142,7 +136,13 @@
     "wordsReadyA11y_one": "1 word ready for review.",
     "wordsReadyA11y_other": "{{count}} words ready for review.",
     "studyEta_one": "  ·  about 1 min",
-    "studyEta_other": "  ·  about {{count}} min"
+    "studyEta_other": "  ·  about {{count}} min",
+    "statAddedRecently": "Added recently",
+    "statAddedRecentlyTip": "Words you have saved in the last 3 days. A steady capture habit will help optimize your progress.",
+    "statDueSoon": "Due soon",
+    "statDueSoonTip": "Words scheduled for review in the next 3 days.",
+    "statAlmostMastered": "Almost mastered",
+    "statAlmostMasteredTip": "Words approaching native-level retention. One more successful recall should promote them into long-term memory."
   },
   "masteryCard": {
     "eyebrow": "Word Mastery",
@@ -156,10 +156,10 @@
     "segmentA11y_other": "{{name}}: {{count}} words",
     "tierWordCount_one": "{{count}} word",
     "tierWordCount_other": "{{count}} words",
-    "saved": "saved",
     "atSummit": "mastered",
     "summitInfoContent": "Mastery is attained when a word has entered your long-term memory.",
-    "summitInfoA11y": "At Summit, more info"
+    "summitInfoA11y": "At Summit, more info",
+    "forming": "memories forming"
   },
   "search": {
     "placeholder": "Type a word in {{lang}}…",
@@ -424,32 +424,24 @@
     "summitReached": "Summit reached!",
     "pctThrough": "{{pct}}% through {{tier}}",
     "fullRoute": "Full Route",
-    "fullRouteSub": "Summit at the top. Keep climbing.",
     "current": "Current",
     "done": "Done",
     "unlockAt": "Unlock at {{count}} mastered",
-    "masteredPlus": "{{count}}+ mastered ✓",
+    "masteredPlus": "{{count}}+ mastered",
     "ofWords": "{{count}} of {{max}} mastered",
-    "atSummitWords": "{{count}} mastered · summit tier",
+    "atSummitWords": "{{count}} mastered",
     "cefrTitle": "CEFR Language Levels",
     "cefrIntro": "CEFR is the standard scale of language proficiency. Lexicamp maps your mastered-word count to an approximate level as you climb.",
     "cefrNote": "Levels are approximate: Lexicamp counts individual word forms, so thresholds sit below research baselines.",
     "projectionLocked": "Projection unlocks soon",
     "projectionLockedBody": "Your estimate appears after your first review session.",
     "allTime": "All-Time",
-    "sessions": "Sessions",
     "avgAccuracy": "Avg. Accuracy",
-    "bestStreak": "Best Streak",
     "emptyRouteTitle": "Your climb hasn't started",
     "emptyRouteBody": "Save your first word to begin your ascent.",
     "masteredThreshold": "{{count}}+ mastered",
     "masteredZeroHint": "Keep reviewing. Your first mastered word unlocks your climb.",
-    "currentStreak": "Current Streak",
-    "sessionsTip": "Spacing research (Cepeda et al., 2006) shows many short sessions beat fewer long ones.",
-    "sessionsTipRate": "You're averaging {{rate}} sessions a day. Spacing research (Cepeda et al., 2006) shows many short sessions beat fewer long ones.",
     "accuracyTip": "Around 90% is the sweet spot: the scheduler aims for challenge without failure. Much higher means your reviews could stretch further apart.",
-    "currentStreakTip": "The schedule assumes daily practice: a streak means each review lands at its optimal moment.",
-    "bestStreakTip": "Your record. Streaks aren't the goal; they're what showing up looks like.",
     "tabLeaders": "Leaderboard",
     "leaders": {
       "global": "Global",
@@ -477,7 +469,17 @@
       "unreachableTitle": "Save more words",
       "unreachableBody": "The words you've saved won't reach {{tier}} on their own. Add new words to keep the climb going.",
       "a11yRange": "Estimated {{low}} to {{high}} {{unit}}",
-      "a11yPoint": "Estimated {{count}} {{unit}}"
+      "a11yPoint": "Estimated {{count}} {{unit}}",
+      "journeyEyebrow": "Your climb so far",
+      "spanMonths_one": "{{count}} month",
+      "spanMonths_other": "{{count}} months",
+      "spanDays_one": "{{count}} day",
+      "spanDays_other": "{{count}} days",
+      "perWeek_one": "{{count}} word/week",
+      "perWeek_other": "{{count}} words/week",
+      "milestoneLine": "{{count}} words",
+      "journeyBigLabel": "words mastered",
+      "journeyDetail": "{{climbing}} climbing  ·  {{pace}}"
     },
     "tabProjection": "Projection",
     "emptyProjectionTitle": "Nothing to project yet",
@@ -490,7 +492,20 @@
       "note": "The early rise is words you’ve already saved reaching long-term memory. The straight part after it is new words, at the rate you’re saving them now.",
       "a11y": "Forecast curve rising from {{from}} to about {{to}} mastered words over the next {{span}}.",
       "axisWords": "{{count}} words",
-      "campEta": "{{tier}} · in {{span}}"
+      "campEta": "{{tier}} · in {{span}}",
+      "milestoneEtaCaption": "{{count}} words · in {{span}}"
+    },
+    "reviews": "Reviews",
+    "reviewsTip": "Every rating is one retrieval attempt — and retrieval, not re-reading, is what builds durable memory.",
+    "reviewsTipRate": "About {{rate}} reviews on each day you study. Every rating is a retrieval attempt, and retrieval is what builds durable memory.",
+    "daysActive": "Days Active",
+    "daysActiveTip": "Distinct days you've reviewed at least one word. Unlike a streak, a missed day never takes this away.",
+    "timeInvested": "Time Invested",
+    "timeInvestedTip": "Total time you have spent in review sessions, measured across {{count}} sessions.",
+    "time": {
+      "hoursMinutes": "{{hours}}h {{minutes}}m",
+      "hours": "{{hours}}h",
+      "minutes": "{{minutes}}m"
     }
   },
   "settings": {
@@ -617,7 +632,12 @@
     "deleteFailed": "We couldn't delete your account. Please try again or contact support.",
     "deleteAccountConfirmWord": "delete",
     "deleteAccountConfirmLabel": "Type “{{word}}” to confirm",
-    "deleteAccountConfirmPlaceholder": "{{word}}"
+    "deleteAccountConfirmPlaceholder": "{{word}}",
+    "appearance": "Appearance",
+    "appearance_system": "System",
+    "appearance_light": "Light",
+    "appearance_dark": "Dark",
+    "appearanceNote": "System follows your device's light/dark setting."
   },
   "deckRow": {
     "studyA11y": "Study deck",
@@ -819,5 +839,15 @@
     "skip": "Skip",
     "done": "Done",
     "replayCta": "See how Lexicamp works"
+  },
+  "saveWithEdit": {
+    "title": "Save with an edit",
+    "help": "Dictionaries sometimes return an inflected form. Save the version you actually want to study.",
+    "fieldLabel": "Word to study",
+    "originalLabel": "Dictionary returned: {{word}}",
+    "note": "Only the text you study changes. The example sentence and your review history stay with the original entry.",
+    "confirm": "Save word",
+    "tooLong": "Keep it under {{max}} characters.",
+    "a11y": "Edit the translation before saving"
   }
 }
