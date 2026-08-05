@@ -6,14 +6,16 @@
 import type { TFunction } from 'i18next';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet as RNStyleSheet, useColorScheme, View } from 'react-native';
+import { Pressable, RefreshControl, StyleSheet as RNStyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { useIsDark } from '@/theme/appearance';
 import { lh } from '@/theme/theme';
 import { useTranslation } from '@/i18n';
 import { useHomeData, useProgressData, useSessionPace } from '@/query/hooks';
+import { usePullToRefresh } from '@/query/usePullToRefresh';
 import { LanguageIndicator } from '@/screens/shared/LanguageSwitcher';
 import { usePrefsStore } from '@/store/prefsStore';
 import { useUiStore } from '@/store/uiStore';
@@ -57,8 +59,12 @@ function todayLabel(t: TFunction) {
   return t('date.todayLabel', { weekday: days[d.getDay()], month: months[d.getMonth()], day: d.getDate() });
 }
 
+/** Every query this screen renders (prefixes — see usePullToRefresh). */
+const HOME_REFRESH_KEYS = ['deckCards', 'progressStats', 'engagement', 'sessionPace'] as const;
+
 export function HomeScreen() {
   const router = useRouter();
+  const { theme } = useUnistyles();
   const { t } = useTranslation();
   const setSearchOpen = useUiStore((s) => s.setSearchOpen);
   const { snapshot, streakDays } = useHomeData();
@@ -72,12 +78,17 @@ export function HomeScreen() {
   // review" card — w1/w5 spotlight it, and most fresh users would otherwise be
   // on the caught-up/empty variants (pointing at elements that don't exist).
   const tourActive = useWalkthroughActive();
+  // Everything on this screen derives from the deck + its FSRS states, the
+  // all-time stats and the streak — 'sessionPace' rides along because the study
+  // card's ETA reads from it.
+  const refresh = usePullToRefresh(HOME_REFRESH_KEYS);
   return (
     <Screen edges={['top']}>
       <ScrollIntoViewScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         revealInsetBottom={BOTTOM_CLEARANCE}
+        refreshControl={<RefreshControl refreshing={refresh.refreshing} onRefresh={refresh.onRefresh} tintColor={theme.color.textMuted} />}
       >
         <GreetingRow dateLabel={todayLabel(t)} streakDays={streakDays} subline={isEmpty ? t('home.firstDayOnMountain') : undefined} />
         {snapshot != null && (
@@ -119,7 +130,7 @@ function GreetingRow({ dateLabel, streakDays, subline }: { dateLabel: string; st
   const [streakOpen, setStreakOpen] = useState(false);
   // bestStreak rides the already-cached progress-stats query (17 §H4).
   const { bestStreak } = useProgressData();
-  const isDark = useColorScheme() === 'dark';
+  const isDark = useIsDark();
   const hot = streakDays > 1;
   const fg = hot ? theme.color.accentStrong : theme.palette.slate[500];
   return (
@@ -196,7 +207,7 @@ function StudyCard({
   onStudy: () => void;
 }) {
   const { theme } = useUnistyles();
-  const isDark = useColorScheme() === 'dark';
+  const isDark = useIsDark();
   const { t } = useTranslation();
   // MEASURED, never guessed: median seconds/card over the user's own recent
   // sessions (get_session_pace). Null until they have 3 timed sessions, and

@@ -365,31 +365,65 @@ export function resolve(base: ProjectionBase, target: number): Projection {
   if (base.reviewsLogged === 0) return { ...shell, status: 'no_reviews', days: null, range: null };
 
   const need = target - mastered;
+  const remaining = Math.max(0, need - maturing.length);
 
-  // Enough already-saved words to cover the target on their own.
-  if (maturing.length >= need) {
-    const days = Math.ceil(maturing[need - 1]!);
-    return { ...shell, status: 'ok', days, range: rangeFor(days, confidence), fromFutureWords: 0 };
+  // Can the words that don't exist yet ever get there? Only asked when the
+  // current library alone is not enough — these two statuses have completely
+  // different fixes, so they stay distinct from plain "unreachable".
+  if (remaining > 0) {
+    if (base.fresh == null) {
+      // No new word could ever mature at this recall rate — distinguish that
+      // from "you aren't saving words".
+      return { ...shell, status: 'low_recall', days: null, range: null, fromFutureWords: remaining };
+    }
+    if (capturePerDay <= 0) {
+      return { ...shell, status: 'unreachable', days: null, range: null, fromFutureWords: remaining };
+    }
   }
 
-  const remaining = need - maturing.length;
-  if (base.fresh == null) {
-    // No new word could ever mature at this recall rate — distinguish that from
-    // "you aren't saving words", because the fix is completely different.
-    return { ...shell, status: 'low_recall', days: null, range: null, fromFutureWords: remaining };
-  }
-  if (capturePerDay <= 0) {
+  // Solve the SAME function the forecast curve plots (Casey, 2026-08-04). This
+  // used to be two closed-form branches, and the first one — "the library
+  // already covers the target, so answer maturing[need-1]" — counted ONLY the
+  // maturation of words the user already has. `masteredAt` also counts the words
+  // they keep saving in the meantime, so the chart reached the camp materially
+  // sooner than the number printed under it: at 20 mastered with 80 words
+  // maturing, resolve said day 40 while the curve crossed 100 on day 26.6 and
+  // stood at 158 words by day 40. That gap is what put the camp dot far above
+  // the threshold line it is supposed to mark. One function, one answer.
+  const exact = daysToReach(base, target);
+  if (exact == null) {
     return { ...shell, status: 'unreachable', days: null, range: null, fromFutureWords: remaining };
   }
-  // Words saved from now mature `fresh` days later, so by day D the future
-  // words that have matured number capturePerDay * (D - fresh).
-  const libraryExhaustedAt = maturing.length > 0 ? maturing[maturing.length - 1]! : 0;
-  const viaFuture = base.fresh + remaining / capturePerDay;
-  const days = Math.ceil(Math.max(viaFuture, libraryExhaustedAt));
-  if (days > MAX_HORIZON_DAYS) {
-    return { ...shell, status: 'unreachable', days: null, range: null, fromFutureWords: remaining };
+  const days = Math.ceil(exact);
+  // How much of the target arrives from words not yet saved, at the day we
+  // actually land on — not from the pre-solve estimate, which assumed the whole
+  // existing library had already matured.
+  const maturedByThen = maturing.filter((d) => d <= exact).length;
+  return {
+    ...shell,
+    status: 'ok',
+    days,
+    range: rangeFor(days, confidence),
+    fromFutureWords: Math.max(0, need - maturedByThen),
+  };
+}
+
+/** Smallest day at which the projection reaches `target`, or null if it never
+ *  does inside MAX_HORIZON_DAYS. `masteredAt` is monotonically non-decreasing in
+ *  `day`, so a bisection is exact to any precision we care about — and, being
+ *  defined in terms of `masteredAt` itself, it can never drift from the curve. */
+function daysToReach(base: ProjectionBase, target: number): number | null {
+  if (masteredAt(base, 0) >= target) return 0;
+  if (masteredAt(base, MAX_HORIZON_DAYS) < target) return null;
+  let lo = 0;
+  let hi = MAX_HORIZON_DAYS;
+  // 50 halvings of a 10,000-day range resolves to well under a millisecond.
+  for (let i = 0; i < 50; i += 1) {
+    const mid = (lo + hi) / 2;
+    if (masteredAt(base, mid) >= target) hi = mid;
+    else lo = mid;
   }
-  return { ...shell, status: 'ok', days, range: rangeFor(days, confidence), fromFutureWords: remaining };
+  return hi;
 }
 
 /** Days until the user has `target` mastered words. Convenience wrapper — if

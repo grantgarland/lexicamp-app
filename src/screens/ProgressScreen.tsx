@@ -7,7 +7,7 @@
 // bottom nav is the persistent tab layout, not this screen.
 import type { TFunction } from 'i18next';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, useColorScheme, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { findLanguage } from '@/constants/languages';
@@ -17,8 +17,10 @@ import { forecast, horizon, nextCampTarget, projectionBase, resolve, SUMMIT_TARG
 import { formatUsername } from '@/domain/username';
 import { useTranslation } from '@/i18n';
 import { useActiveLang, useLeaderboard, useProgressData } from '@/query/hooks';
+import { usePullToRefresh } from '@/query/usePullToRefresh';
 import { TOUR_FIXTURE_PROGRESS } from '@/tour/tourFixture';
 import { useWalkthroughActive } from '@/tour/walkthrough';
+import { useIsDark } from '@/theme/appearance';
 import { TIERS, tierView } from '@/theme/tiers';
 import { EmptyState, IconBook, IconChart, IconCheck, IconFire, IconInfo, IconLock, IconMountain, IconStar, RawText, Screen, ForecastChart, SegmentedPills, SegmentedTabs, Sheet, SkeletonRows, TAB_BAR_FAB_OVERHANG, Tooltip } from '@/ui';
 
@@ -34,8 +36,12 @@ const masteredMinAt = (i: number) => MOUNTAIN_TIERS[i].masteredMin;
 const masteredMaxAt = (i: number) => (i + 1 < MOUNTAIN_TIERS.length ? MOUNTAIN_TIERS[i + 1].masteredMin : Number.POSITIVE_INFINITY);
 const tierRegistry = (i: number) => TIERS[i]; // MOUNTAIN_TIERS and TIERS share id order
 
+/** Every query this screen renders (prefixes — see usePullToRefresh). */
+const PROGRESS_REFRESH_KEYS = ['deckCards', 'progressStats', 'engagement', 'leaderboard'] as const;
+
 export function ProgressScreen() {
   const { t } = useTranslation();
+  const { theme } = useUnistyles();
   const [tab, setTab] = useState<SubTab>('route');
   const [info, setInfo] = useState<InfoKey | null>(null);
   const realData = useProgressData();
@@ -46,6 +52,10 @@ export function ProgressScreen() {
   // oblivious to the tour.
   const tourActive = useWalkthroughActive();
   const data = tourActive && realData.totalSaved === 0 ? { ...realData, ...TOUR_FIXTURE_PROGRESS } : realData;
+  // All three tabs at once, not just the visible one: switching tabs is not a
+  // refresh, so a user who pulls on Route and then taps Leaders would otherwise
+  // be looking at the stale board they just tried to refresh.
+  const refresh = usePullToRefresh(PROGRESS_REFRESH_KEYS);
 
   return (
     <Screen edges={['top']}>
@@ -61,7 +71,11 @@ export function ProgressScreen() {
           ]}
         />
       </View>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refresh.refreshing} onRefresh={refresh.onRefresh} tintColor={theme.color.textMuted} />}
+      >
         {tab === 'route' && <RouteTab data={data} t={t} onInfo={setInfo} />}
         {tab === 'projection' && <ProjectionTab data={data} t={t} />}
         {tab === 'leaders' && <LeadersTab t={t} />}
@@ -87,7 +101,7 @@ type TabProps = {
 // All-Time. The projection moved to its own tab.
 function RouteTab({ data, t, onInfo }: TabProps) {
   const { theme } = useUnistyles();
-  const isDark = useColorScheme() === 'dark';
+  const isDark = useIsDark();
   const saved = data.totalSaved;
 
   if (saved === 0) {
@@ -282,7 +296,7 @@ type ResolvedProjection = Projection & { tierId: string; cefr: string; target: n
 
 function ProjectionCard({ projection, t }: { projection: ResolvedProjection; t: TFunction }) {
   const { theme } = useUnistyles();
-  const isDark = useColorScheme() === 'dark';
+  const isDark = useIsDark();
 
   // Per-tier theming (Casey 2026-07-30): the card wears the colours of the tier
   // it projects TOWARD, resolved through the registry — Summit is amber, not the
@@ -376,7 +390,7 @@ function ProjectionCard({ projection, t }: { projection: ResolvedProjection; t: 
 // switching to Summit re-scales the curve instead of just relabelling it.
 // One series, so no legend: the section title names it.
 function ForecastSection({ base, target, t }: { base: ProjectionBase; target: number; t: TFunction }) {
-  const isDark = useColorScheme() === 'dark';
+  const isDark = useIsDark();
   const f = useMemo(() => forecast(base, { target }), [base, target]);
 
   // Nothing to plot before the first review, or when the curve is flat.
@@ -606,7 +620,7 @@ function LeaderRow({ entry, prevRank, t }: { entry: LeaderboardEntry; prevRank?:
 
 // ── Info sheets (CEFR ladder / FSRS stability) ────────────────────────────────
 function InfoSheet({ infoKey, t, onClose }: { infoKey: InfoKey | null; t: TFunction; onClose: () => void }) {
-  const isDark = useColorScheme() === 'dark';
+  const isDark = useIsDark();
   // Only the CEFR ladder remains: the FSRS stability explainer was retired with
   // the Inventory tab (Casey 2026-07-30).
   return (

@@ -18,6 +18,7 @@ import { directionLangs } from '@/domain/derive';
 import { type LookupResult, posTagI18nKey, qualityReasonI18nKey, senseDisplayWord, type UsageExample } from '@/domain/translation';
 import type { Profile, SearchDirection } from '@/domain/types';
 import { useTranslation } from '@/i18n';
+import { resolveSenseCardId } from '@/lib/senseCardId';
 import { useDeleteCard, useExamples, useLookup, useProfile, useSaveCard, useWords } from '@/query/hooks';
 import { LanguageIndicator } from '@/screens/shared/LanguageSwitcher';
 import { usePrefsStore } from '@/store/prefsStore';
@@ -358,7 +359,13 @@ export function SearchView({ onClose, bottomInset = 0 }: { onClose: () => void; 
     setPendingUnsave(null);
     if (result == null || i == null || outcome?.status !== 'found') return;
     const tid = outcome.result.translationId;
+    // `pendingUnsave` is an INDEX held across the confirm dialog. Sense order is
+    // stable for a given lookup (it comes straight off `outcome.result.senses`),
+    // so it cannot point at a different sense — but the row can vanish if the
+    // lookup resolves to fewer senses while the dialog is open, and reading
+    // `.id` off undefined would take the screen down mid-delete.
     const sense = result.translations[i];
+    if (sense == null) return;
     // Optimistic clear (also covers mock mode, where nothing persists) …
     setSaved((s) => {
       const n = new Set(s);
@@ -368,10 +375,16 @@ export function SearchView({ onClose, bottomInset = 0 }: { onClose: () => void; 
     setLocallyRemoved((s) => new Set(s).add(sense.id));
     // … then the REAL delete (A12b, sense-scoped per D10): this session's save
     // id, else the words row whose content IS this sense. On failure, unmask.
-    const cardId =
-      sessionCardIds.get(sense.id) ??
-      words.find((w) => w.translationId === tid && w.target === sense.word)?.id ??
-      (i === 0 ? words.find((w) => w.translationId === tid)?.id : undefined);
+    // The matching rules live in `resolveSenseCardId` (pure + unit-tested) — it
+    // feeds a destructive RPC, and the loose version of it deleted SIBLING
+    // senses (CRUD audit, 2026-08-04). It returns undefined rather than guess.
+    const cardId = resolveSenseCardId(
+      words,
+      tid,
+      result.translations.map((tr) => tr.word),
+      i,
+      sessionCardIds.get(sense.id),
+    );
     if (cardId != null) {
       deleteCard.mutate(cardId, {
         onError: () => {

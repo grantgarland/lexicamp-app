@@ -122,6 +122,7 @@ export const getTierByStability = (stability: number): Tier =>
 
 /** Theme-aware tier colors: in dark mode, merge the tier's `dark` overrides
  *  (deep tinted surfaces + light text + a brighter accent `color`). Light mode
- *  returns the tier unchanged. Consumers pass `useColorScheme() === 'dark'`. */
+ *  returns the tier unchanged. Consumers pass `useIsDark()` (theme/appearance) —
+ *  NOT RN's `useColorScheme()`, which lags the applied theme. */
 export const tierView = (tier: Tier, isDark: boolean): Tier =>
   isDark ? { ...tier, ...tier.dark } : tier;

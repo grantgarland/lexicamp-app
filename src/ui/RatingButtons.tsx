@@ -9,11 +9,12 @@
 // it makes the auto-select feel chosen rather than done to them. Any tap (on the
 // highlighted button or another) cancels the timer and takes the user's answer.
 import { useEffect, useRef } from 'react';
-import { Pressable, useColorScheme, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import Animated, { cancelAnimation, Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
+import { useIsDark } from '@/theme/appearance';
 import { Text } from './Text';
 
 export type Rating = 'again' | 'almost' | 'got_it';
@@ -46,7 +47,7 @@ export function RatingButtons({ onRate, prompt, highlighted = null, onAutoSelect
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const { color: c, palette: p } = theme;
-  const isDark = useColorScheme() === 'dark';
+  const isDark = useIsDark();
 
   // Dark-only: the neutral "again" and blue "almost" buttons used light palette
   // fills that don't flip (light box + now-light text = unreadable). Override to

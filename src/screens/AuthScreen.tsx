@@ -8,10 +8,11 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { Linking, Pressable, ScrollView, useColorScheme, View } from 'react-native';
+import { Linking, Pressable, ScrollView, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { authErrorKey, localAuthErrorKey } from '@/auth/errorMessages';
+import { useIsDark } from '@/theme/appearance';
 import { LEGAL_URLS } from '@/constants/legal';
 import {
   AppleSignInCancelled,
@@ -35,7 +36,7 @@ type Mode = 'signup' | 'signin' | 'forgot';
 
 export function AuthScreen() {
   const { theme } = useUnistyles();
-  const isDark = useColorScheme() === 'dark';
+  const isDark = useIsDark();
   const { t } = useTranslation();
   const router = useRouter();
   const [mode, setMode] = useState<Mode>('signup');

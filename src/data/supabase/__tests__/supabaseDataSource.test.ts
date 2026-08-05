@@ -34,7 +34,7 @@ function mockMakeChain(rec: RecordedCall) {
       return chain;
     };
   const chain: Record<string, unknown> = {};
-  for (const m of ['select', 'eq', 'gt', 'lte', 'in', 'order', 'limit', 'update', 'upsert', 'insert', 'delete']) {
+  for (const m of ['select', 'eq', 'gt', 'lte', 'in', 'or', 'order', 'limit', 'update', 'upsert', 'insert', 'delete']) {
     chain[m] = record(m);
   }
   chain.maybeSingle = () => {
@@ -275,6 +275,35 @@ describe('getDueCards', () => {
     const items = await supabaseDataSource.getDueCards(1, 'es');
     expect(items).toHaveLength(1);
     expect(mockCalls.filter((c) => c.table === 'cards')).toHaveLength(1);
+  });
+
+  // Quiz-repeat bug, 2026-08-04. The fill is "study ahead", and a word answered
+  // minutes ago is not ahead of anything — FSRS schedules off ACTUAL elapsed
+  // time, so re-rating at elapsed ≈ 0 teaches the model nothing while the user
+  // is handed back the session they just finished. A short queue must end in
+  // "All caught up!", not a rerun.
+  it('holds just-reviewed cards OUT of the study-ahead fill', async () => {
+    mockQueue.push(ok([{ ...CARD_ROW('due1'), card_fsrs_state: FSRS_ROW('due1', '2026-07-17T00:00:00Z') }]));
+    mockQueue.push(ok([]));
+    await supabaseDataSource.getDueCards(3, 'es');
+
+    const [, topUp] = mockCalls.filter((c) => c.table === 'cards');
+    const or = topUp!.ops.find(([name]) => name === 'or');
+    expect(or).toBeDefined();
+    const [filter, opts] = or![1] as [string, { referencedTable?: string }];
+    // Never-reviewed cards must survive it; the cooldown applies to the rest.
+    expect(filter).toContain('last_review_at.is.null');
+    expect(filter).toContain('last_review_at.lt.');
+    expect(opts.referencedTable).toBe('card_fsrs_state');
+  });
+
+  it('leaves the DUE pull unfiltered by the cooldown', async () => {
+    // A lapsed card goes into relearning and is due again in MINUTES by design.
+    // It returns through the due pull, which the cooldown must not touch.
+    mockQueue.push(ok([{ ...CARD_ROW('a'), card_fsrs_state: FSRS_ROW('a', '2026-07-17T00:00:00Z') }]));
+    await supabaseDataSource.getDueCards(1, 'es');
+    const [duePull] = mockCalls.filter((c) => c.table === 'cards');
+    expect(duePull!.ops.find(([name]) => name === 'or')).toBeUndefined();
   });
 });
 

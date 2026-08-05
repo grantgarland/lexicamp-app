@@ -251,7 +251,16 @@ export function useDueCards(limit: number, deckId?: string) {
     queryFn: () => ds.getDueCards(limit, activeLang, deckId),
     enabled: activeLang != null,
   });
-  return { cards: q.data ?? [], isLoading: activeLang == null || q.isLoading };
+  return {
+    cards: q.data ?? [],
+    isLoading: activeLang == null || q.isLoading,
+    // `isFetching` (not `isLoading`) is what tells a caller "this list may be a
+    // cached list from a previous session, and a fresher one is on its way".
+    // isLoading is false whenever ANY cached data exists, so a screen that
+    // freezes the queue on first paint would freeze the stale one — see the
+    // snapshot guard in QuizScreen (Casey, quiz-repeat bug 2026-08-04).
+    isFetching: q.isFetching,
+  };
 }
 
 // Stable empty fallbacks. `?? []` inline would allocate a fresh array on every

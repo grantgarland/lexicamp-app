@@ -5,8 +5,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-/** 'empty' = brand-new user; the rest are mastery-tier scenarios (registry ids). */
-export type DevUserState = 'empty' | 'bc' | 'abc' | 'hc' | 'sr' | 'summit';
+/** 'empty' = brand-new user; the rest are mastery-tier scenarios (registry ids).
+ *  'veteran' is the one that is NOT a tier: a library PAST the summit (3,000+
+ *  mastered), for validating the late-stage experience — projection horizons,
+ *  the mastery forecast, list performance and any copy that assumes the summit
+ *  is still ahead of you. */
+export type DevUserState = 'empty' | 'bc' | 'abc' | 'hc' | 'sr' | 'summit' | 'veteran';
 export type DevPlan = 'free' | 'paid';
 
 interface DevState {
@@ -46,11 +50,19 @@ export const useDevStore = create<DevState>()(
   ),
 );
 
-export const USER_STATE_LABELS: { value: DevUserState; label: string }[] = [
+export const USER_STATE_LABELS: { value: DevUserState; label: string; mockOnly?: true }[] = [
   { value: 'empty', label: 'New' },
   { value: 'bc', label: 'Base Camp' },
   { value: 'abc', label: 'Adv. Base' },
   { value: 'hc', label: 'High Camp' },
   { value: 'sr', label: 'Summit Ridge' },
   { value: 'summit', label: 'Summit' },
+  // MOCK ONLY. Live mode switches scenarios by signing into a seeded
+  // `dev-<scenario>@lexicamp.app` account, and there is no dev-veteran: seeding
+  // one means 4,300 real cards, and therefore 4,300 gate-approved
+  // translations_cache rows, in the production database. The fixture exists to
+  // exercise the late-stage UI, which the mock source does offline and
+  // deterministically — so the chip is hidden in live mode rather than offering
+  // a sign-in that can only fail. (DevBadge filters on this flag.)
+  { value: 'veteran', label: 'Veteran 3k', mockOnly: true },
 ];

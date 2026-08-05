@@ -4,12 +4,13 @@
 // stays a thin hub.
 import DateTimePicker, { type DateTimePickerChangeEvent } from '@react-native-community/datetimepicker';
 import { type ReactNode, useEffect, useState } from 'react';
-import { Linking, Platform, Pressable, useColorScheme, View } from 'react-native';
+import { Linking, Platform, Pressable, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { SvgXml } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { languageName } from '@/domain/derive';
+import { useIsDark } from '@/theme/appearance';
 import type { LanguageCode, NotificationPrefs, Profile } from '@/domain/types';
 import { formatUsername, generateUsernameCandidate } from '@/domain/username';
 import { useTranslation } from '@/i18n';
@@ -250,6 +251,23 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
         confirmLabel={t('settings.deleteConfirm')}
         cancelLabel={t('settings.cancel')}
         destructive
+        // Type-to-confirm: `delete_own_account` has no undo and no recovery
+        // window, so a single destructive tap is not enough friction.
+        //
+        // A short LOCALIZED word, not the account email — Sign in with Apple
+        // hands out relay addresses like `a1b2c3d4e5@privaterelay.appleid.com`,
+        // and demanding that be typed on a phone keyboard turns a legitimate
+        // deletion into a chore (and pushes users to support instead).
+        //
+        // The word is read from the locale file and passed to the dialog, which
+        // compares against THAT string and renders it in the prompt from the
+        // same value. A translator can change 'delete' to anything without
+        // touching code — nothing here compares to a hardcoded constant.
+        typeToConfirm={{
+          word: t('settings.deleteAccountConfirmWord'),
+          label: t('settings.deleteAccountConfirmLabel', { word: t('settings.deleteAccountConfirmWord') }),
+          placeholder: t('settings.deleteAccountConfirmPlaceholder', { word: t('settings.deleteAccountConfirmWord') }),
+        }}
         onConfirm={() => {
           if (deleting) return;
           setDeleting(true);
@@ -633,7 +651,7 @@ export function SupportSheet({ visible, onClose }: { visible: boolean; onClose: 
 // binary. "Made with ♥" is gone; the tagline already carries the warmth.
 export function AboutSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { t } = useTranslation();
-  const isDark = useColorScheme() === 'dark';
+  const isDark = useIsDark();
   return (
     <Sheet visible={visible} onClose={onClose} title={t('settings.aboutTitle')}>
       <View style={styles.aboutHead}>

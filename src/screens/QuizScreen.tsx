@@ -2,11 +2,12 @@
 // Reads the due queue through the state layer (`useDueCards`), buffers ratings
 // in-memory, and commits the batch on completion (`useCommitQuizSession`) per 03's
 // quiz write pattern. Composes the kit (QuizCardFront/Back, RatingButtons, TierBadge)
-// + screen-specific phases built inline (top bar, end, stats, tier-promo, exit confirm).
+// + screen-specific phases built inline (top bar, end, stats, milestone, exit confirm).
 import { useEffect, useRef, useState } from 'react';
 import type { TFunction } from 'i18next';
 import { useRouter } from 'expo-router';
 import { ActivityIndicator, Image, Keyboard, Pressable, ScrollView, View } from 'react-native';
+import { SvgXml } from 'react-native-svg';
 import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -22,7 +23,7 @@ import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
 import { tourFixtureCards } from '@/tour/tourFixture';
 import { isQuizResultsStep, isQuizRevealStep, useTourScene } from '@/tour/tourScene';
 import { tourTargets, useWalkthroughActive, WalkthroughOverlayHost } from '@/tour/walkthrough';
-import { type TierId } from '@/theme/tiers';
+import { BRAND_MARK_KNOCKOUT_XML } from '@/ui/brandMark';
 import {
   Button,
   Confetti,
@@ -42,15 +43,17 @@ import {
   Tooltip,
 } from '@/ui';
 
-// Sanctioned Pika moments only (Q-07/Q-08 end, Q-10 mastery) — assets from the brand kit.
+// Sanctioned Pika moments only (Q-07/Q-08 end, Q-10 milestone) — assets from the brand kit.
 import pikaGoodJob from '../../assets/images/pika/good-job.png';
 import pikaHugs from '../../assets/images/pika/hugs.png';
 import pikaCelebrate from '../../assets/images/pika/celebrate.png';
 
 type Phase = 'quiz' | 'end' | 'stats' | 'promo';
 
-// Summit celebration confetti (Q-10) — warm golds + a few accent flecks (milestone spec).
-const SUMMIT_CONFETTI = ['#e87722', '#f7a855', '#f5b91e', '#d97706', '#2f5e7e', '#459a6b', '#f472b6'];
+// Session-milestone confetti (Q-10) — warm golds + a few accent flecks
+// (milestone spec). Brand palette, not a tier's: the screen no longer belongs to
+// any one camp.
+const MILESTONE_CONFETTI = ['#e87722', '#f7a855', '#f5b91e', '#d97706', '#2f5e7e', '#459a6b', '#f472b6'];
 
 // Per-word review outcome for the results screen — the ACTUAL FSRS recompute
 // the commit persists, expressed as memory strength (days), never tiers.
@@ -106,7 +109,7 @@ export function QuizScreen({ deckId, deckName }: QuizScreenProps = {}) {
   const { isPaid } = useEntitlement();
   const quizLength = usePrefsStore((s) => s.quizLength);
   const sessionCap = isPaid ? quizLength : QUIZ_LENGTH_FREE;
-  const { cards: realCards, isLoading } = useDueCards(sessionCap, deckId);
+  const { cards: realCards, isLoading, isFetching: dueFetching } = useDueCards(sessionCap, deckId);
   // WALKTHROUGH: a brand-new account has nothing due, which left w6/w7 pointing
   // at an empty state. Substitute an in-memory demo session so the rating gutter
   // and results screen are real, tappable UI. Only when there is genuinely
@@ -146,11 +149,31 @@ export function QuizScreen({ deckId, deckName }: QuizScreenProps = {}) {
   // the way the render-adjust above does. The effect fires post-paint, which is
   // exactly "the first card is actually on screen."
   const startedAt = useRef<number | null>(null);
-  if (sessionCards == null && cards.length > 0) setSessionCards(cards);
+  // Snapshot only once the queue in hand was fetched FOR THIS SESSION.
+  //
+  // THE QUIZ-REPEAT BUG (Casey, 2026-08-04): this used to fire on the first
+  // render with any cards at all. TanStack serves a cached list synchronously on
+  // mount and refetches in the background, so entering the quiz right after a
+  // session froze the queue to the PREVIOUS session's ten cards — and this
+  // snapshot is deliberately never re-read, so the fresh list that landed
+  // milliseconds later was ignored for the whole session. The user answered the
+  // same ten words again; the server, which re-reads state at commit time, duly
+  // logged ten reviews with elapsed_days = 0 (verified in review_logs: the
+  // 16:06 and 16:12 sessions are the same ten card ids).
+  //
+  // Waiting for `isFetching` to clear is the whole fix: after a commit,
+  // `useCommitQuizSession` invalidates ['dueCards'], so the next mount ALWAYS
+  // refetches and we hold until the real queue arrives. When the cache is
+  // genuinely fresh there is no refetch, isFetching is false, and the snapshot
+  // is immediate as before.
+  if (sessionCards == null && !dueFetching && cards.length > 0) setSessionCards(cards);
   useEffect(() => {
     if (startedAt.current == null && cards.length > 0) startedAt.current = Date.now();
   }, [cards.length]);
-  const sc = sessionCards ?? cards;
+  // While the snapshot is deliberately being held back (above), falling through
+  // to the live `cards` would put the stale queue on screen regardless — the
+  // guard has to cover the render path too, not just the freeze.
+  const sc = sessionCards ?? (dueFetching ? [] : cards);
 
   // WALKTHROUGH w7 ("Your results"): the step used to leave card 1 of N on
   // screen while the tooltip described a results view the user could not see
@@ -265,7 +288,7 @@ export function QuizScreen({ deckId, deckName }: QuizScreenProps = {}) {
   if (phase === 'promo') {
     return (
       <>
-        <TierPromoScreen promotions={promotions} onContinue={() => router.back()} />
+        <SessionMilestoneScreen promotions={promotions} onContinue={() => router.back()} />
         <WalkthroughOverlayHost scope="quiz" />
       </>
     );
@@ -277,7 +300,10 @@ export function QuizScreen({ deckId, deckName }: QuizScreenProps = {}) {
   if (effectivePhase === 'quiz' && card == null) {
     return (
       <Screen edges={['top', 'bottom']}>
-        {isLoading ? (
+        {/* `dueFetching` too, not just `isLoading`: while a refetch is in
+            flight we are deliberately holding the snapshot back, and without
+            this the screen would flash "All caught up!" in the gap. */}
+        {isLoading || dueFetching ? (
           <View style={styles.centered}>
             <ActivityIndicator />
           </View>
@@ -599,24 +625,29 @@ function RatingPill({ rating, gained }: { rating: UiRating; gained: number }) {
   );
 }
 
-// ── Mastery / Summit celebration (Q-10) ──────────────────────────────────────
-function TierPromoScreen({ promotions, onContinue }: { promotions: PromotedWord[]; onContinue: () => void }) {
+// ── Session milestone (Q-10) ─────────────────────────────────────────────────
+// GENERICIZED 2026-08-04. This screen used to pick ONE tier — the highest any
+// word reached — and frame the whole celebration around it: that tier's badge,
+// and a headline that either said "You reached the Summit!" or "New camp
+// reached!". A single session routinely promotes words into DIFFERENT camps, so
+// the frame was wrong more often than right: three words moving into High Camp
+// and one into Summit rendered a Summit badge over a Summit headline, and the
+// other three words read as though they had summited too.
+//
+// The screen now says what actually happened — N words moved up — over the
+// generic Lexicamp mark. Tier language lives where it is true: on each word's
+// own row, which already carries its real from → to.
+export function SessionMilestoneScreen({ promotions, onContinue }: { promotions: PromotedWord[]; onContinue: () => void }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  // Highest tier reached this session drives the badge + headline: full Summit
-  // mastery celebration only when a word actually crossed into summit;
-  // otherwise the generic tier-up milestone.
-  const order: TierId[] = ['bc', 'abc', 'hc', 'sr', 'summit'];
-  const topTier = promotions.reduce<TierId>((acc, p) => (order.indexOf(p.to) > order.indexOf(acc) ? p.to : acc), 'abc');
-  const summit = topTier === 'summit';
-  // 18-session (Casey): STATIC layout — badge/headline/Pika/CTA never scroll,
+  // 18-session (Casey): STATIC layout — mark/headline/Pika/CTA never scroll,
   // so the CTA can't fall below the fold. Only the promoted-words list scrolls,
   // in its own bounded window (flexShrink absorbs long sessions).
   return (
     <View style={styles.promoRoot}>
-      <Confetti colors={SUMMIT_CONFETTI} />
+      <Confetti colors={MILESTONE_CONFETTI} />
       <View style={[styles.promoStatic, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 24 }]}>
-        {/* Ascending stars over the badge */}
+        {/* Ascending stars over the mark */}
         <Animated.View entering={FadeIn.duration(400).delay(500)} style={styles.promoStars}>
           {[0, 1, 2, 3, 4].map((i) => (
             <RawText key={i} style={[styles.promoStarTop, { fontSize: 10 + i * 2 }]}>
@@ -625,23 +656,26 @@ function TierPromoScreen({ promotions, onContinue }: { promotions: PromotedWord[
           ))}
         </Animated.View>
 
-        {/* Badge of the highest tier reached — pops in with a gold glow */}
-        <Animated.View entering={ZoomIn.duration(560).delay(150)} style={styles.promoBadgeWrap}>
-          <TierBadge tier={topTier} variant="badge" px={116} />
+        {/* The Lexicamp mark, knocked out for the dark celebration surface —
+            one asset for every session, whatever mix of camps it produced. */}
+        <Animated.View entering={ZoomIn.duration(560).delay(150)} style={styles.promoMarkWrap}>
+          <SvgXml xml={BRAND_MARK_KNOCKOUT_XML} width={104} height={104} />
         </Animated.View>
 
         <Animated.View entering={FadeInDown.duration(400).delay(320)} style={styles.promoHead}>
-          <RawText style={styles.promoTitle}>{summit ? t('quiz.masteryHeadline') : t('quiz.promoHeadline')}</RawText>
-          <RawText style={styles.promoSub}>{summit ? t('quiz.masterySub') : t('quiz.promoSubtitle')}</RawText>
+          <RawText style={styles.promoTitle}>{t('quiz.milestoneHeadline', { count: promotions.length })}</RawText>
+          <RawText style={styles.promoSub}>{t('quiz.milestoneSub', { count: promotions.length })}</RawText>
         </Animated.View>
 
         {promotions.length > 0 && (
           <Animated.View entering={FadeInDown.duration(400).delay(440)} style={styles.promoList}>
-            <RawText style={styles.promoWordsLabel}>{t('quiz.masteryWordsLabel')}</RawText>
+            <RawText style={styles.promoWordsLabel}>{t('quiz.milestoneWordsLabel')}</RawText>
             <ScrollView style={styles.promoListScroll} showsVerticalScrollIndicator contentContainerStyle={styles.promoListContent}>
               {promotions.map((p) => (
                 <View key={p.cardId} style={styles.promoWordRow}>
-                  <RawText style={styles.promoStar}>★</RawText>
+                  {/* Per-word chip: THIS word's new camp, at word scale. The
+                      screen makes no claim; each row makes its own. */}
+                  <TierBadge tier={p.to} variant="chip" size="sm" style={styles.promoWordChip} />
                   <View style={styles.promoWordBody}>
                     <RawText style={styles.promoWord}>{p.word}</RawText>
                     <RawText style={styles.promoWordTiers}>
@@ -730,7 +764,7 @@ const styles = StyleSheet.create((theme) => {
     promoListContent: { paddingBottom: 4 },
     promoStars: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, marginBottom: 10 },
     promoStarTop: { color: '#f7a855' },
-    promoBadgeWrap: { marginBottom: 18, borderRadius: 999, boxShadow: '0 0 28px rgba(232, 119, 34, 0.45)' },
+    promoMarkWrap: { marginBottom: 18, borderRadius: 999, boxShadow: '0 0 28px rgba(232, 119, 34, 0.45)' },
     promoHead: { alignItems: 'center', marginBottom: 14 },
     promoTitle: { fontFamily: fonts.serif.bold, fontSize: 26, color: '#fff', textAlign: 'center', letterSpacing: -0.4, lineHeight: 32 },
     promoSub: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 20, color: 'rgba(255,255,255,0.6)', textAlign: 'center', maxWidth: 250, marginTop: 8 },
@@ -740,7 +774,7 @@ const styles = StyleSheet.create((theme) => {
     // Star pinned to the first line; word + tier transition stack in a flexible column
     // (minWidth:0 lets long words/expressions wrap instead of overflowing the card).
     promoWordRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, marginTop: 5 },
-    promoStar: { fontSize: 12, color: '#f7a855', marginTop: 3 },
+    promoWordChip: { marginTop: 2 },
     promoWordBody: { flex: 1, minWidth: 0 },
     promoWord: { fontFamily: fonts.serif.semibold, fontSize: 15, color: '#fff' },
     promoWordTiers: { fontFamily: fonts.mono.regular, fontSize: 11, color: 'rgba(255,255,255,0.75)', marginTop: 2 },

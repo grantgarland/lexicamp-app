@@ -53,7 +53,14 @@ export interface TextProps extends RNTextProps {
 export function Text({ variant = 'body', color, align, style, maxFontSizeMultiplier = FONT_SCALE_MAX, ...rest }: TextProps) {
   const { theme } = useUnistyles();
   return (
-    <RNText
+    // `UnistylesText`, NOT a bare RNText — for exactly the reason spelled out
+    // above RawText. This variant component had the same hole and kept it after
+    // RawText was fixed (2026-08-01): a runtime light↔dark switch left every
+    // `Text` node on the PREVIOUS theme's colors, which is invisible for muted
+    // greys and glaring for `textStrong` — headings rendered near-black on the
+    // dark canvas. Reproduced on the simulator 2026-08-04 by flipping appearance
+    // with the app in the foreground.
+    <UnistylesText
       maxFontSizeMultiplier={maxFontSizeMultiplier}
       style={[
         styles[variant],

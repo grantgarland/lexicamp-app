@@ -67,9 +67,14 @@ const base = {
   motion,
 } as const;
 
-export const lightTheme = base;
+// `isDark` rides ON the theme so "which mode am I in?" has exactly ONE answer,
+// reachable everywhere the theme already is. It replaces RN's `useColorScheme()`
+// at every call site (see `useIsDark` in theme/appearance.ts for why the two
+// disagreed). Typed as `boolean`, not the literal, so `theme.isDark` is usable
+// from either theme without narrowing to a constant.
+export const lightTheme = { ...base, isDark: false as boolean };
 // Dark diverges ONLY in the semantic color set; all other tokens are shared.
-export const darkTheme = { ...base, color: colorDark } as const;
+export const darkTheme = { ...base, color: colorDark, isDark: true as boolean };
 
 export const breakpoints = { xs: 0, sm: 360, md: 768, lg: 1024 } as const;
 

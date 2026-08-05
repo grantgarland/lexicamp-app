@@ -2,13 +2,14 @@
 // and the deck detail sheet. Tier + memory-strength card, example, a DetailStats strip
 // (Next review · Reviews · Added), and a delete action.
 import { useState } from 'react';
-import { Pressable, useColorScheme, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import type { WordListItem } from '@/data/DataSource';
 import { useTranslation } from '@/i18n';
 import { addedLabel, dueLabel } from '@/lib/relativeTime';
 import { useExamples } from '@/query/hooks';
+import { useIsDark } from '@/theme/appearance';
 import { getTierByStability, tierView } from '@/theme/tiers';
 import { DetailStats } from './DetailStats';
 import { IconArchive, IconMoreVertical, IconTrash } from './icons';
@@ -32,7 +33,7 @@ export interface WordDetailSheetProps {
 
 export function WordDetailSheet({ word, onClose, onDelete, onToggleArchive, onEditTranslation }: WordDetailSheetProps) {
   const { theme } = useUnistyles();
-  const isDark = useColorScheme() === 'dark';
+  const isDark = useIsDark();
   const { t } = useTranslation();
   const tier = word ? tierView(getTierByStability(word.stability), isDark) : null;
   // Examples (16 §3) are USER-GATED (2026-07-22): a saved word with no cached

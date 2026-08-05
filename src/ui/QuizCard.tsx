@@ -2,10 +2,11 @@
 // Front has two modes: `recognition` (tap to reveal) and `recall` (WordCharInput).
 // Colors come from the tier registry; the screen owns the flip between front/back.
 import type { TFunction } from 'i18next';
-import { Pressable, useColorScheme, View, type ViewStyle } from 'react-native';
+import { Pressable, View, type ViewStyle } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
+import { useIsDark } from '@/theme/appearance';
 import { getTier, tierView, type Tier, type TierId } from '@/theme/tiers';
 import { IconChevronDown } from './icons';
 import { RawText as RNText } from './Text';
@@ -64,7 +65,7 @@ export interface QuizCardFrontProps {
 
 export function QuizCardFront({ tier, card, mode = 'recognition', onReveal, onRecallComplete, autoFocus = true, revealCta = true, style }: QuizCardFrontProps) {
   const { t: translate } = useTranslation();
-  const isDark = useColorScheme() === 'dark';
+  const isDark = useIsDark();
   const tr = tierView(toTier(tier), isDark);
   const recall = mode === 'recall';
 
@@ -112,7 +113,7 @@ export function QuizCardFront({ tier, card, mode = 'recognition', onReveal, onRe
  *  interaction while the keyboard is up. */
 export function QuizRevealButton({ tier, mode = 'recognition', onPress, style }: { tier: Tier | TierId | string; mode?: QuizMode; onPress: () => void; style?: ViewStyle }) {
   const { t: translate } = useTranslation();
-  const isDark = useColorScheme() === 'dark';
+  const isDark = useIsDark();
   const tr = tierView(toTier(tier), isDark);
   if (mode === 'recall') {
     return (
@@ -151,7 +152,7 @@ export interface QuizCardBackProps {
 export function QuizCardBack({ tier, card, style }: QuizCardBackProps) {
   const { theme } = useUnistyles();
   const { t: translate } = useTranslation();
-  const isDark = useColorScheme() === 'dark';
+  const isDark = useIsDark();
   const tr = tierView(toTier(tier), isDark);
 
   return (

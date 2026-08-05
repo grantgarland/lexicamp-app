@@ -3,12 +3,13 @@
 // (search-plus → blue + rotate-to-× when a sheet is open). Frosted nav surface via
 // expo-glass-effect on liquid-glass devices, opaque-white fallback elsewhere.
 import { type ComponentType, useEffect, useState } from 'react';
-import { Animated, Pressable, useColorScheme, View } from 'react-native';
+import { Animated, Pressable, View } from 'react-native';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
+import { useIsDark } from '@/theme/appearance';
 import { IconChart, IconGear, IconHome, IconList, IconSearchPlus, type IconProps } from './icons';
 import { Text } from './Text';
 
@@ -86,7 +87,7 @@ export function TabBar({ activeTab, onTabChange, sheetOpen = false, onFabPress, 
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   // Frosted-glass surface follows the device color scheme (adaptive themes).
-  const scheme: 'light' | 'dark' = useColorScheme() === 'dark' ? 'dark' : 'light';
+  const scheme: 'light' | 'dark' = useIsDark() ? 'dark' : 'light';
   // Lazy `useState` init (not `useRef().current`) so the stable Animated.Value can be used
   const [rot] = useState(() => new Animated.Value(sheetOpen ? 1 : 0));
 

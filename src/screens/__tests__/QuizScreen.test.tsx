@@ -87,8 +87,11 @@ const mockCard = {
     learningSteps: 0,
   },
 };
+// Mutable so the repeat-bug test can model a stale cache being replaced by a
+// fresh fetch mid-mount (see the bottom of this file).
+let mockDue = { cards: [], isLoading: false, isFetching: false };
 jest.mock('@/query/hooks', () => ({
-  useDueCards: () => ({ cards: [mockCard, { ...mockCard, id: 'c2', fsrs: { ...mockCard.fsrs, cardId: 'c2' } }], isLoading: false }),
+  useDueCards: () => mockDue,
   useHomeData: () => ({ streakDays: 3 }),
   useCommitQuizSession: () => ({ mutate: jest.fn() }),
   useEntitlement: () => ({ entitlement: undefined, isPaid: false, isLoading: false }), // 17 §S2: session cap read
@@ -112,8 +115,12 @@ import { QuizScreen } from '@/screens/QuizScreen';
 import { useTourScene } from '@/tour/tourScene';
 import i18n from '@/i18n';
 
+const CARD_A = mockCard;
+const CARD_B = { ...mockCard, id: 'c2', fsrs: { ...mockCard.fsrs, cardId: 'c2' } };
+
 beforeEach(() => {
   mockBack.mockClear();
+  mockDue = { cards: [CARD_A, CARD_B], isLoading: false, isFetching: false };
   useTourScene.getState().setStepId(null);
 });
 afterAll(() => useTourScene.getState().setStepId(null));
@@ -176,4 +183,60 @@ test('w7 shows the per-word results LIST, not the "Great session!" splash', () =
   // stats list shows that. It used to render the end splash instead.
   expect(screen.getByText(i18n.t('quiz.sessionResults'))).toBeTruthy();
   expect(screen.queryByText(i18n.t('quiz.endGreat'))).toBeNull();
+});
+
+// ── Quiz-repeat bug (Casey, 2026-08-04) ─────────────────────────────────────
+// Reported: finishing a session and starting another served the SAME words.
+// Confirmed in production review_logs — the 16:06 and 16:12 sessions were the
+// same ten card ids, the second one logged at elapsed_days = 0.
+//
+// Cause: the session snapshot fired on the first render with ANY cards. TanStack
+// hands back a cached list synchronously on mount and refetches in the
+// background, so entering the quiz right after a commit froze the queue to the
+// PREVIOUS session — and the snapshot is deliberately never re-read, so the
+// fresh list that arrived milliseconds later was ignored for the whole session.
+
+const STALE = [
+  { ...mockCard, id: 'stale1', fsrs: { ...mockCard.fsrs, cardId: 'stale1' } },
+  { ...mockCard, id: 'stale2', fsrs: { ...mockCard.fsrs, cardId: 'stale2' } },
+];
+const FRESH = [
+  { ...mockCard, id: 'fresh1', fsrs: { ...mockCard.fsrs, cardId: 'fresh1' } },
+  { ...mockCard, id: 'fresh2', fsrs: { ...mockCard.fsrs, cardId: 'fresh2' } },
+];
+
+test('does not snapshot a cached queue while a fresh one is still being fetched', () => {
+  // Mount exactly as it happens after a commit: cached data present, refetch in
+  // flight. The old code froze the session to STALE right here.
+  mockDue = { cards: STALE, isLoading: false, isFetching: true };
+  const { rerender } = render(<QuizScreen />);
+  expect(screen.queryByText('hola')).toBeNull(); // holding, not showing a card
+
+  // Refetch lands.
+  mockDue = { cards: FRESH, isLoading: false, isFetching: false };
+  rerender(<QuizScreen />);
+
+  // The session runs on the FRESH queue. `1 / 2` proves a session started at all.
+  expect(screen.getByText('1')).toBeTruthy();
+  expect(screen.getByText('hola')).toBeTruthy();
+});
+
+test('snapshots immediately when the cached queue is not being refetched', () => {
+  // The common case must not regress into an extra spinner frame.
+  mockDue = { cards: FRESH, isLoading: false, isFetching: false };
+  render(<QuizScreen />);
+  expect(screen.getByText('hola')).toBeTruthy();
+});
+
+test('holds the session on the snapshot once taken, ignoring later refetches', () => {
+  // The reason the snapshot exists: committing invalidates ['dueCards'] and the
+  // refetch comes back re-scheduled, which must not reshuffle the results the
+  // user is reading.
+  mockDue = { cards: FRESH, isLoading: false, isFetching: false };
+  const { rerender } = render(<QuizScreen />);
+  expect(screen.getByText('1')).toBeTruthy();
+
+  mockDue = { cards: [], isLoading: false, isFetching: false };
+  rerender(<QuizScreen />);
+  expect(screen.getByText('hola')).toBeTruthy(); // still mid-session, not "All caught up"
 });

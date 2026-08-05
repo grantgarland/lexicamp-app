@@ -65,6 +65,13 @@ const mockSnapshot = {
 // estimate. Tests drive both sides of that.
 const mockPace = { value: null };
 
+// Pull-to-refresh reaches for the real QueryClient; this suite mocks the data
+// layer wholesale and mounts no provider. Refresh has its own tests.
+jest.mock('@/query/usePullToRefresh', () => ({
+  usePullToRefresh: () => ({ refreshing: false, onRefresh: jest.fn() }),
+  REFRESH_THROTTLE_MS: 5000,
+}));
+
 jest.mock('@/query/hooks', () => ({
   useHomeData: () => ({ snapshot: mockSnapshot, streakDays: 3, isLoading: false }),
   useProgressData: () => ({ bestStreak: 5, isLoading: false }),

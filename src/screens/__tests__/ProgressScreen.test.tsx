@@ -109,6 +109,13 @@ const mockProgressData = {
   isLoading: false,
 };
 
+// Pull-to-refresh reaches for the real QueryClient; this suite mocks the data
+// layer wholesale and mounts no provider. Refresh has its own tests.
+jest.mock('@/query/usePullToRefresh', () => ({
+  usePullToRefresh: () => ({ refreshing: false, onRefresh: jest.fn() }),
+  REFRESH_THROTTLE_MS: 5000,
+}));
+
 jest.mock('@/query/hooks', () => ({
   useProgressData: () => mockProgressData,
   useLeaderboard: () => ({ entries: [], isLoading: false }),

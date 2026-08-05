@@ -18,12 +18,10 @@ import { View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Path, Stop, Line as SvgLine, Text as SvgText } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { dayAtValue, type ForecastChartPoint } from './forecastGeometry';
 import { RawText as Text } from './Text';
 
-export interface ForecastChartPoint {
-  day: number;
-  mastered: number;
-}
+export type { ForecastChartPoint };
 
 export interface ForecastChartThreshold {
   /** Y value of the dashed line (a camp's mastered-word target). */
@@ -89,10 +87,13 @@ export function ForecastChart({
     const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.day).toFixed(2)},${y(p.mastered).toFixed(2)}`).join(' ');
     const area = `${line} L${x(horizonDays).toFixed(2)},${(height - PAD_B).toFixed(2)} L${x(0).toFixed(2)},${(height - PAD_B).toFixed(2)} Z`;
 
-    const cross =
-      threshold?.day != null && threshold.day >= 0 && threshold.day <= horizonDays
-        ? { cx: x(threshold.day), cy: y(threshold.value) }
-        : null;
+    // The marker sits where the stroke meets the dashed line — measured off the
+    // drawing itself, never mapped from the model's day (see `dayAtValue`).
+    // `threshold.day` still GATES it: a null day means the model puts the
+    // crossing beyond the horizon, and a dot with no caption to explain it is
+    // worse than no dot.
+    const crossDay = threshold?.day != null ? dayAtValue(points, threshold.value) : null;
+    const cross = crossDay != null && crossDay >= 0 && crossDay <= horizonDays ? { cx: x(crossDay), cy: y(threshold!.value) } : null;
 
     const thresholdY = threshold != null ? y(threshold.value) : null;
     return { line, area, thresholdY, cross, x, y };

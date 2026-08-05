@@ -81,6 +81,12 @@ const DUE_JOIN = CARD_JOIN.replace('card_fsrs_state (', 'card_fsrs_state!inner (
  *  replaces, just sourced from the server instead of a slice). */
 const DECK_MEMBER_JOIN = CARD_JOIN + ', deck_cards!inner ( deck_id )';
 
+/** How recently a card must have been reviewed to be held OUT of the study-ahead
+ *  fill (see getDueCards). Long enough to cover "finish a session, immediately
+ *  start another", short enough that a genuine later-in-the-day top-up session
+ *  can still reach ahead. */
+const FILL_COOLDOWN_MS = 30 * 60 * 1000;
+
 /** Deck-scoped DUE variant — both `!inner`s matter, for different reasons:
  *  card_fsrs_state to exclude cards with no schedule, deck_cards to exclude
  *  non-members. */
@@ -444,12 +450,25 @@ export const supabaseDataSource: DataSource = {
 
     const remaining = limit - rows.length;
     if (remaining > 0) {
+      // The fill is "study ahead", and a word answered minutes ago is not ahead
+      // of anything: FSRS schedules from ACTUAL elapsed time, so re-rating at
+      // elapsed ≈ 0 teaches the model nothing and the user just sees the session
+      // they only just finished. Excluding the cooldown window is what makes a
+      // short queue end in "All caught up!" instead of a rerun (Casey,
+      // quiz-repeat bug 2026-08-04 — this is the second route into that symptom;
+      // the first was a stale snapshot in QuizScreen).
+      //
+      // Only the FILL is filtered. A lapsed card put into relearning is due
+      // again in minutes BY DESIGN, and it comes back through the due pull
+      // above, which this does not touch.
+      const cooldownIso = new Date(Date.now() - FILL_COOLDOWN_MS).toISOString();
       const nextQuery = supabase
         .from('cards')
         .select(deckId != null ? DECK_DUE_JOIN : DUE_JOIN)
         .eq('suspended', false)
         .eq('decks.target_lang', target)
-        .gt('card_fsrs_state.due_at', nowIso);
+        .gt('card_fsrs_state.due_at', nowIso)
+        .or(`last_review_at.is.null,last_review_at.lt.${cooldownIso}`, { referencedTable: 'card_fsrs_state' });
       if (deckId != null) nextQuery.eq('deck_cards.deck_id', deckId);
       const { data: nextData, error: nextErr } = await nextQuery
         .order('card_fsrs_state(due_at)', { ascending: true })

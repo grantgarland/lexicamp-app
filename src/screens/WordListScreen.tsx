@@ -8,7 +8,7 @@
 // row tap + Add-to-Deck are wired as TODOs.
 import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { FlatList, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, ScrollView, TextInput, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
@@ -28,6 +28,7 @@ import {
   useSetCardTargetOverride,
   useWords,
 } from '@/query/hooks';
+import { usePullToRefresh } from '@/query/usePullToRefresh';
 import type { DeckSummary, WordListItem } from '@/data/DataSource';
 import { addedLabel } from '@/lib/relativeTime';
 import { useDeferredReady } from '@/lib/useDeferredReady';
@@ -88,9 +89,16 @@ function deckErrorMessage(e: unknown, t: (k: string) => string): string {
 }
 
 // 18-session sort model (Casey): three DIMENSIONS, each with a direction toggle.
-// The old flat radio list (incl. the tier sort) is gone — "memory strength"
-// covers it more honestly (weakest = due soonest = what needs attention).
-type SortDim = 'added' | 'strength' | 'alpha';
+// The old flat radio list (incl. the tier sort) is gone.
+//
+// 'due' was called 'strength' / "Memory strength" until 2026-08-04. It always
+// sorted by `dueAt` — the label was the lie. FSRS separates STABILITY (how
+// durable the memory is) from RETRIEVABILITY (how likely recall is right now),
+// and "memory strength" collapsed the two: a Summit-tier word with months of
+// stability comes due on schedule without its memory being weak, so it sorted
+// under a "Weakest" heading that flatly contradicted its own tier badge. The
+// dimension now says what it does — next review, soonest ↔ latest.
+type SortDim = 'added' | 'due' | 'alpha';
 export interface SortSel {
   dim: SortDim;
   /** Direction index into the dimension's two labels (0 = first). */
@@ -102,7 +110,7 @@ const sameSort = (a: SortSel, b: SortSel) => a.dim === b.dim && a.dir === b.dir;
 function sortWords(list: WordListItem[], sel: SortSel): WordListItem[] {
   const arr = [...list];
   switch (sel.dim) {
-    case 'strength': // weakest = due soonest (needs attention) ↔ strongest
+    case 'due': // soonest (what's coming up) ↔ latest
       return arr.sort((a, b) => (sel.dir === 0 ? a.dueAt.getTime() - b.dueAt.getTime() : b.dueAt.getTime() - a.dueAt.getTime()));
     case 'alpha': // by the TARGET word — the bold lead column the user scans
       return arr.sort((a, b) => (sel.dir === 0 ? a.target.localeCompare(b.target) : b.target.localeCompare(a.target)));
@@ -110,6 +118,10 @@ function sortWords(list: WordListItem[], sel: SortSel): WordListItem[] {
       return arr.sort((a, b) => (sel.dir === 0 ? b.createdAt.getTime() - a.createdAt.getTime() : a.createdAt.getTime() - b.createdAt.getTime()));
   }
 }
+
+/** Every query this screen renders (prefixes — see usePullToRefresh). Both
+ *  sub-tabs, because switching tabs is not a refresh. */
+const WORDS_REFRESH_KEYS = ['words', 'decks', 'deckWords', 'cardDecks'] as const;
 
 export function WordListScreen() {
   const { theme } = useUnistyles();
@@ -164,6 +176,9 @@ export function WordListScreen() {
   // PREVIOUS language — carrying them over corrupts counts (the "-3 words" bug)
   // and filters. Render-adjust reset on activeLang change. Deck state is no
   // longer in this list: those queries are keyed by activeLang and refetch.
+  const refresh = usePullToRefresh(WORDS_REFRESH_KEYS);
+  const refreshControl = <RefreshControl refreshing={refresh.refreshing} onRefresh={refresh.onRefresh} tintColor={theme.color.textMuted} />;
+
   const activeLang = useActiveLang();
   const [prevLang, setPrevLang] = useState(activeLang);
   if (prevLang !== activeLang) {
@@ -216,20 +231,32 @@ export function WordListScreen() {
     setEditWord(w);
   };
 
+  // The optimistic-delete overlay, applied ONCE. Everything that counts or
+  // renders words derives from this array — see `savedCount` for why.
+  const present = useMemo(() => words.filter((w) => !removed.includes(w.id)), [words, removed]);
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const filtered = words
+    const filtered = present
       .filter((w) => w.suspended === showArchived) // E3: active list vs archived shelf
-      .filter((w) => !removed.includes(w.id))
       .filter((w) => q === '' || w.native.toLowerCase().includes(q) || w.target.toLowerCase().includes(q))
       .filter((w) => filterTiers.size === 0 || filterTiers.has(getTierByStability(w.stability).id));
     return sortWords(filtered, sortBy);
-  }, [words, removed, query, filterTiers, sortBy, showArchived]);
+  }, [present, query, filterTiers, sortBy, showArchived]);
 
   // Count = ALL saved words, archived included (Casey ruling, post-E3): archiving
   // a mastered word removes it from lists/reviews, never from what you've earned —
   // tier counts and this header stay whole.
-  const savedCount = words.length - removed.length;
+  //
+  // Counted from `present`, NOT `words.length - removed.length` (Casey bug,
+  // 2026-08-04). `removed` is an optimistic overlay that is never cleared on
+  // success, so once the delete lands and ['words'] refetches WITHOUT the row,
+  // the subtraction charged for the same delete twice: 3 words minus 1 read as
+  // 1 while the list rendered 2, and 2 words minus 1 read as 0 — which tripped
+  // `noneSaved` and swapped the whole list for the empty state, i.e. deleting
+  // one word appeared to delete every word. Deriving both numbers from one
+  // array makes the header and the rows structurally unable to disagree.
+  const savedCount = present.length;
   const noneSaved = savedCount === 0;
 
   return (
@@ -297,6 +324,7 @@ export function WordListScreen() {
           // synchronously, which is what made tab traversal feel stuck.
           <FlatList
             data={visible}
+            refreshControl={refreshControl}
             keyExtractor={(w) => w.id}
             renderItem={({ item: w }) => (
               <WordRow
@@ -335,7 +363,7 @@ export function WordListScreen() {
                 <RawText style={styles.decksEmptyBody}>{t('wordList.decksEmptyBody')}</RawText>
               </View>
             ) : (
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.decksList}>
+              <ScrollView showsVerticalScrollIndicator={false} refreshControl={refreshControl} contentContainerStyle={styles.decksList}>
                 {allDecks.map((d) => (
                   <DeckRow
                     key={d.id}
@@ -478,10 +506,12 @@ export function WordListScreen() {
         onClose={() => setPendingDeckDelete(null)}
       />
 
-      {/* W-05 — Create deck */}
+      {/* W-05 — Create deck. `present`, not `words`: a word deleted this session
+          must not be offerable as a member of a new deck — the delete has landed
+          server-side, so picking it would fail the membership write. */}
       <CreateDeckSheet
         visible={createOpen}
-        words={words}
+        words={present}
         initialWord={createInitialWord}
         error={createError}
         pending={createDeck.isPending}
@@ -636,9 +666,14 @@ function FilterSortSheet({
       return next;
     });
 
+  // Order matters: "Next review" leads (2026-08-04). Browsing a word list is
+  // mostly asking "what's coming up?", and that answer was buried under two
+  // sorts nobody reaches for first. Date added stays the DEFAULT — promoting a
+  // row in the sheet is a discoverability change; changing `DEFAULT_SORT` would
+  // silently reorder every existing user's list.
   const sortDims: { dim: SortDim; label: string; dirs: [string, string] }[] = [
+    { dim: 'due', label: t('wordList.sortDimDue'), dirs: [t('wordList.dirSoonest'), t('wordList.dirLatest')] },
     { dim: 'added', label: t('wordList.sortDimAdded'), dirs: [t('wordList.dirNewest'), t('wordList.dirOldest')] },
-    { dim: 'strength', label: t('wordList.sortDimStrength'), dirs: [t('wordList.dirWeakest'), t('wordList.dirStrongest')] },
     { dim: 'alpha', label: t('wordList.sortDimAlpha'), dirs: [t('wordList.dirAZ'), t('wordList.dirZA')] },
   ];
 
@@ -671,8 +706,8 @@ function FilterSortSheet({
               <RawText style={[styles.optionLabel, on && styles.optionLabelOn]}>{label}</RawText>
               {on && (
                 // Dual brand colors signal the direction at a glance (Casey):
-                // dir 0 (Newest / Weakest / A–Z) wears base-camp green; dir 1
-                // (Oldest / Strongest / Z–A) wears brand ember — the color flip
+                // dir 0 (Soonest / Newest / A–Z) wears base-camp green; dir 1
+                // (Latest / Oldest / Z–A) wears brand ember — the color flip
                 // doubles the toggle feedback.
                 <Animated.View
                   key={`dir-${localSort.dir}`}

@@ -33,6 +33,7 @@ export function DevBadge() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const plan = useDevStore((s) => s.plan);
   const userState = useDevStore((s) => s.userState);
   const setPlan = useDevStore((s) => s.setPlan);
@@ -45,11 +46,17 @@ export function DevBadge() {
   // every cached read so the app rehydrates as that user.
   const switchScenario = async (scenario: string) => {
     setBusy(scenario);
+    setError(null);
     try {
       await signInWithEmail(`dev-${scenario}@lexicamp.app`, DEV_PASSWORD);
       setUserState(scenario as (typeof USER_STATE_LABELS)[number]['value']); // keeps query keys/chip state in sync
       queryClient.clear();
       router.replace('/');
+    } catch (e) {
+      // A missing/renamed seed account used to reject into nothing: the chip
+      // stopped spinning and the app sat on the previous user with no clue why.
+      // Say which account failed — that IS the fix instruction.
+      setError(`dev-${scenario}@lexicamp.app — ${e instanceof Error ? e.message : 'sign-in failed'}`);
     } finally {
       setBusy(null);
     }
@@ -104,7 +111,10 @@ export function DevBadge() {
               {USE_SUPABASE ? 'Scenario account' : 'User'}
             </Text>
             <View style={styles.rowWrap}>
-              {USER_STATE_LABELS.map((o) => (
+              {/* Mock-only scenarios have no seeded account to sign into, so in
+                  live mode they are hidden rather than offered as a chip that
+                  can only fail (see USER_STATE_LABELS). */}
+              {USER_STATE_LABELS.filter((o) => !(USE_SUPABASE && o.mockOnly)).map((o) => (
                 <Chip
                   key={o.value}
                   label={busy === o.value ? '…' : o.label}
@@ -113,6 +123,11 @@ export function DevBadge() {
                 />
               ))}
             </View>
+            {error != null && (
+              <Text style={styles.error} allowFontScaling={false}>
+                {error}
+              </Text>
+            )}
             {USE_SUPABASE && (
               <View style={styles.rowWrap}>
                 <Chip label={busy === 'reset' ? '…' : '↺ Reset scenario'} active={false} onPress={() => void resetScenario()} />
@@ -235,6 +250,7 @@ const styles = StyleSheet.create({
   },
   heading: { color: '#fff', fontSize: 12, fontWeight: '700', marginBottom: 2 },
   label: { color: 'rgba(255,255,255,0.5)', fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 4 },
+  error: { color: '#ffb4b4', fontSize: 10, marginTop: 6, lineHeight: 14 },
   row: { flexDirection: 'row', gap: 6 },
   rowWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chip: {

@@ -59,13 +59,91 @@ const DISTRIBUTION: Record<DevUserState, number[]> = {
   hc: [10, 20, 12, 0, 0],
   sr: [10, 20, 12, 8, 0],
   summit: [10, 20, 12, 5, 13],
+  // Past the summit: 3,050 mastered, with the tail a real veteran still carries
+  // — you don't stop saving words once you get there, so the lower tiers are
+  // populated by recent captures rather than empty. 4,300 total.
+  veteran: [180, 260, 340, 470, 3050],
 };
 // A representative stability (days) inside each tier's band.
 const TIER_STABILITY = [1.5, 5, 10, 20, 45];
-const STREAK: Record<DevUserState, number> = { empty: 1, bc: 3, abc: 7, hc: 10, sr: 12, summit: 14 };
+const STREAK: Record<DevUserState, number> = { empty: 1, bc: 3, abc: 7, hc: 10, sr: 12, summit: 14, veteran: 63 };
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
+
+// ── Realistic FSRS history (the 'veteran' scenario) ─────────────────────────
+// Every other scenario pins one flat stability per tier. That is fine at 60
+// words — you can see the whole list — but it is actively misleading at 3,000:
+// with identical stability the maturation curve steps as a single cliff, every
+// due date lands on the same four offsets, and the projection chart renders a
+// shape no real library ever produces. The scenario exists to catch exactly
+// those defects, so its data has to have real spread. (Casey ruling, 2026-08-04.)
+//
+// Deterministic: a seeded PRNG, not Math.random. A dev scenario that reshuffles
+// on every render can't be used to reproduce a rendering bug — same discipline
+// as the disabled FSRS fuzz (02).
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Per-tier stability bands, mirroring `theme/tiers.ts` stMin/stMax. The summit
+ *  band is open-ended (30 → ∞); 30–540 days covers "just mastered" through
+ *  "seen twice in three years" without inventing decade-long intervals. */
+const TIER_BANDS: [number, number][] = [
+  [0.5, 3],
+  [3, 7],
+  [7, 14],
+  [14, 30],
+  [30, 540],
+];
+
+export interface MockFsrsSample {
+  stability: number;
+  difficulty: number;
+  reps: number;
+  lapses: number;
+  createdAt: Date;
+  lastReviewAt: Date;
+  dueAt: Date;
+}
+
+/** One card's plausible history. Called with the SAME (tierIdx, g) from both
+ *  `buildDeckCards` and `buildWords` so Home's stats and My Words can't disagree. */
+function realisticFsrs(tierIdx: number, g: number, now: number): MockFsrsSample {
+  const rand = mulberry32(g * 2654435761 + tierIdx);
+  const [lo, hi] = TIER_BANDS[tierIdx];
+  // Log-uniform within the band: stability compounds review over review, so the
+  // real distribution is heavily skewed toward the low end of any band. Uniform
+  // sampling would put as many 400-day words as 40-day ones.
+  const stability = lo * Math.pow(hi / lo, rand());
+
+  // A word is somewhere between "just reviewed" and "due right now" — the
+  // elapsed fraction of its own interval IS its retrievability spread, which is
+  // what makes the due-date histogram look like a real queue instead of four
+  // spikes. A slice run past 1.0 gives the overdue backlog every real user has.
+  const elapsedFrac = rand() < 0.08 ? 1 + rand() * 0.6 : rand();
+  const lastReviewAt = new Date(now - stability * elapsedFrac * DAY);
+  const dueAt = new Date(lastReviewAt.getTime() + stability * DAY);
+
+  // Reps grow with stability (that IS how a card got stable), with noise.
+  const reps = Math.max(1, Math.round(2 + Math.log2(stability + 1) * 2.2 + rand() * 3));
+  // Lapses are rarer on the words that survived to a high band.
+  const lapses = rand() < 0.35 / (tierIdx + 1) ? 1 + Math.floor(rand() * 2) : 0;
+  // FSRS difficulty is 1–10 and clusters mid-scale; harder words tend to sit in
+  // the lower bands, which is why the mean slides down as the tier goes up.
+  const difficulty = Math.min(10, Math.max(1, 6.5 - tierIdx * 0.5 + (rand() - 0.5) * 3));
+
+  // Saved before it could possibly have matured: at least as long ago as the
+  // reviews it took to get here, spread over a multi-year library.
+  const ageDays = stability * (1.5 + rand() * 2) + reps * (1 + rand() * 3);
+  return { stability, difficulty, reps, lapses, createdAt: new Date(now - ageDays * DAY), lastReviewAt, dueAt };
+}
 
 function buildDeckCards(userState: DevUserState): DeckCards {
   const cards: Card[] = [];
@@ -74,16 +152,20 @@ function buildDeckCards(userState: DevUserState): DeckCards {
   const now = Date.now();
   let g = 0; // global index, spreads due/created dates deterministically
 
+  const realistic = userState === 'veteran';
+
   dist.forEach((count, tierIdx) => {
     for (let j = 0; j < count; j += 1, g += 1) {
       const id = `c${tierIdx}_${j}`;
+      const s = realistic ? realisticFsrs(tierIdx, g, now) : null;
       // due spread → realistic Need-Recall (today + backlog) / Due-tomorrow counts
       const dueAt =
-        g % 4 === 0 ? new Date(now - 2 * HOUR) // overdue today
+        s != null ? s.dueAt
+        : g % 4 === 0 ? new Date(now - 2 * HOUR) // overdue today
         : g % 4 === 1 ? new Date(now - 3 * DAY) // overdue backlog
         : g % 4 === 2 ? new Date(now + 6 * HOUR) // due in next 24h
         : new Date(now + 5 * DAY); // future
-      const createdAt = g % 6 === 0 ? new Date(now - 1 * HOUR) : new Date(now - (g + 2) * DAY);
+      const createdAt = s != null ? s.createdAt : g % 6 === 0 ? new Date(now - 1 * HOUR) : new Date(now - (g + 2) * DAY);
 
       cards.push({
         id,
@@ -99,13 +181,13 @@ function buildDeckCards(userState: DevUserState): DeckCards {
       states.push({
         cardId: id,
         userId: USER_ID,
-        stability: TIER_STABILITY[tierIdx],
-        difficulty: 5,
+        stability: s?.stability ?? TIER_STABILITY[tierIdx],
+        difficulty: s?.difficulty ?? 5,
         dueAt,
-        lastReviewAt: new Date(now - 1 * DAY),
+        lastReviewAt: s?.lastReviewAt ?? new Date(now - 1 * DAY),
         state: 2, // review
-        reps: 3,
-        lapses: 0,
+        reps: s?.reps ?? 3,
+        lapses: s?.lapses ?? 0,
         learningSteps: 0,
       });
     }
@@ -190,13 +272,24 @@ function buildWords(userState: DevUserState): WordListItem[] {
   const dist = DISTRIBUTION[userState];
   const now = Date.now();
   const out: WordListItem[] = [];
+  const realistic = userState === 'veteran';
   let g = 0;
   dist.forEach((count, tierIdx) => {
     for (let j = 0; j < count; j += 1, g += 1) {
-      const w = WORD_BANK[g % WORD_BANK.length];
-      const createdAt = g % 6 === 0 ? new Date(now - 1 * HOUR) : new Date(now - (g + 2) * DAY);
+      const bank = WORD_BANK[g % WORD_BANK.length];
+      // The bank holds 60 real pairs — enough that no scenario up to `summit`
+      // repeats. `veteran` is 4,300 words, and 4,300 unique curated pairs is a
+      // content problem, not a fixture problem: cycle the bank and mark the
+      // repeats so every row is still DISTINCT (search, sort and the delete
+      // predicates all key off text, and silent duplicates would mask exactly
+      // the kind of collision bug this fixture is meant to surface).
+      const pass = Math.floor(g / WORD_BANK.length);
+      const w = pass === 0 ? bank : { native: `${bank.native} (${pass + 1})`, target: `${bank.target} (${pass + 1})` };
+      const s = realistic ? realisticFsrs(tierIdx, g, now) : null;
+      const createdAt = s != null ? s.createdAt : g % 6 === 0 ? new Date(now - 1 * HOUR) : new Date(now - (g + 2) * DAY);
       const dueAt =
-        g % 4 === 0 ? new Date(now - 2 * HOUR)
+        s != null ? s.dueAt
+        : g % 4 === 0 ? new Date(now - 2 * HOUR)
         : g % 4 === 1 ? new Date(now - 3 * DAY)
         : g % 4 === 2 ? new Date(now + 6 * HOUR)
         : new Date(now + 5 * DAY);
@@ -214,8 +307,8 @@ function buildWords(userState: DevUserState): WordListItem[] {
         example: EXAMPLE_FRAMES[g % EXAMPLE_FRAMES.length].source(w.native),
         exampleTranslation: EXAMPLE_FRAMES[g % EXAMPLE_FRAMES.length].target(w.target),
         provider: 'azure_dictionary',
-        stability: TIER_STABILITY[tierIdx],
-        reps: 2 + (g % 9),
+        stability: s?.stability ?? TIER_STABILITY[tierIdx],
+        reps: s?.reps ?? 2 + (g % 9),
         createdAt,
         dueAt,
         suspended: mockArchived.has(id),
@@ -233,6 +326,10 @@ const PROGRESS_STATS: Record<DevUserState, ProgressStats> = {
   hc: { sessionsTotal: 24, avgAccuracy: 80, bestStreak: 10, daysActive: 18 },
   sr: { sessionsTotal: 33, avgAccuracy: 82, bestStreak: 12, daysActive: 24 },
   summit: { sessionsTotal: 42, avgAccuracy: 85, bestStreak: 14, daysActive: 30 },
+  // Three years of near-daily study. daysActive/sessionsTotal drive the
+  // projection's confidence banding, so a veteran must read as HIGH confidence
+  // — a 3,000-word library still labelled "rough estimate" is its own bug.
+  veteran: { sessionsTotal: 1180, avgAccuracy: 91, bestStreak: 214, daysActive: 1024 },
 };
 
 // Custom decks (Premium). Membership is REAL in the mock as of 2026-07-30 —
