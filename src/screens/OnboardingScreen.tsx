@@ -1,16 +1,14 @@
 // OnboardingScreen (O-01…O-09) — the first-run narrative arc, assembled against
-// onboarding/Onboarding.html. One paged flow: welcome → 6 story beats → language
+// onboarding/Onboarding.html. One paged flow: welcome → 5 story beats → language
 // selection → notification opt-in, then hands off to the auth screen (O-10/O-11).
 // Uses the shared illustrations, ProgressDots, Button, and ButtonRow.
 import { useRouter } from 'expo-router';
 import { type ComponentType, useMemo, useState, useEffect } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
-import { SvgXml } from 'react-native-svg';
+import { Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
-import { findLanguage, TRANSLATABLE_LANGUAGES } from '@/constants';
+import { findLanguage, LOCALIZED_LANGUAGES, TRANSLATABLE_LANGUAGES } from '@/constants';
 import { useTranslation } from '@/i18n';
-import { BRAND_MARK_KNOCKOUT_XML } from '@/ui/brandMark';
 import { useLogEvent } from '@/query/hooks';
 import { requestPushPermission } from '@/notifications/push';
 import { useOnboardingStore } from '@/store/onboardingStore';
@@ -18,11 +16,12 @@ import {
   Button,
   ButtonRow,
   CardSorter,
-  DailyPractice,
-  ForgettingCurve,
+  ForgettingCurveInfo,
   IconBell,
   IconChevronRight,
   IntervalTrack,
+  MountainRoute,
+  ReminderPreview,
   OnboardingShot,
   type OnboardingShotName,
   Wordmark,
@@ -30,6 +29,7 @@ import {
   ProgressDots,
   RawText,
   Screen,
+  SCREEN_MAX_WIDTH,
   SummitScene,
 } from '@/ui';
 
@@ -37,43 +37,51 @@ import {
 // the target can be any translatable language except the native one.
 const NATIVE_LANG = 'en';
 
-// Story beats O-02…O-07 → (title, two paragraphs, illustration).
-// `shot` names a captured in-app screenshot to show INSTEAD of the vector
-// illustration. NONE are set yet: no captures are committed, and
-// `OnboardingShotName` is derived from the files that actually exist, so naming
-// an uncommitted one is a TYPE ERROR rather than a broken bundle. That is
-// deliberate — Metro resolves `require()` at bundle time, so a missing asset
-// fails the build, not the render (see the note atop ui/OnboardingShot.tsx).
+// Story beats O-02…O-06 → (title, ONE supporting line, optional footnote, art).
 //
-// Once .maestro/capture-onboarding-shots.yaml has been run and the PNGs are in
-// assets/images/onboarding/, add each to SHOTS and then set `shot:` here.
-// Planned mapping: s1 → 'home', s3 → 'quiz', s4 → 'progress', s5 → 'search'.
-// The abstract beats (forgetting curve, summit) keep their illustration — there
-// is no single screen to photograph.
+// Visual-first (Casey 2026-08-05): the beats used to carry two paragraphs each,
+// which nobody reads on a first run. Now the art IS the argument and the copy is
+// a caption under it. The old "catch it before it slips" beat is gone — beat 1
+// now names the forgetting curve outright, which is the same claim.
+//
+// `shot` names a captured in-app screenshot shown INSTEAD of the vector
+// illustration; `Illustration` stays as the fallback the shot degrades to
+// (OnboardingShot renders `children` for any name it has no asset for).
+// `OnboardingShotName` is derived from the files that actually exist, so naming
+// an uncaptured one is a TYPE ERROR rather than a broken bundle — deliberate,
+// because Metro resolves `require()` at bundle time and a missing asset fails
+// the BUILD, not the render (see the note atop ui/OnboardingShot.tsx).
+//
+// `noteKey` is the footnote the body's `*` points at — the two beats that
+// introduce a term of art (memory strength, FSRS) and the one that makes a
+// research claim have to say where it comes from, quietly.
 const STORY: {
   titleKey: string;
-  aKey: string;
-  bKey: string;
+  bodyKey: string;
+  noteKey?: string;
   Illustration: ComponentType;
   shot?: OnboardingShotName;
 }[] = [
-  { titleKey: 's1Title', aKey: 's1a', bKey: 's1b', Illustration: DailyPractice },
-  { titleKey: 's2Title', aKey: 's2a', bKey: 's2b', Illustration: ForgettingCurve },
-  { titleKey: 's3Title', aKey: 's3a', bKey: 's3b', Illustration: IntervalTrack },
-  { titleKey: 's4Title', aKey: 's4a', bKey: 's4b', Illustration: SummitScene },
-  { titleKey: 's5Title', aKey: 's5a', bKey: 's5b', Illustration: CardSorter },
-  { titleKey: 's6Title', aKey: 's6a', bKey: 's6b', Illustration: SummitScene },
+  { titleKey: 's1Title', bodyKey: 's1Body', noteKey: 's1Note', Illustration: ForgettingCurveInfo },
+  { titleKey: 's2Title', bodyKey: 's2Body', noteKey: 's2Note', Illustration: CardSorter, shot: 'wordlist' },
+  { titleKey: 's3Title', bodyKey: 's3Body', Illustration: IntervalTrack, shot: 'quiz' },
+  { titleKey: 's4Title', bodyKey: 's4Body', noteKey: 's4Note', Illustration: SummitScene, shot: 'results' },
+  { titleKey: 's5Title', bodyKey: 's5Body', Illustration: SummitScene, shot: 'projection' },
 ];
 
 const WELCOME = 0;
-const STORY_START = 1; // steps 1..6
-const LANG = 7;
-const NOTIF = 8;
+const STORY_START = 1; // steps 1..5
+const LANG = STORY_START + STORY.length; // 6
+const NOTIF = LANG + 1; // 7
 
 export function OnboardingScreen() {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const router = useRouter();
+  const { width: windowWidth } = useWindowDimensions();
+  // O-01 hero: 75% of the device width (Casey 2026-08-05), clamped to the
+  // centred content column so a tablet doesn't get a billboard.
+  const wordmarkWidth = Math.min(windowWidth, SCREEN_MAX_WIDTH) * 0.75;
   const [step, setStep] = useState(0);
   // 3.4: activation-funnel start — completion is logged server-side by
   // complete_onboarding's word/deck writes; this bookends the funnel.
@@ -82,18 +90,40 @@ export function OnboardingScreen() {
     logEvent('onboarding_started');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // O-05 pair. Native defaults to English — the one side that keeps capture on
+  // Azure's dictionary path (pairs are X↔en, 16 §1) — but is now selectable
+  // across the locales whose UI we actually ship.
+  const [native, setNative] = useState<string>(NATIVE_LANG);
   const [target, setTarget] = useState<string | null>(null);
-  const [picker, setPicker] = useState(false);
-  const targetLanguages = useMemo(() => TRANSLATABLE_LANGUAGES.filter((l) => l.code.toLowerCase() !== NATIVE_LANG), []);
+  // Which field the shared picker sheet is currently editing (null = closed).
+  const [picker, setPicker] = useState<'native' | 'target' | null>(null);
+  const targetLanguages = useMemo(
+    () => TRANSLATABLE_LANGUAGES.filter((l) => l.code.toLowerCase() !== native.toLowerCase()),
+    [native],
+  );
+  const nativeLang = findLanguage(native);
   const targetLang = target != null ? findLanguage(target) : undefined;
+  const setNativeLang = useOnboardingStore((s) => s.setNativeLang);
   const setTargetLang = useOnboardingStore((s) => s.setTargetLang);
   const setNotificationsEnabled = useOnboardingStore((s) => s.setNotificationsEnabled);
 
   const next = () => setStep((s) => Math.min(s + 1, NOTIF));
   const back = () => setStep((s) => Math.max(s - 1, 0));
+  // Skip jumps the story act — the beats are the pitch, not a gate. It lands on
+  // LANG (the first step that collects something) rather than finishing, so a
+  // skipper still leaves with a language pair.
+  const skip = () => setStep(LANG);
+  // The pair must stay distinct (complete_onboarding rejects native = learning),
+  // so picking a native that matches the target clears the target.
+  const chooseNative = (code: string) => {
+    setNative(code);
+    if (target != null && target.toLowerCase() === code.toLowerCase()) setTarget(null);
+    setPicker(null);
+  };
   // O-06 choice → buffer (with the O-05 pair) → written transactionally by
   // complete_onboarding after auth succeeds (03 onboarding data flow).
   const finish = async (notificationsEnabled: boolean) => {
+    setNativeLang(native);
     if (target != null) setTargetLang(target);
     // Raise the OS prompt HERE, in the screen that explains why — not silently
     // after auth on the Home screen. The buffered flag still drives token
@@ -111,15 +141,21 @@ export function OnboardingScreen() {
     return (
       <Screen edges={['top', 'bottom']}>
         <View style={styles.welcome}>
-          <View style={styles.welcomeHero}>
-            {/* Official brand mark (knockout) inside the accent disc. */}
-            <SvgXml xml={BRAND_MARK_KNOCKOUT_XML} width={64} height={64} />
-          </View>
+          {/* The official lockup IS the hero (Casey 2026-08-05) — the accent tile
+              above it was a second, lower-fidelity logo competing with it — and
+              it is sized from the VIEWPORT (75%), not a fixed pt value, so it
+              lands the same on an SE as on a Pro Max. */}
           <View style={styles.wordmarkWrap}>
-            <Wordmark width={216} />
+            <Wordmark width={wordmarkWidth} />
           </View>
           <RawText style={styles.welcomeTitle}>{t('onboarding.welcomeTitle')}</RawText>
           <RawText style={styles.welcomeSub}>{t('onboarding.welcomeSub')}</RawText>
+          {/* The route up the mountain, drawn faintly under the pitch: five
+              camps, summit in accent. Ambient, not illustrative — it should
+              register as texture, not as a diagram to read. */}
+          <View style={styles.welcomeArt} pointerEvents="none">
+            <MountainRoute maxWidth={wordmarkWidth} />
+          </View>
           <View style={styles.welcomeCta}>
             <Button title={t('onboarding.getStarted')} variant="primary" onPress={next} />
           </View>
@@ -135,9 +171,21 @@ export function OnboardingScreen() {
     const Illustration = beat.Illustration;
     return (
       <Screen edges={['top', 'bottom']}>
+        <View style={styles.storyHeader}>
+          <ProgressDots count={STORY.length} index={i} />
+          <Pressable
+            onPress={skip}
+            accessibilityRole="button"
+            testID="onboardingSkip"
+            hitSlop={12}
+            style={({ pressed }) => [styles.skip, pressed && { opacity: 0.6 }]}
+          >
+            <RawText style={styles.skipText}>{t('onboarding.skip')}</RawText>
+          </Pressable>
+        </View>
         <ScrollView contentContainerStyle={styles.storyScroll} showsVerticalScrollIndicator={false}>
-          <ProgressDots count={STORY.length} index={i} style={styles.dots} />
           <RawText style={styles.storyTitle}>{t(`onboarding.${beat.titleKey}`)}</RawText>
+          <RawText style={styles.storyBody}>{t(`onboarding.${beat.bodyKey}`)}</RawText>
           <View style={styles.storyArt}>
             {beat.shot != null ? (
               <OnboardingShot name={beat.shot}>
@@ -147,8 +195,9 @@ export function OnboardingScreen() {
               <Illustration />
             )}
           </View>
-          <RawText style={styles.storyPara}>{t(`onboarding.${beat.aKey}`)}</RawText>
-          <RawText style={styles.storyPara}>{t(`onboarding.${beat.bKey}`)}</RawText>
+          {beat.noteKey != null && (
+            <RawText style={styles.storyNote}>{t(`onboarding.${beat.noteKey}`)}</RawText>
+          )}
         </ScrollView>
         <View style={styles.footer}>
           <ButtonRow
@@ -168,16 +217,41 @@ export function OnboardingScreen() {
             <RawText style={styles.stepTitle}>{t('onboarding.langTitle')}</RawText>
             <RawText style={styles.stepSub}>{t('onboarding.langSub')}</RawText>
 
+            {/* Both fields are the SAME control (Casey 2026-08-05) — native used to
+                be a flat read-only row, which read as "broken dropdown" sitting
+                above a real one. */}
             <RawText style={styles.fieldLabel}>{t('onboarding.nativeLabel')}</RawText>
-            <View style={styles.nativeRow}>
-              <RawText style={styles.nativeText}>{t('languages.en')}</RawText>
+            <Pressable
+              onPress={() => setPicker('native')}
+              accessibilityRole="button"
+              accessibilityLabel={t('onboarding.nativeLabel')}
+              testID="onboardingNativePicker"
+              style={({ pressed }) => [styles.targetRow, pressed && { opacity: 0.7 }]}
+            >
+              {nativeLang != null ? (
+                <View style={styles.targetValueWrap}>
+                  <RawText style={styles.targetValue}>{nativeLang.name}</RawText>
+                  <RawText style={styles.targetNative}>{nativeLang.nativeName}</RawText>
+                </View>
+              ) : (
+                <RawText style={styles.targetPlaceholder}>{t('onboarding.nativePlaceholder')}</RawText>
+              )}
+              <IconChevronRight size={16} color={theme.color.brand} />
+            </Pressable>
+            {/* Two locales is a short list, and a short list reads as a bug
+                unless you say it's temporary. Same card shape as the Premium
+                note below, in the neutral palette — this is information, not an
+                upsell. */}
+            <View style={styles.note}>
+              <RawText style={styles.noteText}>{t('onboarding.nativeNote')}</RawText>
             </View>
 
             <RawText style={styles.fieldLabel}>{t('onboarding.targetLabel')}</RawText>
             <Pressable
-              onPress={() => setPicker(true)}
+              onPress={() => setPicker('target')}
               accessibilityRole="button"
               accessibilityLabel={t('onboarding.targetLabel')}
+              testID="onboardingTargetPicker"
               style={({ pressed }) => [styles.targetRow, pressed && { opacity: 0.7 }]}
             >
               {targetLang != null ? (
@@ -203,14 +277,20 @@ export function OnboardingScreen() {
           </View>
         </Screen>
 
+        {/* One sheet, two fields — mounting a second copy would mean two Portals
+            fighting over the same layer. `languages` swaps with the mode: the
+            native side offers only the locales the app ships a UI for. */}
         <LanguagePickerSheet
-          visible={picker}
-          current={target ?? ''}
-          languages={targetLanguages}
-          title={t('onboarding.langPickerTitle')}
+          visible={picker != null}
+          current={(picker === 'native' ? native : target) ?? ''}
+          languages={picker === 'native' ? LOCALIZED_LANGUAGES : targetLanguages}
+          title={picker === 'native' ? t('onboarding.nativePickerTitle') : t('onboarding.langPickerTitle')}
           searchPlaceholder={t('onboarding.searchLanguages')}
-          onSelect={(c) => { setTarget(c); setPicker(false); }}
-          onClose={() => setPicker(false)}
+          onSelect={(c) => {
+            if (picker === 'native') chooseNative(c);
+            else { setTarget(c); setPicker(null); }
+          }}
+          onClose={() => setPicker(null)}
         />
       </>
     );
@@ -225,6 +305,15 @@ export function OnboardingScreen() {
         </View>
         <RawText style={styles.stepTitleCentered}>{t('onboarding.notifTitle')}</RawText>
         <RawText style={styles.notifBody}>{t('onboarding.notifBody')}</RawText>
+        {/* Show the thing being asked for. The card is drawn, not captured —
+            see ReminderPreview for why a simulator can't produce a real banner. */}
+        <View style={styles.notifPreview}>
+          <ReminderPreview
+            title={t('onboarding.notifPreviewTitle')}
+            body={t('onboarding.notifPreviewBody')}
+            now={t('onboarding.notifPreviewNow')}
+          />
+        </View>
       </View>
       <View style={styles.footer}>
         <Button title={t('onboarding.enableNotif')} variant="primary" onPress={() => void finish(true)} />
@@ -240,17 +329,26 @@ const styles = StyleSheet.create((theme) => {
   const { color, fonts, radius } = theme;
   return {
     welcome: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
-    welcomeHero: { width: 96, height: 96, borderRadius: 30, backgroundColor: color.accent, alignItems: 'center', justifyContent: 'center', marginBottom: 24, boxShadow: theme.shadow.accent },
-    wordmarkWrap: { marginBottom: 20 },
+    wordmarkWrap: { marginBottom: 28 },
+    welcomeArt: { marginTop: 36, opacity: 0.8 },
     welcomeTitle: { fontFamily: fonts.serif.semibold, fontSize: 26, lineHeight: 33, color: color.brandStrong, textAlign: 'center' },
     welcomeSub: { fontFamily: fonts.sans.regular, fontSize: 14, lineHeight: 21, color: color.textMuted, textAlign: 'center', marginTop: 12 },
     welcomeCta: { alignSelf: 'stretch', position: 'absolute', bottom: 24, left: 32, right: 32 },
 
-    storyScroll: { paddingHorizontal: 28, paddingTop: 24, paddingBottom: 16 },
-    dots: { marginBottom: 24 },
-    storyTitle: { fontFamily: fonts.serif.semibold, fontSize: 27, lineHeight: 33, letterSpacing: -0.5, color: color.brandStrong, marginBottom: 20 },
-    storyArt: { alignItems: 'center', marginBottom: 22 },
-    storyPara: { fontFamily: fonts.sans.regular, fontSize: 15, lineHeight: 25, color: color.textBody, marginBottom: 12 },
+    // Dots and Skip share a row so Skip sits on the status-bar line, clear of the
+    // scrolling content underneath it.
+    storyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 28, paddingTop: 20, paddingBottom: 4 },
+    skip: { paddingVertical: 6, paddingLeft: 12 },
+    skipText: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.textMuted },
+    // flexGrow + a flexing art block centres the screenshot in whatever space is
+    // left under the copy, instead of stranding it against a tall bottom gap.
+    storyScroll: { flexGrow: 1, paddingHorizontal: 28, paddingTop: 16, paddingBottom: 8, alignItems: 'center' },
+    storyTitle: { alignSelf: 'stretch', fontFamily: fonts.serif.semibold, fontSize: 27, lineHeight: 33, letterSpacing: -0.5, color: color.brandStrong, textAlign: 'center', marginBottom: 10 },
+    storyBody: { alignSelf: 'stretch', fontFamily: fonts.sans.regular, fontSize: 15, lineHeight: 23, color: color.textBody, textAlign: 'center', marginBottom: 20 },
+    storyArt: { alignSelf: 'stretch', flex: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
+    // The `*` in the body points here. Faint on purpose: it is a citation, not a
+    // second sentence competing with the caption above the art.
+    storyNote: { alignSelf: 'stretch', fontFamily: fonts.sans.regular, fontSize: 11.5, lineHeight: 16, color: color.textFaint, textAlign: 'center', marginTop: 4 },
 
     footer: { paddingHorizontal: 28, paddingTop: 8, paddingBottom: 8, gap: 8 },
 
@@ -259,19 +357,20 @@ const styles = StyleSheet.create((theme) => {
     stepTitleCentered: { fontFamily: fonts.serif.semibold, fontSize: 26, lineHeight: 32, letterSpacing: -0.5, color: color.brandStrong, textAlign: 'center', marginBottom: 12 },
     stepSub: { fontFamily: fonts.sans.regular, fontSize: 14, lineHeight: 21, color: color.textMuted, marginBottom: 24 },
     fieldLabel: { fontFamily: fonts.sans.semibold, fontSize: 12, letterSpacing: 0.5, textTransform: 'uppercase', color: color.textMuted, marginBottom: 8, marginTop: 8 },
-    nativeRow: { paddingVertical: 14, paddingHorizontal: 16, borderRadius: radius.md, borderWidth: 1.5, borderColor: color.border, backgroundColor: color.surfaceSunken },
-    nativeText: { fontFamily: fonts.sans.medium, fontSize: 15, color: color.textMuted },
     targetRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 16, borderRadius: radius.md, borderWidth: 1.5, borderColor: color.border, backgroundColor: color.surfaceCard },
     targetValueWrap: { flex: 1 },
     targetValue: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.textStrong },
     targetNative: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted, marginTop: 1 },
     targetPlaceholder: { flex: 1, fontFamily: fonts.sans.medium, fontSize: 15, color: color.textMuted },
+    note: { flexDirection: 'row', gap: 8, backgroundColor: color.surfaceSunken, borderWidth: theme.borderWidth.thin, borderColor: color.border, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 12, marginTop: 8 },
+    noteText: { flex: 1, fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 19, color: color.textMuted },
     premiumNote: { flexDirection: 'row', gap: 8, backgroundColor: theme.color.brandTint, borderWidth: theme.borderWidth.thin, borderColor: theme.color.brandSoft, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 12, marginTop: 20 },
     premiumNoteText: { flex: 1, fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 19, color: color.brand },
 
     notif: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
     notifHero: { width: 96, height: 96, borderRadius: 48, backgroundColor: color.brandSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 28 },
     notifBody: { fontFamily: fonts.sans.regular, fontSize: 15, lineHeight: 24, color: color.textBody, textAlign: 'center' },
+    notifPreview: { alignSelf: 'stretch', marginTop: 28 },
     maybeLater: { alignSelf: 'center', paddingVertical: 10 },
     maybeLaterText: { fontFamily: fonts.sans.semibold, fontSize: 15, color: color.textMuted },
   };

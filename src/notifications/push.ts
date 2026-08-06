@@ -61,8 +61,37 @@ export async function registerForPush(): Promise<boolean> {
     });
   }
 
-  const projectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
-  const token = (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data;
+  const token = await expoPushToken();
+  if (token == null) return false;
   await dataSource.registerPushToken(token, Platform.OS === 'ios' ? 'ios' : 'android');
   return true;
+}
+
+/** This device's Expo push token, or null when it cannot be obtained. */
+async function expoPushToken(): Promise<string | null> {
+  const projectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
+  try {
+    return (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Drop this account's registration for this device. MUST run while the session
+ * is still valid — the delete is RLS-scoped to auth.uid(), so calling it after
+ * `supabase.auth.signOut()` silently does nothing.
+ *
+ * Best-effort by design: a failure here must never block sign-out. The server
+ * also de-duplicates per device (run_push_scheduler), so a token that survives
+ * an offline sign-out costs at most a stale row, not a duplicate notification.
+ */
+export async function unregisterForPush(): Promise<void> {
+  if (!USE_SUPABASE || !Device.isDevice) return;
+  try {
+    const token = await expoPushToken();
+    if (token != null) await dataSource.unregisterPushToken(token);
+  } catch {
+    /* never block sign-out */
+  }
 }

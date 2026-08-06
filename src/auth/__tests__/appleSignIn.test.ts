@@ -6,7 +6,15 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 
 import { supabase } from '@/data/supabase/client';
 
-import { AppleSignInCancelled, isAppleSignInAvailable, signInWithApple } from '../session';
+import { unregisterForPush } from '@/notifications/push';
+
+import { AppleSignInCancelled, isAppleSignInAvailable, signInWithApple, signOut } from '../session';
+
+// session.ts reaches for the push module on sign-out (2026-08-05) to drop this
+// device's token while the session is still valid. That module pulls in
+// expo-notifications/expo-device, which are untransformed ESM under jest and
+// have nothing to do with the Apple exchange under test here.
+jest.mock('@/notifications/push', () => ({ unregisterForPush: jest.fn().mockResolvedValue(undefined) }));
 
 jest.mock('expo-apple-authentication', () => ({
   isAvailableAsync: jest.fn(),
@@ -19,6 +27,7 @@ jest.mock('@/data/supabase/client', () => ({
     auth: {
       signInWithIdToken: jest.fn(),
       updateUser: jest.fn(),
+      signOut: jest.fn(),
     },
   },
 }));
@@ -98,5 +107,32 @@ describe('isAppleSignInAvailable', () => {
   it('passes through a true availability result', async () => {
     (appleAuth.isAvailableAsync as jest.Mock).mockResolvedValue(true);
     await expect(isAppleSignInAvailable()).resolves.toBe(true);
+  });
+});
+
+
+// Duplicate push notifications, 2026-08-05: one phone signed into two accounts
+// received two identical reminders every morning, because `push_tokens` is keyed
+// (user_id, token) and signing out never removed the row.
+describe('signOut drops this device from the account', () => {
+  it('unregisters BEFORE the session is torn down', async () => {
+    // Ordering is the whole fix: the delete is RLS-scoped to auth.uid(), so
+    // running it after signOut() silently deletes nothing and the duplicate
+    // notification comes back.
+    const order: string[] = [];
+    (unregisterForPush as jest.Mock).mockImplementation(async () => { order.push('unregister'); });
+    (supabase.auth.signOut as jest.Mock).mockImplementation(async () => { order.push('signOut'); return {}; });
+
+    await signOut();
+
+    expect(order).toEqual(['unregister', 'signOut']);
+  });
+
+  it('still signs out when unregistering fails', async () => {
+    // A network blip must never trap someone in a session they asked to leave.
+    (unregisterForPush as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+    (supabase.auth.signOut as jest.Mock).mockResolvedValue({});
+    await expect(signOut()).resolves.toBeUndefined();
+    expect(supabase.auth.signOut).toHaveBeenCalled();
   });
 });

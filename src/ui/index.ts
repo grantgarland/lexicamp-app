@@ -111,3 +111,4 @@ export {
 } from './QuizCard';
 export { BrandMark, Wordmark } from './Wordmark';
 export { OnboardingShot, type OnboardingShotName } from './OnboardingShot';
+export { ForgettingCurveInfo, MountainRoute, ReminderPreview } from './onboardingArt';

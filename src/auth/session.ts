@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 
 import { supabase } from '@/data/supabase/client';
+import { unregisterForPush } from '@/notifications/push';
 
 export async function signUpWithEmail(email: string, password: string): Promise<void> {
   const { data, error } = await supabase.auth.signUp({ email, password });
@@ -24,6 +25,19 @@ export async function signInWithEmail(email: string, password: string): Promise<
 }
 
 export async function signOut(): Promise<void> {
+  // Drop this device's registration BEFORE the session goes away: the delete is
+  // RLS-scoped to auth.uid(), so doing it after signOut() silently no-ops.
+  //
+  // Without this, `push_tokens` kept a row per (account, device) forever — a
+  // phone used by two accounts received two identical reminders every morning
+  // (observed 2026-08-05, both at 06:00:00.223). Best-effort: `unregisterForPush`
+  // swallows its own failures so a network blip can never trap a user in a
+  // session they asked to leave, and the scheduler de-duplicates per device
+  // anyway, so a surviving row costs a stale row rather than a repeat push.
+  // `.catch` as well as the swallow inside unregisterForPush: the guarantee is
+  // "sign-out always completes", and it should hold here rather than depend on
+  // a callee keeping its own promise.
+  await unregisterForPush().catch(() => {});
   await supabase.auth.signOut();
 }
 

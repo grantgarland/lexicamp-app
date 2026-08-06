@@ -21,7 +21,6 @@
 -- old account-wide body. A no-arg caller would have silently kept the unscoped
 -- numbers this change exists to fix.
 drop function if exists public.get_study_stats();
-
 -- ── 1. Per-deck review stats ────────────────────────────────────────────────
 -- getDecks returned `reviews: 0, lastReviewedAt: null` behind a TODO, so the
 -- Deck detail sheet said "REVIEWS 0 / LAST REVIEWED Never" no matter how much
@@ -59,10 +58,8 @@ as $function$
     group by dk.id
   ) d;
 $function$;
-
 revoke execute on function public.get_deck_stats() from public, anon;
 grant execute on function public.get_deck_stats() to authenticated;
-
 -- ── 2. Language-scoped study stats ──────────────────────────────────────────
 -- get_study_stats aggregated review_logs and study_events across the WHOLE
 -- account, so switching to a language the user had never studied still showed
@@ -172,10 +169,8 @@ begin
     'time_invested_ms', round(v_time_ms)
   );
 end $function$;
-
 revoke execute on function public.get_study_stats(text) from public, anon;
 grant execute on function public.get_study_stats(text) to authenticated;
-
 -- ── 3. Stamp the session's language ─────────────────────────────────────────
 -- Derived from the reviewed cards themselves. The client never says which
 -- language it was studying, and a client-supplied value would be unverified.
@@ -251,6 +246,5 @@ begin
          end
   );
 end $function$;
-
 revoke execute on function public.commit_quiz_session(jsonb, bigint) from public, anon;
 grant execute on function public.commit_quiz_session(jsonb, bigint) to authenticated;

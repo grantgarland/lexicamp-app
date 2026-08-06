@@ -504,3 +504,17 @@ describe('lookup error mapping', () => {
     expect(mockInvokeCalls[0]).toEqual(['translate', { body: { text: 'hola', from: 'es', to: 'en' } }]);
   });
 });
+
+describe('unregisterPushToken', () => {
+  it('deletes only THIS account\'s row for the device', async () => {
+    // Scoped by user_id AND token: signing out of account A on a shared phone
+    // must not disturb account B's registration for the same device, and must
+    // not touch this account's other devices.
+    mockQueue.push(ok(null));
+    await supabaseDataSource.unregisterPushToken('ExponentPushToken[abc]');
+    const call = mockCalls.find((c) => c.table === 'push_tokens')!;
+    expect(call.ops.map(([op]) => op)).toContain('delete');
+    expect(call.ops).toContainEqual(['eq', ['token', 'ExponentPushToken[abc]']]);
+    expect(call.ops.some(([op, args]) => op === 'eq' && args[0] === 'user_id')).toBe(true);
+  });
+});

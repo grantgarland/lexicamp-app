@@ -687,6 +687,9 @@ export const mockDataSource: DataSource = {
   async updateNotificationPrefs(prefs) {
     Object.assign(mockPrefs, prefs);
   },
+  async unregisterPushToken(_token: string) {
+    /* no-op: the mock never registers */
+  },
   async registerPushToken(_token, _platform) {
     // Mock: nothing to register.
   },

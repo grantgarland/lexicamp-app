@@ -225,6 +225,11 @@ export interface DataSource {
   /** Register this device's Expo push token (called once expo-notifications
    *  lands app-side; the server scheduler no-ops for users without tokens). */
   registerPushToken(token: string, platform: 'ios' | 'android'): Promise<void>;
+  /** Drop THIS account's registration for this device. Called on sign-out:
+   *  `push_tokens` is keyed (user_id, token) and signing out used to leave the
+   *  row behind, so every account that had ever signed in on a phone kept a live
+   *  registration and the device got one reminder per account (2026-08-05). */
+  unregisterPushToken(token: string): Promise<void>;
   // ── Phase D: multi-language (18 §2a) ──────────────────────────────────────
   /** Enrolled learning languages, oldest first. Free = 1; premium ≤ 5. */
   getLearningLanguages(): Promise<string[]>;

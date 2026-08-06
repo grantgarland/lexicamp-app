@@ -582,6 +582,14 @@ export const supabaseDataSource: DataSource = {
     bail(error);
   },
 
+  async unregisterPushToken(token: string): Promise<void> {
+    // Scoped to the caller by user_id AND by RLS. Signing out of account A on a
+    // shared phone must not disturb account B's registration for the same token.
+    const userId = await uid();
+    const { error } = await supabase.from('push_tokens').delete().eq('user_id', userId).eq('token', token);
+    bail(error);
+  },
+
   async getSessionPace(): Promise<number | null> {
     const { data, error } = await supabase.rpc('get_session_pace');
     bail(error);
