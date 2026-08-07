@@ -157,7 +157,7 @@ export function OnboardingScreen() {
             <MountainRoute maxWidth={wordmarkWidth} />
           </View>
           <View style={styles.welcomeCta}>
-            <Button title={t('onboarding.getStarted')} variant="primary" onPress={next} />
+            <Button testID="onboardingGetStarted" title={t('onboarding.getStarted')} variant="primary" onPress={next} />
           </View>
         </View>
       </Screen>
@@ -201,8 +201,8 @@ export function OnboardingScreen() {
         </ScrollView>
         <View style={styles.footer}>
           <ButtonRow
-            left={{ title: t('onboarding.back'), onPress: back }}
-            right={{ title: isLast ? t('onboarding.letsBegin') : t('onboarding.next'), onPress: next }}
+            left={{ title: t('onboarding.back'), onPress: back, testID: 'onboardingBack' }}
+            right={{ title: isLast ? t('onboarding.letsBegin') : t('onboarding.next'), onPress: next, testID: 'onboardingNext' }}
           />
         </View>
       </Screen>

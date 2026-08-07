@@ -163,8 +163,28 @@ const FLOW = fs
   .split('\n')
   .filter((l) => !/^\s*#/.test(l))
   .join('\n');
-function flowHas(selector: string): boolean {
-  return FLOW.includes(`'${selector}'`) || FLOW.includes(`"${selector}"`);
+// Every quoted selector in the flow, compiled the way Maestro compiles one:
+// a WHOLE-text regex (Regex.matches, not find).
+//
+// MATCHED, not substring-equal (2026-08-06). This used to ask whether the flow
+// literally contained `'la mosca'`, which broke the moment the selector became
+// `'la mosca.*'` — a change that made the flow MORE correct, not less (iOS
+// merges the sense row into one element reading "la mosca, noun", so the bare
+// form could never match on device). The question this suite actually wants to
+// ask is "does the flow still TARGET the text the assertions below prove is
+// rendered", and regex matching is that question. Substring equality also
+// silently accepted a selector that merely contained the string as a fragment.
+const FLOW_SELECTORS = [...FLOW.matchAll(/(['"])(.*?)\1/g)].map((m) => m[2]);
+
+function flowHas(rendered: string): boolean {
+  return FLOW_SELECTORS.some((raw) => {
+    const body = raw.startsWith('(?i)') ? raw.slice(4) : raw;
+    try {
+      return new RegExp(`^(?:${body})$`).test(rendered);
+    } catch {
+      return false; // not a valid regex → it can only have been a literal, and that didn't match
+    }
+  });
 }
 
 describe("Maestro word-capture selectors match what the components actually render", () => {

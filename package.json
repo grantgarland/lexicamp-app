@@ -19,6 +19,7 @@
     "expo": "~56.0.16",
     "expo-apple-authentication": "56.0.4",
     "expo-constants": "~56.0.21",
+    "expo-dev-client": "~56.0.24",
     "expo-device": "~56.0.4",
     "expo-font": "~56.0.7",
     "expo-glass-effect": "~56.0.4",
@@ -66,6 +67,9 @@
   },
   "scripts": {
     "start": "expo start",
+    "start:mock": "EXPO_NO_DOTENV=1 EXPO_PUBLIC_USE_SUPABASE=0 expo start -c",
+    "ios:mock": "EXPO_NO_DOTENV=1 EXPO_PUBLIC_USE_SUPABASE=0 expo run:ios",
+    "ios:mock:release": "SENTRY_DISABLE_AUTO_UPLOAD=true EXPO_NO_DOTENV=1 EXPO_PUBLIC_USE_SUPABASE=0 expo run:ios --configuration Release",
     "sync:assets": "node ./scripts/sync-brand-assets.js",
     "sync:tokens": "node ./scripts/sync-tokens.mjs",
     "sync:tokens:check": "node ./scripts/sync-tokens.mjs --check",

@@ -21,6 +21,35 @@
 #
 # word-capture.yaml added 2026-07-13. If it alone is red, suspect the flow's
 # gesture/visibility assumptions before the app — see notes in the flow header.
+#
+# 2026-08-06 — five flows added, taking the suite from "boot + capture" to the
+# whole app. Each owns one subsystem so a red flow names its own cause:
+#   quiz        the study loop (reveal → rate → the two post-session screens)
+#   word-list   browse: search, sort, tier filter, the archived shelf, detail
+#   decks       deck CRUD — the ONLY place the mock is a real data source
+#               (create/delete/add/remove genuinely mutate) and the only place a
+#               write REJECTION is exercised end to end
+#   progress    all three sub-tabs + the projection card and mastery forecast
+#   settings    every sheet opens; sign-out confirm reached and CANCELLED
+#   walkthrough the tour starts and step 1 lands (traversal is BLOCKED — read
+#               that file's header before assuming it's incomplete by accident)
+#
+# All of them were run green on a local iOS simulator (iPhone 16 Pro Max, iOS
+# 18.6) against a Release dev build in mock mode. NONE has run on Android yet,
+# which is what the nightly uses — expect the first nightly after this commit to
+# be the real test of the cross-platform assumptions, and read a failure against
+# each flow's header notes before suspecting the app.
+#
+# Runtime: the suite is now ~6× its old length. If the nightly's budget becomes
+# a problem, `executionOrder` is NOT the tool (see above) — drop flows from this
+# list, or split the slow ones (quiz walks a whole 9-card session) onto a
+# separate schedule.
 flows:
   - smoke.yaml
   - word-capture.yaml
+  - quiz.yaml
+  - word-list.yaml
+  - decks.yaml
+  - progress.yaml
+  - settings.yaml
+  - walkthrough.yaml

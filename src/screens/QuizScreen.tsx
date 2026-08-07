@@ -449,9 +449,11 @@ export function QuizTopBar({ current, total, onClose }: { current: number; total
         </RawText>
         {/* testID, not text: the accessibilityLabel collapses this Pressable into
             one iOS a11y element (see src/test/a11yCollapse.ts) and its only child
-            is an icon anyway. `.maestro/capture-onboarding-shots.yaml` needs this
-            to leave the quiz — quiz is a fullScreenModal, so Maestro's `back`
-            (a left-edge swipe) does nothing here. */}
+            is an icon anyway. Kept as the intended Maestro handle for leaving the
+            quiz — quiz is a fullScreenModal, so Maestro's `back` (a left-edge
+            swipe) does nothing here — but see .maestro/quiz.yaml: tapping it
+            reports success without opening the exit sheet, so no flow uses it
+            yet. */}
         <Pressable onPress={onClose} testID="quizClose" accessibilityRole="button" accessibilityLabel={t('quiz.closeQuiz')} style={styles.closeBtn}>
           <IconX size={16} color={theme.color.textMuted} />
         </Pressable>

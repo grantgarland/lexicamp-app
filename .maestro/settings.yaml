@@ -1,0 +1,215 @@
+# CI-4g — Settings: every sheet opens, and the two destructive confirms are
+# reachable but NOT taken.
+#
+# What this catches that smoke.yaml cannot: smoke taps `tab-settings` and
+# asserts the "Account" section header — which renders from a static Section
+# label, so it passes even if every row below it is dead. Settings is almost
+# entirely a launcher for SHEETS (User Info, Learning Languages, Study
+# Reminders, Quiz Length, How it works, Contact Support, About, Sign out), and
+# not one of them has ever been opened on a device by CI. They all mount through
+# the in-app Portal (ui/Sheet), which is the exact machinery CLAUDE.md flags as
+# a past source of dead-screen and stacking bugs — a class jest cannot see.
+#
+# ⚠️ NOTHING DESTRUCTIVE IS CONFIRMED HERE, deliberately. The flow opens the
+# sign-out confirm and CANCELS it: signing out of a mock build would drop the
+# fixture session and every later assertion would fail for an uninteresting
+# reason, and in a LIVE build it would be a real state change on a real account.
+# Delete Account is opened not at all — it sits behind a type-to-confirm gate
+# (`confirm-type-gate`) whose whole purpose is to be hard to trigger by
+# accident, and a flow that types into it is a flow one bad edit away from
+# deleting an account. Reaching the confirm is the coverage; taking it is not.
+#
+# SELECTOR POLICY: tap by testID, assert by TEXT (see word-capture.yaml). The
+# `settings-*` row ids are NOT stylistic. Every row is a `ui/List.ListItem` with
+# a DYNAMIC subtitle (the profile summary, the reminder schedule, the current
+# quiz length), and the row is one iOS accessibility element reading
+# "<title>, <subtitle>" — so "Study Reminders" alone never matches the whole
+# text, and the text it would have to match changes whenever a preference does.
+#
+# PREMIUM: devStore defaults to plan 'paid', so the Subscription section renders
+# the Premium card rather than the upgrade block. The Quiz Length sheet is also
+# plan-sensitive (free is capped). If the default flips, this flow goes red in
+# the Subscription assert first.
+#
+# Run locally: maestro test .maestro/settings.yaml
+appId: com.lexicamp.app
+tags:
+  - candidate
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: 'dataSource-mock'
+    timeout: 20000
+- tapOn:
+    id: 'tab-settings'
+- assertVisible: '(?i)Settings'
+
+# ── The section scaffolding rendered ────────────────────────────────────────
+# All four Section labels, because a row that fails to mount takes its section's
+# content with it but leaves the label — asserting only "Account" (as smoke
+# does) cannot tell those apart.
+- assertVisible: '(?i)Account'
+- assertVisible: '(?i)Study Preferences'
+- assertVisible: '(?i)Subscription'
+- assertVisible: '(?i)Help & Support'
+# Plan card. devStore defaults to 'paid', so the Premium card renders here
+# rather than the free-tier usage meter + upgrade block.
+# (Comment on its own line on purpose: the guard's selector parser reads to
+# end-of-line, so an inline `#` comment containing an apostrophe is swallowed
+# into the selector it was annotating.)
+- assertVisible: 'Premium'
+
+# ── User Info sheet ────────────────────────────────────────────────────────
+- tapOn:
+    id: 'settings-profile'
+- assertVisible: 'User Info'
+- assertVisible: 'Username'
+- assertVisible: 'Native Language'
+- assertVisible: 'Appearance'
+# Every sheet below leaves the same way: a POINT tap at the top of the screen.
+# `ui/Sheet` has no close button, its only dismiss affordance is a full-screen
+# scrim, and `tapOn` an element aims at that scrim's CENTRE — which lands inside
+# the sheet whenever the sheet is tall. Sheets are bottom-anchored, so the top
+# of the screen is always scrim; 12% clears the status bar / notch.
+- tapOn:
+    point: '50%,12%'
+- assertNotVisible: 'Username'
+- assertVisible: '(?i)Account'
+
+# ── Learning Languages sheet (the Phase D switcher) ────────────────────────
+# The mock enrolls two languages (mockLearningLangs = es + fr), so this sheet
+# has real content rather than a single row — and "Add a language" proves the
+# add affordance rendered rather than the premium cap notice.
+- tapOn:
+    id: 'settings-languages'
+- assertVisible: 'Learning Languages'
+- assertVisible: 'Add a language'
+- tapOn:
+    point: '50%,12%'
+- assertNotVisible: 'Add a language'
+
+# ── Study Reminders sheet ──────────────────────────────────────────────────
+- tapOn:
+    id: 'settings-reminders'
+- assertVisible: 'Study Reminders'
+- assertVisible: 'Enable reminders'
+- tapOn:
+    point: '50%,12%'
+- assertNotVisible: 'Enable reminders'
+
+# ── Quiz Length sheet — the one PREFERENCE WRITE in this flow ─────────────
+# The only sheet here that changes anything, so it is the only one asserted by
+# effect rather than by appearance: pick 10, Save, and the Settings row's own
+# subtitle must repaint to match (settings.cardsPerSession). That round trip
+# covers setQuizLength + the profile mutation + the row's re-render, which is
+# strictly more than "the sheet opened".
+#
+# ⚠️ `quiz-length-10` and not the option's text. Each option row is ONE iOS
+# accessibility element whose name is the merge of everything in it —
+# "20 cards, 1–7 min, · Standard, Recommended" — so a whole-text selector for
+# "10 cards" or "Recommended" alone cannot match, and the string that WOULD match
+# carries the minute estimates and the Recommended badge, i.e. it changes with
+# copy this flow has no business pinning. Same reasoning as the sort rows in
+# word-list.yaml.
+- tapOn:
+    id: 'settings-quiz-length'
+- assertVisible: 'Quiz Length'
+- assertVisible: 'Each card takes.*'
+- tapOn:
+    id: 'quiz-length-10'
+- tapOn: 'Save'
+# The row is ONE accessibility element reading "Quiz Length, 10 cards per
+# session" — title and subtitle merged (this is exactly why the row is tapped by
+# id). Maestro matches WHOLE text, so the subtitle needs a leading `.*`.
+- assertVisible: '.*10 cards per session'
+# Put it back, so this flow leaves the preference as it found it — flows share a
+# simulator and the quiz flow's session length is read from here.
+- tapOn:
+    id: 'settings-quiz-length'
+- tapOn:
+    id: 'quiz-length-20'
+- tapOn: 'Save'
+- assertVisible: '.*20 cards per session'
+# ⚠️ Wait out the "Study preferences updated" toast before the next scrim tap.
+# `ui/Toast` is anchored top:0 / zIndex:100, i.e. exactly over the 12% point the
+# sheet dismissals below aim at. On the 2026-08-06 run the toast swallowed that
+# tap, the How-It-Works sheet never closed, and the NEXT assertion still passed
+# — 'Contact Support' matched the Settings row sitting behind the scrim, which
+# is why every dismissal below is now verified with an assertNotVisible.
+- assertNotVisible: 'Study preferences updated'
+
+# ── How Lexicamp works (the educator; also the walkthrough's entry point) ───
+- tapOn:
+    id: 'settings-how-it-works'
+# 'The science behind your climb.' and not the sheet TITLE: the Settings row
+# that opens this sheet prints "How Lexicamp works" too (it has no subtitle, so
+# nothing is merged onto it), and the row stays in the hierarchy behind the
+# scrim — asserting the title would pass whether or not the sheet is open.
+- assertVisible: 'The science behind your climb.'
+- tapOn:
+    point: '50%,12%'
+- assertNotVisible: 'The science behind your climb.'
+
+# ── Contact Support ────────────────────────────────────────────────────────
+- tapOn:
+    id: 'settings-support'
+# Same trap as above — the Settings row also reads "Contact Support" — so the
+# sheet is identified by content only it has.
+# The row's declared accessibilityLabel (settings.emailSupportA11y), NOT the
+# visible "Email support" heading: the row is a Pressable with its own label, so
+# iOS collapses it and the heading text is not in the hierarchy — the announced
+# label is. This is the a11y-collapse rule again, resolved by naming the label.
+- assertVisible: 'Email support — opens your mail app'
+- tapOn:
+    point: '50%,12%'
+- assertNotVisible: 'Email support — opens your mail app'
+
+# ── About ──────────────────────────────────────────────────────────────────
+- tapOn:
+    id: 'settings-about'
+- assertVisible: 'Climb your vocabulary mountain, one word at a time.'
+- tapOn:
+    point: '50%,12%'
+- assertNotVisible: 'Climb your vocabulary mountain, one word at a time.'
+
+# ── Sign out: reach the confirm, then CANCEL (see the header note) ─────────
+# ⚠️ `centerElement: true` IS LOAD-BEARING (2026-08-06 device run). At the
+# bottom of the Settings scroll the Sign Out row lands at y 868–916 while the
+# floating capture FAB occupies 845–903 — they OVERLAP, and Maestro taps an
+# element's CENTRE, so the tap went to the FAB: the run opened the search
+# overlay and then failed on the sign-out confirm, three commands from the
+# actual cause. Centring the row first moves it clear of the FAB.
+# (The overlap is real for a human too, not a Maestro artefact — worth a look.)
+- scrollUntilVisible:
+    element:
+      id: 'settings-signout'
+    direction: DOWN
+    centerElement: true
+    timeout: 15000
+- tapOn:
+    id: 'settings-signout'
+- assertVisible: 'Sign out\?'
+- assertVisible: 'You can sign back in anytime. Your synced data stays safe.'
+- tapOn:
+    id: 'confirm-cancel'
+# Still signed in and still on Settings — the cancel did nothing, which is the
+# assertion. A confirm that signs you out on CANCEL is exactly the bug worth
+# catching here.
+#
+# ⚠️ Asserted at the BOTTOM of the screen, not on the "Account" section header
+# (2026-08-06). That was the original assertion and it broke the moment the
+# bottom gutter was widened to clear the FAB: Settings now genuinely scrolls, the
+# `scrollUntilVisible` above leaves the list at its end, and ACCOUNT is off
+# screen — a passing app failing on a stale assumption that the screen fit.
+- assertNotVisible: 'Sign out\?'
+- assertVisible:
+    id: 'settings-signout'
+
+# ── Round trip home (dead-screen-after-nav guard) ──────────────────────────
+- tapOn:
+    id: 'tab-home'
+- extendedWaitUntil:
+    visible: '(?i)Word Mastery'
+    timeout: 20000

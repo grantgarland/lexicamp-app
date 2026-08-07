@@ -21,11 +21,13 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
+import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { useUnistyles } from 'react-native-unistyles';
 
 import { useRecoveryLink } from '@/auth/useRecoveryLink';
+import { USE_SUPABASE } from '@/data';
 import { DevBadge } from '@/dev/DevBadge';
 import { queryClient } from '@/query/queryClient';
 import { startAppearanceSync, useAppliedScheme } from '@/theme/appearance';
@@ -52,6 +54,9 @@ export default function RootLayout() {
   // keep the old ink until the session ends, instead of the session being
   // thrown away mid-answer.
   const quizBusy = useUiStore((s) => s.quizInProgress);
+   
+  console.log(`[lexicamp] dataSource=${USE_SUPABASE ? 'live' : 'mock'} EXPO_PUBLIC_USE_SUPABASE=${process.env.EXPO_PUBLIC_USE_SUPABASE ?? 'undefined'}`);
+
   const [rebuildKey, setRebuildKey] = useState(scheme);
   if (!quizBusy && rebuildKey !== scheme) setRebuildKey(scheme);
   const [fontsLoaded] = useFonts({
@@ -120,6 +125,21 @@ export default function RootLayout() {
                 of the persistent nav — see ui/Portal + ui/Sheet + ui/Toast. */}
             <PortalHost />
             <Toast />
+            {/* Mode beacon. Zero-size and pointerEvents="none" so it can never
+                intercept a tap; present in EVERY build (not __DEV__-gated) —
+                its whole job is to let a flow assert what it is running
+                against BEFORE it asserts anything about the UI. */}
+            <View
+              testID={`dataSource-${USE_SUPABASE ? 'live' : 'mock'}`}
+              // `accessible` + a label are REQUIRED, not decoration. A bare
+              // zero-size View is not an iOS accessibility element, so it never
+              // enters the hierarchy Maestro reads and the assertion fails even
+              // when the mode is correct.
+              accessible
+              accessibilityLabel={`dataSource ${USE_SUPABASE ? 'live' : 'mock'}`}
+              pointerEvents="none"
+              style={{ position: 'absolute', top: 0, left: 0, width: 1, height: 1 }}
+            />
             {__DEV__ ? <DevBadge /> : null}
           </BottomSheetModalProvider>
         </SafeAreaProvider>

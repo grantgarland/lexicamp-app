@@ -167,10 +167,9 @@ export function DevBadge() {
             </Text>
             <View style={styles.rowWrap}>
               {/* The pill overlaps the Home header date, so it lands in every
-                  instructional screenshot `.maestro/capture-onboarding-shots.yaml`
-                  takes. Hiding it PERSISTS across relaunches (devStore) — which is
-                  the only reason it is useful, since the capture flow relaunches
-                  the app. The invisible hit target below brings it back. */}
+                  instructional screenshot taken for onboarding art. Hiding it
+                  PERSISTS across relaunches (devStore), so it survives a rebuild
+                  mid-session. The invisible hit target below brings it back. */}
               <Chip
                 label={badgeHidden ? '◉ Badge hidden' : '◎ Hide badge'}
                 active={badgeHidden}

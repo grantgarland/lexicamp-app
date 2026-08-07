@@ -214,6 +214,7 @@ export function AuthScreen() {
                   <Button
                     title={t('auth.continueEmail')}
                     variant="secondary"
+                    testID="authOpenEmail"
                     onPress={() => setEmailOpen(true)}
                   />
                 )}
@@ -223,12 +224,12 @@ export function AuthScreen() {
         )}
 
         {showEmailForm && !(isForgot && resetSentTo != null) && (
-          <Input label={t('auth.email')} placeholder={t('auth.emailPlaceholder')} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+          <Input testID="authEmail" label={t('auth.email')} placeholder={t('auth.emailPlaceholder')} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
         )}
         {showEmailForm && !isForgot && (
           <>
             <View style={styles.gap} />
-            <Input label={t('auth.password')} placeholder={t(isSignup ? 'auth.passwordCreate' : 'auth.passwordEnter')} value={password} onChangeText={setPassword} secureTextEntry />
+            <Input testID="authPassword" label={t('auth.password')} placeholder={t(isSignup ? 'auth.passwordCreate' : 'auth.passwordEnter')} value={password} onChangeText={setPassword} secureTextEntry />
           </>
         )}
 
@@ -251,6 +252,7 @@ export function AuthScreen() {
             <Button
               title={busy ? t('auth.working') : t(isSignup ? 'auth.createAccount' : 'auth.signIn')}
               variant="primary"
+              testID="authSubmit"
               onPress={busy ? undefined : submit}
             />
           ) : null}
@@ -266,7 +268,7 @@ export function AuthScreen() {
           ) : (
             <>
               <RawText style={styles.switchLabel}>{t(isSignup ? 'auth.haveAccount' : 'auth.noAccount')} </RawText>
-              <Pressable onPress={() => switchMode(isSignup ? 'signin' : 'signup')} hitSlop={6} accessibilityRole="button">
+              <Pressable testID="authToggleMode" onPress={() => switchMode(isSignup ? 'signin' : 'signup')} hitSlop={6} accessibilityRole="button">
                 <RawText style={styles.switchLink}>{t(isSignup ? 'auth.signIn' : 'auth.createAccount')}</RawText>
               </Pressable>
             </>

@@ -13,10 +13,12 @@
 // the dark canvas reads as a photo of somebody else's phone, so the dark
 // capture is what makes this look native rather than pasted in.
 //
-// Shots are captured by .maestro/capture-onboarding-shots.yaml, not by hand, so
-// the set can be re-cut whenever the UI moves (run it once per appearance). A
-// stale onboarding graphic is worse than none: it teaches a screen that no
-// longer exists.
+// Shots are captured BY HAND, once per appearance (light + dark). There used to
+// be a Maestro flow that cut the whole set automatically; it was retired on
+// 2026-08-06 — `.maestro/` is a test suite, and a flow that asserts nothing and
+// only takes screenshots does not belong in a nightly. A stale onboarding
+// graphic is still worse than none (it teaches a screen that no longer exists),
+// so re-cut the affected shots whenever the UI they show moves.
 //
 // ⚠️ METRO RESOLVES `require()` AT BUNDLE TIME. A `require` naming a file that
 // isn't committed fails the BUILD — no try/catch can rescue it, because nothing
@@ -44,6 +46,12 @@ interface Shot {
   dark: number;
   /** Committed pixel width ÷ height. The frame is sized from this. */
   ratio: number;
+  /** Draw the card shell around the crop? FALSE when the captured UI already
+   *  brings its own container (the quiz card, the projection cards) — a card
+   *  inside a card is a double border and reads as a screenshot pasted onto the
+   *  screen. TRUE for flat content like the word list, where the shell is the
+   *  only thing separating rows from the canvas. */
+  frame: boolean;
 }
 
 /** Captured shots that EXIST on disk. Static literals only — Metro cannot
@@ -53,21 +61,25 @@ const SHOTS = {
     light: require('../../assets/images/onboarding/onboarding-wordlist.png'),
     dark: require('../../assets/images/onboarding/onboarding-wordlist-dark.png'),
     ratio: 900 / 755,
+    frame: true,
   },
   quiz: {
     light: require('../../assets/images/onboarding/onboarding-quiz.png'),
     dark: require('../../assets/images/onboarding/onboarding-quiz-dark.png'),
     ratio: 900 / 1347,
+    frame: false,
   },
   results: {
     light: require('../../assets/images/onboarding/onboarding-results.png'),
     dark: require('../../assets/images/onboarding/onboarding-results-dark.png'),
     ratio: 900 / 559,
+    frame: true,
   },
   projection: {
     light: require('../../assets/images/onboarding/onboarding-projection.png'),
     dark: require('../../assets/images/onboarding/onboarding-projection-dark.png'),
     ratio: 900 / 982,
+    frame: false,
   },
 } as const satisfies Record<string, Shot>;
 
@@ -98,11 +110,13 @@ export function OnboardingShot({ name, children }: { name: OnboardingShotName; c
     width = height * shot.ratio;
   }
 
-  return (
-    <View style={styles.frame}>
-      <Image source={source} style={[styles.shot, { width, height }]} resizeMode="contain" accessibilityIgnoresInvertColors />
-    </View>
+  const image = (
+    <Image source={source} style={[styles.shot, { width, height }]} resizeMode="contain" accessibilityIgnoresInvertColors />
   );
+  // Frameless crops sit straight on the canvas — their own capture background
+  // is the same canvas colour in the same appearance, so the seam is invisible.
+  if (!shot.frame) return image;
+  return <View style={styles.frame}>{image}</View>;
 }
 
 const styles = StyleSheet.create((theme) => ({

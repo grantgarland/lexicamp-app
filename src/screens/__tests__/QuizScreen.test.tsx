@@ -139,8 +139,8 @@ test('close button registers a press and shows the in-tree exit confirm', () => 
   expect(screen.getByText(i18n.t('quiz.exitConfirm'))).toBeTruthy();
 });
 
-// The capture-flow path (2026-08-04): `.maestro/capture-onboarding-shots.yaml`
-// taps × AFTER revealing a card, not on the front. On device that tap registered
+// The device-observed path (2026-08-04): a flow tapped × AFTER revealing a card,
+// not on the front. On device that tap registered
 // and the exit sheet never appeared; this proves the difference is NOT the
 // revealed state / rating gutter, and that both testIDs the flow selects by are
 // actually on rendered elements.

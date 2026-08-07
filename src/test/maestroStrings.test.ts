@@ -84,11 +84,39 @@ function leaves(tree: Tree, prefix = '', out: Leaf[] = []): Leaf[] {
 // distribution (the flows assert the before/after word-count of a delete), so a
 // fixture resize fails HERE, not at 3am. Add values as flows grow.
 const summitTotal = SMOKE_FIXTURES.DISTRIBUTION.summit.reduce((a, b) => a + b, 0);
+// Per-tier counts, in registry order [bc, abc, hc, sr, summit]. `.maestro/
+// word-list.yaml` filters to one tier and asserts the resulting header count,
+// so the whole row is a candidate rather than just the total.
+const summitPerTier = [...SMOKE_FIXTURES.DISTRIBUTION.summit];
 const TEMPLATE_PARAMS: Record<string, (string | number)[]> = {
-  word: ['melancólico'],
-  name: ['melancólico'],
+  word: ['melancólico', 'melancholic'],
+  // `name` is both a word name and a DECK name (wordList.deckCreated /
+  // deleteDeckTitle / deckDeleted). 'Zeta' is the literal name
+  // .maestro/decks.yaml creates — keep the two in step, or that flow's
+  // selectors fall back to matching the generic `.*` and stop being guarded.
+  name: ['melancólico', 'Zeta'],
+  // Decks the same flow taps; the fixture names come from DECK_FIXTURES, so a
+  // rename there fails HERE rather than on the device.
+  deck: [...SMOKE_FIXTURES.DECK_NAMES, 'Zeta'],
   lang: ['Spanish'],
-  count: [summitTotal, summitTotal - 1],
+  // Word counts (delete: 60 → 59), deck counts (create: 3 → 4), and 1 for the
+  // picker's "(N selected)". Both count families are fixture-DERIVED on purpose:
+  // resizing WORD_BANK/DISTRIBUTION or DECK_FIXTURES must fail this guard.
+  count: [
+    summitTotal,
+    summitTotal - 1,
+    ...summitPerTier,
+    SMOKE_FIXTURES.DECK_COUNT,
+    SMOKE_FIXTURES.DECK_COUNT + 1,
+    1,
+    // Quiz-length presets (settings/sheets QUIZ_OPTIONS) — `.maestro/
+    // settings.yaml` switches between them and asserts the row subtitle. Listed
+    // explicitly rather than relied on: they only happened to be covered because
+    // the summit tier counts include 10 and 20, which is a coincidence a
+    // DISTRIBUTION edit would silently remove.
+    10,
+    20,
+  ],
   tier: ['Base Camp'],
 };
 
@@ -111,11 +139,43 @@ const enLeaves: Leaf[] = leaves(en as Tree).flatMap(({ key, text }) => instantia
 function buildFixtureCandidates(inputs: string[]): string[] {
   const out: string[] = [];
   // Mock lookup fixtures (see SMOKE_FIXTURES export in data/mock.ts).
-  for (const w of SMOKE_FIXTURES.WORD_BANK) out.push(w.native, w.target);
+  for (const w of SMOKE_FIXTURES.WORD_BANK) {
+    out.push(w.native, w.target);
+    // The RENDERED form of a word-picker row (2026-08-06). The picker's
+    // ListItem uses `subtitleInline`, which puts title and subtitle in ONE
+    // <Text> separated by a space — so iOS merges the row into a single element
+    // whose name ends "…melancholic melancólico" (the tier badge merges in
+    // ahead of it). `.maestro/decks.yaml` selects on that tail; it is
+    // fixture-backed with no i18n key, exactly like senseDisplayWord below.
+    out.push(`${w.target} ${w.native}`);
+  }
+  // Deck names render as bare row titles (DeckRow / the Add-to-Deck ListItems),
+  // so they are renderable strings with no i18n key — same class as WORD_BANK.
+  // Without this, `.maestro/decks.yaml`'s 'Travel.*' only passed by accident:
+  // the flow also TYPES "Travel", and typed inputs are candidates too.
+  for (const n of SMOKE_FIXTURES.DECK_NAMES) out.push(n);
   for (const s of SMOKE_FIXTURES.FLY_SENSES) {
     out.push(senseDisplayWord(s));
     for (const b of s.backTranslations) out.push(b.displayText);
   }
+  // The usage example, composed the way TranslationCard renders it: prefix +
+  // term + suffix, one <Text> per side. `.maestro/word-capture.yaml` asserts the
+  // target sentence after tapping "Show example sentence", so an edit to the
+  // fixture has to fail here rather than on the device.
+  const ex = SMOKE_FIXTURES.FLY_EXAMPLE;
+  out.push(`${ex.sourcePrefix}${ex.sourceTerm}${ex.sourceSuffix}`);
+  out.push(`${ex.targetPrefix}${ex.targetTerm}${ex.targetSuffix}`);
+  // Walkthrough tooltip controls (2026-08-06). The tour's buttons are rendered
+  // by @wrack/react-native-tour-guide, which COMPOSES each one's
+  // accessibilityLabel from our en.json strings plus its own English connective
+  // ("Next, go to step 3"). Since the Pressable declares that label, it is the
+  // text iOS exposes — so `.maestro/walkthrough.yaml` has to select on the
+  // composed form, and these are the only strings in the suite that are
+  // half-ours, half-library. Mirrors Tooltip.tsx; if the library's wording
+  // changes on an upgrade, that flow goes red and this is the line to fix.
+  const w = (en as Tree).walkthrough as Record<string, string>;
+  out.push(`${w.skip} tour`, `${w.back}, go to previous step`, `${w.done}, finish tour`);
+  for (let step = 2; step <= 12; step += 1) out.push(`${w.next}, go to step ${step}`);
   // Mock phrase path fabricates `<phrase>·es`; echo/miss render i18n copy (above).
   for (const i of inputs) out.push(i, `${i}·es`);
   return out;
@@ -264,7 +324,7 @@ describe('Maestro flow strings are backed by en.json / mock fixtures', () => {
 // inside an element that declares its own accessibilityLabel. iOS collapses
 // that subtree into ONE accessibility element carrying the declared label, so
 // the child text nodes — and any testID on them — are absent from the hierarchy
-// Maestro reads. `capture-onboarding-shots.yaml` burned a device run on
+// Maestro reads. A since-retired screenshot flow burned a device run on
 // `'(?i)Study now'` for exactly this: the string is in en.json, referenced by
 // HomeScreen, and plainly visible in the screenshot of the failure.
 //
@@ -281,6 +341,16 @@ describe('flow text selectors are not aimed at a11y-collapsed text', () => {
     expect(collapse.collapsedOnly.has('home.studyNow')).toBe(true);
     // And the control: ordinary copy under no a11y label stays reachable.
     expect(collapse.collapsedOnly.has('progress.fullRoute')).toBe(false);
+    // 2026-08-06: text inside a collapsing element whose OWN label is that same
+    // key is still reachable — iOS exposes it on the parent. ProgressScreen's
+    // leaderboard chip renders `🌍 {t(...global)}` inside a Pressable labelled
+    // exactly `t(...global)`, and 'Global' matches it on device. Before
+    // a11yCollapse.soleLabelKey this was a false positive that told the author
+    // to add a testID they did not need.
+    expect(collapse.collapsedOnly.has('progress.leaders.global')).toBe(false);
+    // The strict half of that rule: home.studyNow's label CONCATENATES several
+    // keys, so nothing in it is reachable whole — it must stay flagged (it is,
+    // via the assertion above).
   });
 
   for (const { file, selectors } of flows) {

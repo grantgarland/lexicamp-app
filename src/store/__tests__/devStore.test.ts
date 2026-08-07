@@ -3,11 +3,10 @@
 // Why this suite exists: `badgeHidden` is the ONLY field that survives a
 // relaunch, and both halves of that statement are load-bearing.
 //
-//  • It MUST persist, because the only consumer that needs it —
-//    `.maestro/capture-onboarding-shots.yaml` — relaunches the app. A
-//    session-only flag would be back to `false` before the first screenshot and
-//    the DEV pill would sit on top of the Home header in every piece of
-//    onboarding art.
+//  • It MUST persist, because it is used while cutting the onboarding
+//    instructional screenshots, which spans app relaunches. A session-only flag
+//    would be back to `false` after the first relaunch and the DEV pill would
+//    sit on top of the Home header in the rest of the art.
 //  • userState/plan MUST NOT persist. They drive query keys, and in live mode
 //    the scenario chip signs into a real account. A stale persisted scenario
 //    would come back on the next launch describing a session that no longer

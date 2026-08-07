@@ -235,7 +235,7 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
         <View style={styles.saveWrap}>
           <Button title={t('settings.save')} variant="primary" disabled={!dirty || !canCycle || setUsername.isPending} onPress={save} />
         </View>
-        <Pressable onPress={() => setConfirmDelete(true)} style={({ pressed }) => [styles.deleteRow, pressed && { opacity: 0.7 }]} accessibilityRole="button">
+        <Pressable testID="settingsDeleteAccount" onPress={() => setConfirmDelete(true)} style={({ pressed }) => [styles.deleteRow, pressed && { opacity: 0.7 }]} accessibilityRole="button">
           <RawText style={styles.deleteText}>{t('settings.deleteAccount')}</RawText>
         </Pressable>
       </Sheet>
@@ -553,7 +553,12 @@ export function QuizLengthSheet({ visible, isPaid, onClose, onUpgrade }: { visib
         {QUIZ_OPTIONS.map((o) => {
           const sel = selected === o.n;
           return (
-            <Pressable key={o.n} onPress={() => setSelected(o.n)} style={[styles.quizOption, { borderColor: sel ? theme.color.brand : theme.color.border, backgroundColor: sel ? theme.color.brandTint : 'transparent' }]} accessibilityRole="radio" accessibilityState={{ selected: sel }}>
+            // Maestro hook. The row is one iOS accessibility element whose name
+            // is the merge of all its text — "20 cards, 1–7 min, · Standard,
+            // Recommended" — which is right for a screen reader and a poor thing
+            // for a flow to pin: Maestro matches WHOLE text, so no selector for
+            // "20 cards" or "Recommended" alone can hit it.
+            <Pressable key={o.n} testID={`quiz-length-${o.n}`} onPress={() => setSelected(o.n)} style={[styles.quizOption, { borderColor: sel ? theme.color.brand : theme.color.border, backgroundColor: sel ? theme.color.brandTint : 'transparent' }]} accessibilityRole="radio" accessibilityState={{ selected: sel }}>
               <View style={styles.quizOptionText}>
                 <RawText style={[styles.quizN, { color: sel ? theme.color.brand : theme.color.textStrong }]}>{t('settings.quizCards', { count: o.n })}</RawText>
                 <RawText style={styles.quizRange}>{t('settings.quizRange', { min: o.min, max: o.max })}</RawText>

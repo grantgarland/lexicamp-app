@@ -69,6 +69,10 @@ export function HowItWorksList({ onStartTour }: HowItWorksListProps = {}) {
         <Pressable
           onPress={onStartTour}
           accessibilityRole="button"
+          // Maestro hook — the ONLY entry point to the walkthrough that doesn't
+          // depend on the auto-start gate (which requires live mode + a profile
+          // that hasn't seen it). `.maestro/walkthrough.yaml` replays from here.
+          testID="tour-replay"
           style={({ pressed }) => [styles.tourCta, pressed && { opacity: 0.85 }]}
         >
           <IconPlay size={14} color={theme.color.accentStrong} />

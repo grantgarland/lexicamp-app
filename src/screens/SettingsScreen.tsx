@@ -8,6 +8,7 @@
 import { useRouter } from 'expo-router';
 import { type ReactNode, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { FREE_DAILY_SAVES, FREE_WORD_BASE, freeTierUsage } from '@/domain/derive';
@@ -35,8 +36,13 @@ import {
   PremiumBadge,
   RawText,
   Screen,
+  TAB_BAR_CORE_HEIGHT,
   TAB_BAR_FAB_OVERHANG,
 } from '@/ui';
+
+/** Static part of the scroll's bottom gutter — see `styles.scroll`. The bottom
+ *  safe-area inset is the remaining term and is added at the call site. */
+const SCROLL_GUTTER = 24 + TAB_BAR_CORE_HEIGHT + TAB_BAR_FAB_OVERHANG;
 
 const FREE_FEATURES = ['featureUnlimited', 'featureDecks', 'featureLanguages'] as const;
 type SheetId = 'about' | 'signout' | 'editProfile' | 'notifications' | 'quizLength' | 'support' | 'howItWorks' | 'languages' | null;
@@ -45,6 +51,7 @@ export function SettingsScreen() {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const setWalkthroughRequested = useUiStore((s) => s.setWalkthroughRequested);
   const profile = useProfile();
   const { isPaid } = useEntitlement();
@@ -98,11 +105,15 @@ export function SettingsScreen() {
       <View style={styles.header}>
         <RawText style={styles.title}>{t('settings.title')}</RawText>
       </View>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      {/* The bottom safe area is the device-dependent third term of the gutter
+          (see `styles.scroll`) — it can only be read from the inset hook, so it
+          is added here rather than baked into the stylesheet. */}
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: SCROLL_GUTTER + insets.bottom }]} showsVerticalScrollIndicator={false}>
         {/* Account */}
         <Section label={t('settings.account')}>
           <ListItem
             leading={<IconTile><IconUser size={16} color={theme.color.brand} /></IconTile>}
+            testID="settings-profile"
             title={t('settings.editProfileTitle')}
             subtitle={profileSub}
             trailing={<Chevron />}
@@ -112,6 +123,7 @@ export function SettingsScreen() {
               switch, upgrade — one sheet shared with the global indicator. */}
           <ListItem
             leading={<IconTile><IconGlobe size={16} color={theme.color.brand} /></IconTile>}
+            testID="settings-languages"
             title={t('settings.learningLanguages')}
             subtitle={learningLangsSubtitle}
             trailing={<Chevron />}
@@ -127,6 +139,7 @@ export function SettingsScreen() {
         <Section label={t('settings.studyPreferences')}>
           <ListItem
             leading={<IconTile><IconBell size={16} color={theme.color.brand} /></IconTile>}
+            testID="settings-reminders"
             title={t('settings.studyReminders')}
             subtitle={remindersSubtitle}
             trailing={<Chevron />}
@@ -134,6 +147,7 @@ export function SettingsScreen() {
           />
           <ListItem
             leading={<IconTile><IconBook size={16} color={theme.color.brand} /></IconTile>}
+            testID="settings-quiz-length"
             title={t('settings.quizLength')}
             subtitle={t('settings.cardsPerSession', { count: isPaid ? quizLength : QUIZ_LENGTH_FREE })}
             trailing={<Chevron />}
@@ -207,18 +221,21 @@ export function SettingsScreen() {
         <Section label={t('settings.dataSupport')}>
           <ListItem
             leading={<IconTile><IconMountain size={15} color={theme.color.brand} /></IconTile>}
+            testID="settings-how-it-works"
             title={t('home.edu.title')}
             trailing={<Chevron />}
             onPress={() => setSheet('howItWorks')}
           />
           <ListItem
             leading={<IconTile><IconMail size={15} color={theme.color.brand} /></IconTile>}
+            testID="settings-support"
             title={t('settings.contactSupport')}
             trailing={<Chevron />}
             onPress={() => setSheet('support')}
           />
           <ListItem
             leading={<IconTile><IconInfo size={15} color={theme.color.brand} /></IconTile>}
+            testID="settings-about"
             title={t('settings.about')}
             subtitle={t('settings.version', { version: '1.0.0' })}
             trailing={<Chevron />}
@@ -228,7 +245,7 @@ export function SettingsScreen() {
         </Section>
 
         <View style={styles.signOutWrap}>
-          <Pressable style={({ pressed }) => [styles.signOut, pressed && { opacity: 0.7 }]} onPress={() => setSheet('signout')} accessibilityRole="button">
+          <Pressable testID="settings-signout" style={({ pressed }) => [styles.signOut, pressed && { opacity: 0.7 }]} onPress={() => setSheet('signout')} accessibilityRole="button">
             <RawText style={styles.signOutText}>{t('settings.signOut')}</RawText>
           </Pressable>
         </View>
@@ -293,8 +310,22 @@ const styles = StyleSheet.create((theme) => {
   return {
     header: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 10 },
     title: { fontFamily: fonts.sans.extra, fontSize: 22, letterSpacing: -0.3, color: color.textStrong },
-    // + the FAB's overhang: the nav's height is spacer-reserved, the FAB is not.
-    scroll: { paddingHorizontal: 16, paddingBottom: 24 + TAB_BAR_FAB_OVERHANG },
+    // Bottom gutter — MEASURED, not assumed (2026-08-06).
+    //
+    // This used to be `24 + TAB_BAR_FAB_OVERHANG`, on the stated assumption that
+    // "the nav's height is spacer-reserved, the FAB is not". The spacer does not
+    // reserve it here: with the list scrolled fully to rest, a device hierarchy
+    // dump put the Sign Out row at y 868–916 while the FAB occupies 845–903 and
+    // the nav's own rows sit at 874–922 (390×844pt @2x → 956pt tall viewport).
+    // Sign Out was underneath BOTH — its centre, which is where a tap lands, was
+    // inside the FAB, so tapping Sign Out opened search instead.
+    //
+    // So reserve the whole nav explicitly: its core height, the FAB that floats
+    // above it, and the bottom safe area it sits in — the same three terms the
+    // tabs layout already sums for the search overlay's `bottomInset`. The safe
+    // area is device-dependent, so it is added at the call site (styles here are
+    // built without inset context); this constant is the static part.
+    scroll: { paddingHorizontal: 16, paddingBottom: SCROLL_GUTTER },
 
     section: { marginBottom: 24 },
     sectionLabel: { fontFamily: fonts.sans.bold, fontSize: 11, letterSpacing: 0.9, textTransform: 'uppercase', color: color.textMuted, marginBottom: 6, marginLeft: 4 },

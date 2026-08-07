@@ -17,11 +17,11 @@ interface DevState {
   userState: DevUserState;
   plan: DevPlan;
   /** Hide the floating DEV pill (see dev/DevBadge). PERSISTED, unlike the knobs
-   *  above, because the thing that needs it is `.maestro/capture-onboarding-shots
-   *  .yaml`: the flow relaunches the app, so a session-only flag would be back to
-   *  `false` before the first screenshot and the pill would sit on top of the
-   *  Home header in every piece of onboarding art. Hiding the pill does NOT
-   *  remove its hit target — see DevBadge for how you get it back. */
+   *  above: it is used when cutting the onboarding instructional screenshots, and
+   *  the pill sits on top of the Home header in every one of them. A
+   *  session-only flag would be back to `false` after the first relaunch, i.e.
+   *  part-way through a capture session. Hiding the pill does NOT remove its hit
+   *  target — see DevBadge for how you get it back. */
   badgeHidden: boolean;
   setUserState: (u: DevUserState) => void;
   setPlan: (p: DevPlan) => void;

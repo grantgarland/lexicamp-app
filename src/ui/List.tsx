@@ -43,6 +43,13 @@ export interface ListItemProps {
   /** Override the title colour (e.g. danger for a destructive row). */
   titleColor?: string;
   accessibilityLabel?: string;
+  /** Maestro hook. Prefer this over a text selector on any row whose SUBTITLE is
+   *  dynamic. A pressable row is ONE iOS accessibility element and, with no
+   *  explicit label, iOS derives its name by merging every child — so the row
+   *  announces "Study Reminders, On · 9:00 AM", and Maestro (whole-text match)
+   *  never matches "Study Reminders" alone. Worse, the string it WOULD have to
+   *  match changes whenever the underlying preference does. */
+  testID?: string;
 }
 
 export function ListItem({
@@ -60,6 +67,7 @@ export function ListItem({
   last = false,
   titleColor,
   accessibilityLabel,
+  testID,
 }: ListItemProps) {
   const base = [
     styles.row,
@@ -103,6 +111,7 @@ export function ListItem({
         accessibilityRole={checkbox ? 'checkbox' : 'button'}
         accessibilityState={checkbox ? { checked } : undefined}
         accessibilityLabel={accessibilityLabel}
+        testID={testID}
         style={({ pressed }) => [base, pressed && !disabled && styles.rowPressed]}
       >
         {content}
@@ -110,7 +119,7 @@ export function ListItem({
     );
   }
   return (
-    <View accessibilityLabel={accessibilityLabel} style={base}>
+    <View accessibilityLabel={accessibilityLabel} testID={testID} style={base}>
       {content}
     </View>
   );

@@ -1,0 +1,137 @@
+# CI-4h — the in-app WALKTHROUGH, all nine steps (w1, w2, w3, w3b, w4, w5, w6,
+# w7, w8), start to finish.
+#
+# WHY THIS IS THE HIGHEST-VALUE FLOW PER LINE, and the one jest can least reach:
+# the walkthrough is not a screen, it is an ORCHESTRATION. Every step change runs
+# `applyStepScene`, which drives real navigation UNDERNEATH a Modal overlay — it
+# pushes and pops the quiz's fullScreenModal, opens and closes the search
+# overlay, switches tabs, and pre-warms the lazy Words scene so the NEXT step's
+# anchor is already mounted when the library validates it synchronously. Four
+# native boundaries crossed in one sequence, and the failure mode is never a
+# wrong string: it is a stranded tour — an anchor that didn't mount, a modal that
+# didn't dismiss, a tooltip describing a screen the user can't see.
+#
+# The tour's own history says the same thing out loud: w6 "showed card 1 of N
+# behind the tooltip", w7 "described a screen the user still could not see", a
+# completed tour "stranded the user on the Progress tab". All three were reported
+# by a human, twice each, because nothing automated walked the tour.
+#
+# ⚠️ THIS FLOW ONLY WORKS BECAUSE `enableAccessibility` IS FALSE in the
+# TourGuideConfig (src/tour/walkthrough.tsx). With it true, the library sets
+# `accessible: true` on the tooltip body, iOS collapses the whole tooltip into
+# ONE element, and the Next/Back/Skip buttons do not exist in the hierarchy at
+# all — a device dump of step 1 contained exactly one app node. That was an
+# accessibility defect in its own right (a VoiceOver user could not operate the
+# tour), and the flag is off for THAT reason; automatability came along with it.
+# If someone turns it back on, this flow dies at the first `tapOn: 'Next…'` —
+# read the comment on that flag before "fixing" the flow.
+#
+# SELECTOR POLICY: the tooltip is the library's, not ours, so there are no
+# testIDs to add. Step TITLES are our en.json copy (guarded by
+# src/test/maestroStrings.test.ts). The BUTTONS expose a COMPOSED label —
+# "Next, go to step 3", "Done, finish tour" — because the library concatenates
+# our string with its own English connective and puts the result on the
+# Pressable's accessibilityLabel. `'Next, go to step .*'` matches every step
+# without pinning the count, so inserting or removing a step doesn't touch these
+# lines. (The guard knows these composed forms; see buildFixtureCandidates.)
+#
+# ⚠️ REPLAY, not auto-start. The auto-start gate is `USE_SUPABASE && onboarded &&
+# !walkthroughDone && activeTab === 'home'` — OFF in mock mode by design, so this
+# flow can never wait for it. `tour-replay` (ui/HowItWorksList) works in every
+# mode and is the supported entry point.
+#
+# Run locally: maestro test .maestro/walkthrough.yaml
+appId: com.lexicamp.app
+tags:
+  - candidate
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: 'dataSource-mock'
+    timeout: 20000
+
+# ── Start the tour: Settings → How Lexicamp works → replay ─────────────────
+- tapOn:
+    id: 'tab-settings'
+- tapOn:
+    id: 'settings-how-it-works'
+# The sheet's own body text, not its title — the Settings ROW that opens it
+# prints "How Lexicamp works" too and stays in the hierarchy behind the scrim.
+- assertVisible: 'The science behind your climb.'
+- tapOn:
+    id: 'tour-replay'
+
+# ── w1 · Home: the study card ─────────────────────────────────────────────
+# extendedWaitUntil, not assertVisible: the sheet has to close and the tour arms
+# on a 350ms timer (the replay effect), then navigates Settings → Home. Every
+# later step is a plain assert — once the tour is running, step changes are fast
+# and `delayBefore` is the library's own business.
+- extendedWaitUntil:
+    visible: 'Start here'
+    timeout: 20000
+- tapOn: 'Next, go to step .*'
+
+# ── w2 · Home: the capture FAB (advancing opens the search overlay) ───────
+- assertVisible: 'Capture a word'
+- tapOn: 'Next, go to step .*'
+
+# ── w3 · Search overlay, with a demo query already rendered ───────────────
+# This step crosses TWO boundaries at once: it opens the search overlay AND
+# switches the tab underneath it to Words, to pre-warm w4's anchor. If that
+# pre-warm ever regresses, w4 below is where it surfaces.
+- assertVisible: 'Search'
+- tapOn: 'Next, go to step .*'
+
+# ── w3b · still on Search: picking the right sense ───────────────────────
+- assertVisible: 'Pick the right meaning'
+- tapOn: 'Next, go to step .*'
+
+# ── w4 · Word List toolbar (the pre-warmed scene) ────────────────────────
+- assertVisible: 'Your word list'
+- tapOn: 'Next, go to step .*'
+
+# ── w5 · back Home ───────────────────────────────────────────────────────
+- assertVisible: 'Review time'
+- tapOn: 'Next, go to step .*'
+
+# ── w6 · INSIDE the quiz modal ───────────────────────────────────────────
+# The step change pushes /quiz — a fullScreenModal — and the tooltip has to
+# present from inside it (the quiz mounts its own WalkthroughOverlayHost for
+# exactly this). A failure here means the overlay was lost at the modal
+# boundary, which is the bug QuizScreen's "EVERY early return must keep
+# WalkthroughOverlayHost mounted" comment exists to prevent.
+- extendedWaitUntil:
+    visible: 'Reveal, then rate'
+    timeout: 20000
+- tapOn: 'Next, go to step .*'
+
+# ── w7 · still in the quiz: the session-results view, fast-forwarded ─────
+# The screen behind this tooltip is synthesised: QuizScreen forces phase 'stats'
+# and fabricates ratings for the duration of the step, so the copy describes
+# something actually on screen. Reaching w7 at all is what proves that.
+- assertVisible: 'Your results'
+- tapOn: 'Next, go to step .*'
+
+# ── w8 · Progress — and this step POPS the quiz modal on the way ────────
+- extendedWaitUntil:
+    visible: 'Watch yourself climb'
+    timeout: 20000
+# Last step: the library swaps Next for Done, and its label composes differently
+# ("Done, finish tour" rather than "…, go to step N").
+- tapOn: 'Done, finish tour'
+
+# ── onTourEnd: always land back on Home ─────────────────────────────────
+# Not incidental — an explicit fix ("a completed tour used to strand the user on
+# the Progress tab it happened to end on", Casey 2026-08-01). This assertion is
+# the reason the flow runs to completion instead of skipping out early: it proves
+# the quiz modal was dismissed AND the router returned Home.
+- extendedWaitUntil:
+    visible: '(?i)Word Mastery'
+    timeout: 20000
+# Home is live after the overlay Modal tore down, not a husk left behind by it.
+- extendedWaitUntil:
+    visible:
+      id: 'studyCard'
+    timeout: 20000

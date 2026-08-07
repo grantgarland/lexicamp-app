@@ -1,0 +1,305 @@
+# CI-4d — Custom Decks CRUD, the one surface where the mock is a REAL data
+# source rather than a fixture reader.
+#
+# WHY THIS FLOW EARNS ITS RUNTIME (and word-capture's CREATE leg does not):
+# mock `saveCard()` is a no-op and `getWords()` serves fixtures, so a saved word
+# never appears anywhere — word-capture can only assert the optimistic "Saved!".
+# Decks are the opposite: `createDeck`/`deleteDeck`/`addCardToDeck`/
+# `removeCardFromDeck` genuinely mutate `mockDeckMeta` + `mockDeckMembers`,
+# `wordCount` is DERIVED from membership, and createDeck throws the SAME
+# rejection tokens as the RPC (`deck_name_taken`, `deck_name_invalid`). So this
+# flow tests true create→read→delete round trips and a real server-rejection
+# path, in mock mode, on a device. Nothing else in the suite does.
+#
+# PREMIUM: Custom Decks are gated (`wordList.premiumTitle` behind PremiumGate).
+# devStore defaults to plan 'paid', so the tab renders its real content. If that
+# default ever flips, EVERY step below fails at once on "Unlock Premium" — check
+# devStore.plan before suspecting the deck code.
+#
+# SELECTOR POLICY: tap by testID, assert by TEXT (see word-capture.yaml). Two
+# recurring iOS facts drive the `.*` wrapping below, both verified from local
+# `maestro hierarchy` dumps:
+#   • A ListItem's title and subtitle merge into ONE accessibility element
+#     ("Travel, 20 words"), so a bare deck-name selector cannot match.
+#   • A WordRow merges its whole row ("Base Camp tier, BC, melancholic,
+#     melancólico, Due now, 2 reviews") — the word is MID-string.
+#
+# Fixture couplings (update together): DECK_FIXTURES (Travel/Business/Favorites,
+# = 3 decks), WORD_BANK (melancholic/melancólico is row 1 of the summit set), and
+# the `name`/`deck` TEMPLATE_PARAMS in src/test/maestroStrings.test.ts — that
+# guard instantiates "Created {{name}}" with the literal 'Zeta' used
+# here, so renaming the deck in this flow without renaming it there silently
+# downgrades those assertions.
+#
+# Run locally: maestro test .maestro/decks.yaml
+appId: com.lexicamp.app
+tags:
+  - candidate
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: 'dataSource-mock'
+    timeout: 20000
+- tapOn:
+    id: 'tab-words'
+- assertVisible: 'My Words'
+
+# ── READ: the decks tab lists the fixture decks ──────────────────────────────
+- tapOn:
+    id: 'words-tab-decks'
+# The header count switches from words to decks with the tab (wordList.deckCount)
+# — asserting it proves the tab actually swapped its data source, not just its
+# highlight. `.*` on the row: title+subtitle are one element on iOS.
+- assertVisible: '3 decks'
+- assertVisible: 'Travel.*'
+
+# ── CREATE (success) ────────────────────────────────────────────────────────
+# ⚠️ THE DECK NAME IS SHORT, SINGLE-WORD, AND VERIFIED BEFORE SUBMIT — all three
+# for the same reason (2026-08-06, two device runs). `inputText` is not reliable
+# character-for-character on iOS under load: an eraseText-then-retype of
+# "Maestro Deck" produced "Maesto Deck" (dropped char), and a clean single type
+# of it during the full 8-flow suite produced "Maestro Dcke" (transposition).
+# Both times the deck was created under a name no later selector matched, and
+# the flow failed several steps downstream reading as a missing deck rather than
+# as mistyped input.
+#
+# So: a 4-character name with no space (far fewer keystrokes to corrupt), no
+# eraseText anywhere (the rejection case gets its own sheet visit below), and an
+# assertion on the FIELD before Create — so if the typing does corrupt, the run
+# fails HERE, naming the actual cause.
+- tapOn:
+    id: 'deck-create-open'
+- assertVisible: 'New deck'
+# Type → verify → RETRY the pair on mismatch. The verify alone turned a silent
+# corruption into an honest failure; the retry turns it into a non-event. The
+# `eraseText` at the top of the block is what makes a second attempt correct
+# rather than additive (a retry over a field still holding "Zta" would otherwise
+# produce "ZtaZeta").
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          id: 'deck-name-input'
+      - eraseText
+      - inputText: 'Zeta'
+      # ⚠️ id AND text, scoping the check to the FIELD. A bare
+      # `assertVisible: 'Zeta'` would also match a deck ROW named Zeta — and the
+      # equivalent check on 'Travel' below did exactly that: it matched the
+      # existing Travel row behind the sheet, passed while the field actually
+      # held "Trvel", and the run created a deck called Trvel. A verification
+      # that can be satisfied by something other than the thing being verified
+      # is worse than none.
+      - assertVisible:
+          id: 'deck-name-input'
+          text: 'Zeta'
+# ⚠️ BLUR THE NAME FIELD before touching the picker below (2026-08-06 device
+# run). `eraseText` acts on whatever is FOCUSED, not on whatever was last
+# tapped — so when the picker retry's `tapOn` hadn't taken focus yet, its
+# `eraseText` ran against the still-focused NAME field and deleted a character
+# from it. That produced a deck called "Trave" from a correctly-typed "Travel",
+# AFTER the field assertion had already passed. Blurring first leaves the stray
+# erase nothing to eat.
+- pressKey: Enter
+# Create is disabled until the deck has BOTH a name and ≥1 word (canCreate), so
+# the picker step is load-bearing, not decoration. Filter first: the summit
+# fixture is 60 rows and the target word is not guaranteed to be on the first
+# screenful.
+# Same type→verify→retry shape as the deck name above. The verification here is
+# the ROW appearing: if the filter text were corrupted, the list would not narrow
+# to this word and the `tapOn` below would miss.
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          id: 'deck-picker-filter'
+      - eraseText
+      - inputText: 'melancholic'
+      - assertVisible: '.*melancholic melancólico.*'
+# ⚠️ The row selector must NOT be '.*melancholic.*' (2026-08-06 device run). Once
+# the filter has been typed into, the TEXT FIELD's own value is also
+# "melancholic", so that pattern matches the input as well as the row — Maestro
+# picked the input, re-focused it (opening the iOS text-selection menu) and
+# reported SUCCESS while selecting nothing. Naming BOTH sides of the row —
+# "melancholic melancólico", which is how the merged row reads because the
+# picker uses `subtitleInline` — cannot match a single-value text field.
+- tapOn: '.*melancholic melancólico.*'
+# Selecting a row moves it into the sticky gutter and updates the count in
+# `wordList.selectWords` — the one assertion that proves the tap registered as a
+# SELECTION rather than just a highlight.
+# `(?i)`: the label is styled textTransform:'uppercase', so the accessibility
+# text is "SELECT WORDS (1 SELECTED)" and Maestro matches case-SENSITIVELY.
+- assertVisible: '(?i)Select words \(1 selected\)'
+- pressKey: Enter # blur the picker filter; the CTA sits below the keyboard line
+- tapOn:
+    id: 'deck-create-confirm'
+# ⚠️ DURABLE STATE, NOT THE TOAST (2026-08-06). "Created Zeta" was the
+# assertion here and it passed on every single-flow run, then failed in the
+# 8-flow suite: `ui/Toast` auto-dismisses after AUTO_MS = 3200ms, and under
+# suite load Maestro's FIRST hierarchy poll can land after the toast is already
+# gone. A toast is a 3-second window; the deck is permanent. Every mutation in
+# this flow is therefore asserted on its lasting effect, and toasts appear only
+# as `assertNotVisible` waits (which are correct whether or not one ever fired).
+#
+# Wait for the sheet to finish animating out BEFORE reading the list. Note that
+# the header count is NOT a sufficient wait: "4 decks" sits at the top of the
+# screen and is already repainted while the sheet still covers the rows below it
+# — which is exactly how this step failed once the toast assertion (an accidental
+# 3-second delay) was removed from between them.
+- assertNotVisible: 'New deck'
+# Round-trip READ: the create is visible in BOTH derived readings of the same
+# membership — the header count and the row itself.
+- assertVisible: '4 decks'
+- assertVisible: 'Zeta.*'
+- assertNotVisible: 'Created Zeta' # let the toast clear the top strip
+
+# ── CREATE (rejected): duplicate name → the server's own token ──────────────
+# mock createDeck throws 'deck_name_taken' exactly like the RPC, and the sheet
+# maps the token to copy. This is the only place in the suite a WRITE REJECTION
+# is exercised end to end.
+- tapOn:
+    id: 'deck-create-open'
+# Retried for the same reason as the create above — a corrupted "Travel" is not
+# a duplicate, so the rejection under test would simply not happen and the flow
+# would fail claiming the app accepted a duplicate name. (Observed: a suite run
+# went red here on exactly that.)
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          id: 'deck-name-input'
+      - eraseText
+      - inputText: 'Travel' # already a DECK_FIXTURES name
+      - assertVisible:
+          id: 'deck-name-input'
+          text: 'Travel'
+# ⚠️ BLUR THE NAME FIELD before touching the picker below (2026-08-06 device
+# run). `eraseText` acts on whatever is FOCUSED, not on whatever was last
+# tapped — so when the picker retry's `tapOn` hadn't taken focus yet, its
+# `eraseText` ran against the still-focused NAME field and deleted a character
+# from it. That produced a deck called "Trave" from a correctly-typed "Travel",
+# AFTER the field assertion had already passed. Blurring first leaves the stray
+# erase nothing to eat.
+- pressKey: Enter
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          id: 'deck-picker-filter'
+      - eraseText
+      - inputText: 'melancholic'
+      - assertVisible: '.*melancholic melancólico.*'
+- tapOn: '.*melancholic melancólico.*'
+- pressKey: Enter
+- tapOn:
+    id: 'deck-create-confirm'
+- assertVisible: 'You already have a deck with this name.'
+# Leave the sheet by POINT — see the note on the detail sheet below for why an
+# element tap can't be used on the scrim. Then prove the rejection wrote
+# NOTHING: still 4 decks, not 5.
+- tapOn:
+    point: '50%,12%'
+- assertVisible: '4 decks'
+
+# ── UPDATE: add an existing word to a deck (swipe tray → Add to Deck) ───────
+- tapOn:
+    id: 'words-tab-all'
+- assertVisible: '60 words'
+- swipe:
+    from:
+      text: '.*melancólico.*'
+    direction: LEFT
+- tapOn:
+    id: 'word-row-add-deck'
+- assertVisible: 'Add to Deck'
+# Business, not Travel: the fixture memberships are strided (Travel takes every
+# 3rd word from offset 0), so melancólico — word index 0 — is ALREADY in Travel
+# and its row renders disabled with "Already added". Business is offset 1.
+- tapOn: 'Business.*'
+# ⚠️ ORDER MATTERS HERE, and both waits are load-bearing (2026-08-06 device runs).
+# `ui/Toast` is anchored `position:absolute; top:0; zIndex:100`, i.e. directly
+# over the Word List sub-tab row AND over the 12% point every scrim dismissal in
+# this file aims at. A tap that lands on the toast is reported COMPLETED and does
+# nothing, so the flow then fails several commands later on something that was
+# never on screen. assertNotVisible POLLS, so these two lines ARE the wait: first
+# the sheet finishes animating out, then the toast expires on its own.
+- assertNotVisible: 'Add to Deck'
+- assertNotVisible: 'Added to Business'
+# Durable read-back rather than the toast (see the note on create), and done in
+# the DECK DETAIL rather than by re-opening the Add-to-Deck sheet. The obvious
+# check there — the Business row now reads "Already added" — cannot be asserted:
+# the row is a `ui/List.ListItem` with no explicit label, so iOS merges its
+# children and the element's whole text is "Business, 16 words, Already added".
+# A bare 'Already added' never matches, and a `.*Already added` that did would
+# also match the Travel row, which was already a member before this flow ran.
+#
+# Opening the deck and finding the word in it is unambiguous, and it reads
+# membership back through `useDeckWords` — a different query from the one the
+# add mutation wrote, which is the point.
+- tapOn:
+    id: 'words-tab-decks'
+- extendedWaitUntil:
+    visible: '4 decks'
+    timeout: 10000
+- tapOn: 'Business.*'
+- assertVisible: '.*melancólico.*'
+- tapOn:
+    point: '50%,12%'
+- assertVisible: '4 decks'
+
+# ── UPDATE: remove a word from a deck (deck detail → swipe → confirm) ───────
+- tapOn: 'Zeta.*'
+- assertVisible: 'Words' # DetailStats loaded
+- swipe:
+    from:
+      text: '.*melancholic.*'
+    direction: LEFT
+- tapOn:
+    id: 'word-row-remove-deck'
+# The TARGET word, matching the row it came from. Delete/remove copy used to
+# interpolate `native` (so this dialog read "Remove “melancólico”?" over a row
+# reading "melancholic") while the archive toast used `target`; both now name
+# the target — see the toast note in word-list.yaml.
+- assertVisible: 'Remove “melancholic”\?'
+- tapOn:
+    id: 'confirm-accept'
+# The deck is now empty — and the empty state is the proof the removal hit
+# MEMBERSHIP, not just the row's local render.
+- assertVisible: 'This deck is empty'
+# The toast sits exactly where the scrim tap below aims (top of screen), so it
+# has to clear first — same hazard as the sub-tab row above.
+- assertNotVisible: 'Removed “melancholic” from Zeta'
+# Dismiss the detail sheet by POINT, not by element or `back`. The scrim
+# (Sheet.tsx) is the only dismiss affordance and it is a full-screen Pressable,
+# so `tapOn` an element would aim at its CENTER — which lands inside the sheet
+# whenever the sheet is tall. Sheets are bottom-anchored, so the top of the
+# screen is always scrim. 12% clears the status bar / notch.
+- tapOn:
+    point: '50%,12%'
+- assertVisible: '4 decks' # back on the decks list, sheet gone
+
+# ── DELETE: swipe the deck row → confirm → toast + count drops ──────────────
+- swipe:
+    from:
+      text: 'Zeta.*'
+    direction: LEFT
+- tapOn:
+    id: 'deck-row-delete'
+- assertVisible: 'Delete “Zeta”\?'
+- tapOn:
+    id: 'confirm-accept'
+- assertVisible: '3 decks'
+- assertNotVisible: 'Deleted “Zeta”' # clear the toast off the sub-tab row
+# The words survive the deck (deleteDeck drops membership, never cards) — the
+# invariant the confirm copy promises out loud ("its words stay in your library").
+- tapOn:
+    id: 'words-tab-all'
+- assertVisible: '60 words'
+
+# ── Round trip home (same dead-screen guard as smoke.yaml) ──────────────────
+- tapOn:
+    id: 'tab-home'
+- extendedWaitUntil:
+    visible: '(?i)Word Mastery'
+    timeout: 20000

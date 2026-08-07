@@ -11,6 +11,10 @@ export interface ButtonRowButton {
   onPress: () => void;
   variant?: ButtonVariant;
   disabled?: boolean;
+  /** Optional Maestro hook. Opt-in per call site — a button's LABEL can change
+   * (e.g. "Next" -> "Let's begin"), so a text selector would need two
+   *  cases and silently break when the copy is edited. */
+  testID?: string;
 }
 
 export interface ButtonRowProps {
@@ -25,10 +29,10 @@ export function ButtonRow({ left, right, leftFlex = 1, rightFlex = 2, style }: B
   return (
     <View style={[styles.row, style]}>
       <View style={{ flex: leftFlex }}>
-        <Button title={left.title} variant={left.variant ?? 'secondary'} disabled={left.disabled} onPress={left.onPress} />
+        <Button testID={left.testID} title={left.title} variant={left.variant ?? 'secondary'} disabled={left.disabled} onPress={left.onPress} />
       </View>
       <View style={{ flex: rightFlex }}>
-        <Button title={right.title} variant={right.variant ?? 'primary'} disabled={right.disabled} onPress={right.onPress} />
+        <Button testID={right.testID} title={right.title} variant={right.variant ?? 'primary'} disabled={right.disabled} onPress={right.onPress} />
       </View>
     </View>
   );

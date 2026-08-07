@@ -1,0 +1,135 @@
+# CI-4f — Progress: all three sub-tabs, plus the two derived surfaces that only
+# exist here (the projection card and the mastery forecast).
+#
+# What this catches that smoke.yaml cannot: smoke taps `tab-progress` and
+# asserts 'Full Route', which proves the ROUTE tab rendered and nothing else.
+# Projection and Leaderboard are separate SegmentedTabs panels that smoke never
+# opens — a dead Projection tab has always been invisible to CI. That panel is
+# also the most derivation-heavy screen in the app (domain/projection over FSRS
+# state), so "it rendered at all" is genuinely worth asserting.
+#
+# ⚠️ WHY SO MANY ASSERTIONS ARE STRUCTURAL RATHER THAN NUMERIC. Almost every
+# number on this screen is a projection over the fixture's FSRS state, and the
+# projection card renders one of FOUR different subtrees (ok / reached /
+# low-recall / unreachable) depending on that math. Asserting a specific
+# estimate would make a correct app go red the moment a tier band or a fixture
+# stability moves. So this flow asserts the STABLE frame — the headings and the
+# `projectionCard` id, which all four branches share — and leaves the numbers to
+# the unit tests (ProgressScreen.test.tsx), which can pin inputs. The one number
+# it does assert is the tier ladder's, which is fixture-derived and pinned by
+# the guard's TEMPLATE_PARAMS.
+#
+# SELECTOR POLICY: tap by testID, assert by TEXT (see word-capture.yaml). The
+# sub-tab and pill ids are NOT stylistic:
+#   • progressTab* — SegmentedTabs rows carry accessibilityRole="tab"; the ids
+#     keep the flow off localized labels, same rule as the bottom `tab-<id>`s.
+#   • projPillNext / projPillSummit — SegmentedPills sets an explicit
+#     accessibilityLabel per pill ("Projection to your next camp"), which
+#     collapses the pill into ONE iOS accessibility element. The visible text
+#     "Next camp" is NOT in the hierarchy Maestro reads.
+#
+# ⚠️ The "Next camp" pill only exists when the account HAS a next camp: at the
+# top of the ladder `nextCampTarget` is null and ProjectionTab renders the
+# Summit view alone, with no toggle at all. The mock summit scenario is nowhere
+# near that, so the pill is present — but if this step alone starts failing,
+# check DISTRIBUTION before the pill code.
+#
+# Fixture couplings (update together): DISTRIBUTION.summit (drives the ladder's
+# mastered count and therefore which tier is 'Current'), theme/tiers.ts (band
+# edges + CEFR mapping), and en.json progress.*.
+#
+# Run locally: maestro test .maestro/progress.yaml
+appId: com.lexicamp.app
+tags:
+  - candidate
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: 'dataSource-mock'
+    timeout: 20000
+- tapOn:
+    id: 'tab-progress'
+
+# ── Route tab ───────────────────────────────────────────────────────────────
+# 'Full Route' and not 'Progress': the bottom tab bar prints "Progress" too
+# (tabs.progress), so that selector would pass against a blank Route panel and
+# stop catching the dead-screen class. Same reasoning as smoke.yaml's note.
+- extendedWaitUntil:
+    visible: '(?i)Full Route'
+    timeout: 20000
+# The ladder rendered its rows AND located the user on it. 'Current' is the
+# badge on exactly one row; without it the ladder is a static list of tiers.
+- assertVisible: '(?i)Current'
+- assertVisible: 'Summit'
+- assertVisible: '(?i)All-Time'
+
+# ── CEFR explainer sheet (the Route tab's only interactive affordance) ──────
+# Tapped by its accessibilityLabel: the control is icon-only, so the label IS
+# the exposed text — there is no inner text node to aim at and no testID needed.
+- tapOn: 'About CEFR levels'
+- assertVisible: 'CEFR Language Levels'
+- assertVisible: 'Levels are approximate.*'
+# Dismiss by POINT: `Sheet` has no close button, its only affordance is a
+# full-screen scrim, and `tapOn` an element aims at the CENTER — which lands
+# inside a tall sheet. Sheets are bottom-anchored, so the top is always scrim.
+- tapOn:
+    point: '50%,12%'
+- assertVisible: '(?i)Full Route'
+
+# ── Projection tab ──────────────────────────────────────────────────────────
+- tapOn:
+    id: 'progressTabProjection'
+- extendedWaitUntil:
+    visible:
+      id: 'projectionCard'
+    timeout: 20000
+# Both pills, because they resolve DIFFERENT targets through the same card
+# (nextCampTarget vs the summit) and only one of them can be the default.
+- tapOn:
+    id: 'projPillNext'
+- extendedWaitUntil:
+    visible:
+      id: 'projectionCard'
+    timeout: 20000
+- tapOn:
+    id: 'projPillSummit'
+- extendedWaitUntil:
+    visible:
+      id: 'projectionCard'
+    timeout: 20000
+
+# ── Mastery forecast (same panel, below the projection) ────────────────────
+# The forecast is a drawn chart: its curve has no text, so `forecastChart` is
+# the only thing that can prove it mounted. The title assert is the companion
+# that proves the SECTION rendered rather than just an empty SVG host.
+- scrollUntilVisible:
+    element:
+      id: 'forecastChart'
+    direction: DOWN
+    timeout: 15000
+- assertVisible: 'Mastery forecast'
+
+# ── Leaderboard tab ────────────────────────────────────────────────────────
+# 'Global' is the scope pill, and it renders whether or not the board has
+# entries — which is what we want: the mock leaderboard's contents are not a
+# contract this flow should pin, but the panel MOUNTING is.
+- tapOn:
+    id: 'progressTabLeaders'
+- extendedWaitUntil:
+    visible: '(?i)Global'
+    timeout: 20000
+
+# ── Back to Route, then home (dead-screen-after-nav guard) ─────────────────
+# Returning to a sub-tab already visited is its own regression class: the panels
+# unmount, and a panel that only survives its FIRST mount would pass every
+# assertion above.
+- tapOn:
+    id: 'progressTabRoute'
+- assertVisible: '(?i)Full Route'
+- tapOn:
+    id: 'tab-home'
+- extendedWaitUntil:
+    visible: '(?i)Word Mastery'
+    timeout: 20000

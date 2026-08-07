@@ -14,6 +14,18 @@ appId: com.lexicamp.app
 - launchApp:
     clearState: true
 
+# ── Mode gate (2026-08-06) ───────────────────────────────────────────────────
+# FIRST assertion on purpose. This flow only makes sense against the mock
+# DataSource: mock's getProfile() always returns onboardingComplete=true, so the
+# app boots straight to Home. A LIVE build has no session on a cleared install
+# and redirects to /onboarding at (tabs)/_layout.tsx:39 — every assertion below
+# then fails identically, and the first one to fail is "Word Mastery", which
+# reads as a broken Home screen rather than a mis-built APK.
+- extendedWaitUntil:
+    visible:
+      id: 'dataSource-mock'
+    timeout: 20000
+
 # NOTE (assertions): eyebrow/section labels render via `textTransform:
 # 'uppercase'`, so the accessibility text Maestro sees is UPPERCASE, and Maestro
 # matches text as a case-SENSITIVE regex — assertions use the `(?i)` inline flag.
@@ -24,15 +36,33 @@ appId: com.lexicamp.app
 # `tapOn: 'Home'` matched the SYSTEM button, backgrounded the app (launcher
 # TO_FRONT in the WindowManager log), and failed the final assertion. IDs also
 # hold if tab labels are ever localized.
+# NOTE (what each assertion has to be, 2026-08-06): this flow's whole job is to
+# catch DEAD SCREENS, and a section header or a screen title is exactly the thing
+# that still renders when the content under it failed. So every tab asserts one
+# static landmark AND one thing that only exists once the screen's DATA
+# resolved. The deep behaviour of each screen belongs to its own flow
+# (word-list / progress / settings / quiz / decks) — keep this one shallow, but
+# keep the second assertion honest.
 # ── Home ─────────────────────────────────────────────────────────────────────
 - extendedWaitUntil:
     visible: '(?i)Word Mastery'
+    timeout: 20000
+# The study card is the hero and it is DERIVED (derive.homeSnapshot over the
+# fixture cards) — "Word Mastery" is a static eyebrow that renders regardless.
+# By id, not text: the card declares its own accessibilityLabel, so iOS
+# collapses it and no text inside it is reachable (src/test/a11yCollapse.ts).
+- extendedWaitUntil:
+    visible:
+      id: 'studyCard'
     timeout: 20000
 
 # ── Word List ────────────────────────────────────────────────────────────────
 - tapOn:
     id: 'tab-words'
 - assertVisible: '(?i)My Words'
+# The count comes from the words query; the title above it does not. A Word List
+# that fails to load renders the title and an empty state.
+- assertVisible: '60 words'
 
 # ── Progress ─────────────────────────────────────────────────────────────────
 # 2026-08-03: this asserted '(?i)You are here' and went red. The 2026-07-30
@@ -55,6 +85,10 @@ appId: com.lexicamp.app
 - tapOn:
     id: 'tab-settings'
 - assertVisible: '(?i)Account'
+# 'Account' is a static Section label — it renders even if every row under it is
+# dead. The plan card is entitlement-driven (getEntitlement + the dev plan knob),
+# so it is the cheapest proof that Settings resolved real data.
+- assertVisible: 'Premium'
 
 # ── Back to Home (round trip — catches the dead-screen-after-nav class) ──────
 - tapOn:

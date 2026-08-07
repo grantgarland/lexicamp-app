@@ -36,6 +36,10 @@ export function DeckRow({ deck, wordCount, onPress, onStudy, onDelete }: DeckRow
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t('deckRow.studyA11y')}
+        // Maestro hooks, mirroring WordRow's `word-row-*` tray. The tray mounts
+        // only while the row is swiped open, so these ids are unambiguous even
+        // with many decks on screen — exactly one tray can exist at a time.
+        testID="deck-row-study"
         style={[styles.action, { backgroundColor: theme.color.accentCta }]}
         onPress={() => {
           ref.current?.close();
@@ -50,6 +54,7 @@ export function DeckRow({ deck, wordCount, onPress, onStudy, onDelete }: DeckRow
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t('deckRow.deleteA11y')}
+        testID="deck-row-delete"
         // Same pinned tray fill + white ink as WordRow — see the note there.
         style={[styles.action, { backgroundColor: theme.palette.red[600] }]}
         onPress={() => {

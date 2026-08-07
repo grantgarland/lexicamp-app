@@ -1,14 +1,16 @@
 # CI-4b — search/capture flow smoke: the CRUD surfaces that exist today,
 # against the mock DataSource (`smoke` EAS profile / dev builds).
 #
-# EXECUTION STATUS (2026-07-28). Every CI run so far died at the second-sense
-# assert, so only the steps up to and including `- assertVisible: 'la mosca'`
-# have ever executed on a device. Everything below it — Save, the phrase card,
-# the three gates, the whole Word List delete section — is still first-run: it
-# type-checks against en.json + fixtures (src/test/maestroStrings.test.ts) but
-# has never been exercised. Treat a failure below that line as a NEW finding,
-# not a regression, and prefer the flow's gesture/visibility assumptions as the
-# first suspect over the app (the row `swipe` most of all).
+# EXECUTION STATUS (2026-08-06). The flow now runs GREEN end to end — every
+# command, including the previously-never-executed tail (Save, the phrase card,
+# the three gates, the Word List swipe→confirm→toast delete), has passed on a
+# device: local iOS simulator (iPhone 16 Pro Max, iOS 18.6), Release dev build,
+# mock DataSource. The long red streak was never the app; it was two selector
+# bugs in this file (whole-text matching, then iOS a11y row merging — see the
+# `.*` notes at 'la mosca.*' and '.*melancólico.*') plus `hideKeyboard` throwing
+# on iOS. The Android leg is still only exercised by the nightly cron: the three
+# fixes are all selector-loosening or platform-neutral, but a first Android
+# failure after 08-06 should be read against these notes before the app.
 #
 # SELECTOR POLICY (2026-07-17): tap by testID, assert by TEXT.
 #   - Taps/gestures only need to FIND an element → ids are locale-proof, immune
@@ -80,13 +82,21 @@ tags:
 # (y 1517–1660) and the second-sense row (y 1704–1844) as invisible children;
 # after this command both are present in the dumped hierarchy.
 #
-# ⚠️ hideKeyboard on Android is literally `input keyevent 4` — an UNCONDITIONAL
-# BACK press (AndroidDriver.hideKeyboard: shell "input keyevent 4"; sleep 300;
-# settle). It does not check whether an IME is showing. Only ever place it where
-# the keyboard is provably up — i.e. immediately after typing into the
-# autofocused search input. Anywhere else it is a back-navigation that would pop
-# this overlay, exactly like the 2026-07-16 system-Home-button collision.
-- hideKeyboard
+# ⚠️ NOT `hideKeyboard` (changed 2026-08-06). It is platform-divergent in two
+# incompatible ways and both are hazards:
+#   • Android: literally `input keyevent 4` — an UNCONDITIONAL BACK press
+#     (AndroidDriver.hideKeyboard). It never checks whether an IME is showing, so
+#     anywhere the keyboard happens to be down it silently back-navigates and
+#     pops this overlay — the 2026-07-16 system-Home-button collision again.
+#   • iOS: it THROWS. `CommandFailed: Couldn't hide the keyboard. This can happen
+#     if the app uses a custom input or doesn't expose a standard dismiss action.`
+#     — which is what red-lit this flow on the 2026-08-06 local run.
+#
+# `pressKey: Enter` blurs and does nothing else, identically on both platforms:
+# the search field is single-line with returnKeyType="search" and NO
+# onSubmitEditing wired (SearchScreen), so RN's default blurOnSubmit drops the
+# IME without re-running the search and without navigating.
+- pressKey: Enter
 # The second sense RENDERS its determiner: mock FLY_SENSES gives mosca
 # prefixWord 'la', and toCardResult composes "la mosca" via
 # domain/translation.senseDisplayWord. Maestro matches the WHOLE element text,
@@ -96,12 +106,43 @@ tags:
 # exactly "la mosca" at [92,1741][264,1810], and no node whose text is "mosca".
 # scrollUntilVisible (no centerElement) stays as cheap insurance against future
 # card growth — it returns immediately when the element is already visible.
+#
+# ⚠️ TRAILING `.*` IS LOAD-BEARING, and it is the cross-platform half of the
+# whole-text rule above (2026-08-06). The sense row renders the word and its POS
+# as two sibling <Text>s. Android's accessibility tree keeps them as two nodes,
+# so a TextView reads exactly "la mosca" (the 07-27 artifact). iOS MERGES the row
+# into ONE element whose accessibilityText is "la mosca, noun" — verified in the
+# local `maestro hierarchy` dump: there is no node reading just "la mosca". A
+# bare 'la mosca' selector therefore passes on Android and can never match on
+# iOS. `la mosca.*` matches both (`.*` also matches empty).
 - scrollUntilVisible:
     element:
-      text: 'la mosca'
+      text: 'la mosca.*'
     direction: DOWN
     timeout: 15000
-- assertVisible: 'la mosca'
+- assertVisible: 'la mosca.*'
+
+# ── READ: the LAZY example fetch (added 2026-08-06) ─────────────────────────
+# Examples are deliberately not part of the lookup — they cost money, so they
+# fetch once, on demand, per translation (invariant 4 in CLAUDE.md: "Examples
+# fetch lazily, once per translation"). That makes "tap the button, a sentence
+# appears" a real read path with its own loading and error states, and nothing
+# else in the suite exercised it.
+#
+# Asserting the TARGET side, composed prefix+term+suffix exactly as
+# TranslationCard renders it — the mock serves one canned example for
+# 'mock-t:fly' (mock.FLY_EXAMPLE, exported through SMOKE_FIXTURES so the guard
+# builds this same string).
+- tapOn:
+    id: 'result-example'
+#
+# ⚠️ `.*`-wrapped: the card renders the sentence inside TYPOGRAPHIC QUOTES
+# (“…”), so the element's whole text is not the bare sentence the fixture holds.
+# Maestro matches whole text; the guard composes the bare form. The wrapper
+# satisfies both.
+- extendedWaitUntil:
+    visible: '.*Quiero decir, para un tipo que podía volar\..*'
+    timeout: 10000
 
 # ── CREATE: save flips to optimistic saved state ─────────────────────────────
 - scrollUntilVisible:
@@ -123,9 +164,10 @@ tags:
     visible: 'buenos dias·es'
     timeout: 10000
 # The re-tap above raises the IME again, and this (shorter) card puts Save near
-# the clip line. A second `hideKeyboard` is NOT the fix — see the BACK-press
-# warning above; if the tap had not re-raised the IME it would pop the overlay.
-# scrollUntilVisible has no side effect either way.
+# the clip line. Blur it the same way — with hideKeyboard gone, a second dismiss
+# here is safe rather than a latent back-navigation. scrollUntilVisible stays as
+# insurance and returns immediately when the element is already visible.
+- pressKey: Enter
 - scrollUntilVisible:
     element:
       text: 'Save word'
@@ -174,16 +216,26 @@ tags:
     id: 'tab-words'
 - assertVisible: 'My Words'
 - assertVisible: '60 words' # SMOKE_FIXTURES.DISTRIBUTION.summit total
+# Wrapped in `.*` for the same cross-platform reason as 'la mosca.*' above, one
+# step further: iOS merges the ENTIRE row into a single element reading
+# "Base Camp tier, BC, melancholic, melancólico, Due now, 2 reviews" (verified in
+# a local `maestro hierarchy` dump), so the fixture word is in the MIDDLE of the
+# text, not at the start. Android keeps the word as its own TextView, which
+# `.*melancólico.*` still matches.
 - swipe:
     from:
-      text: 'melancólico' # text on purpose — content anchor (see policy above)
+      text: '.*melancólico.*' # text on purpose — content anchor (see policy above)
     direction: LEFT
 - tapOn:
     id: 'word-row-delete' # tray action (tray mounts only while swiped open)
-- assertVisible: 'Delete “melancólico”\?'
+# The TARGET word. Delete/remove copy names the target everywhere as of
+# 2026-08-06 — it used to interpolate `native` here while the archive toast used
+# `target`, so the same row was called two different things depending on which
+# action you took.
+- assertVisible: 'Delete “melancholic”\?'
 - tapOn:
     id: 'confirm-accept' # ConfirmDialog confirm — no `below:` anchor needed
-- assertVisible: 'Deleted “melancólico”'
+- assertVisible: 'Deleted “melancholic”'
 - assertVisible: '59 words'
 
 # ── Round trip home (same dead-screen guard as smoke.yaml) ───────────────────

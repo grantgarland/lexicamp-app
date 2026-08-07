@@ -1,6 +1,6 @@
 // iOS accessibility-COLLAPSE analysis, for the Maestro guard suites.
 //
-// The hole this closes (2026-08-04, `capture-onboarding-shots.yaml`):
+// The hole this closes (2026-08-04, found by a since-retired screenshot flow):
 // `home.studyNow` is a live en.json leaf, referenced by live app source, and
 // rendered on screen — the string guard and the orphan guard both passed it.
 // The flow still failed on `assertVisible: '(?i)Study now'`, because the text
@@ -117,6 +117,36 @@ function collapses(node: AnyNode): boolean {
   return IMPLICITLY_ACCESSIBLE.has(jsxName(node));
 }
 
+/**
+ * The key a collapsing element ANNOUNCES AS ITS WHOLE LABEL, if any.
+ *
+ * Why this exists (2026-08-06): collapse hides a subtree behind the label the
+ * element declares — but when that label IS the same string as the child text,
+ * the string is still exposed, just on the parent instead of the child. Real
+ * case: ProgressScreen's leaderboard chip renders `🌍 {t('progress.leaders
+ * .global')}` inside a Pressable whose accessibilityLabel is exactly
+ * `t('progress.leaders.global')`. iOS collapses the chip to one element reading
+ * "Global", and `assertVisible: 'Global'` matches it perfectly. Without this,
+ * the guard called that selector unmatchable and told the author to add a
+ * testID — advice that was not just unnecessary but WRONG about the device.
+ *
+ * Deliberately strict: only when the attribute value is exactly one `t()` call
+ * and nothing else. `accessibilityLabel={`${t('a')}. ${t('b')}`}` announces the
+ * CONCATENATION, and Maestro matches WHOLE text, so neither key is reachable on
+ * its own — that case must stay flagged.
+ */
+function soleLabelKey(node: AnyNode): string | null {
+  const attr = attrNamed(node, 'accessibilityLabel');
+  const value = attr?.value as AnyNode | undefined;
+  if (value?.type !== 'JSXExpressionContainer') return null;
+  const expr = value.expression as AnyNode;
+  const calls = keyCallsIn(expr);
+  // Exactly one key call, and it IS the whole expression — not a fragment of a
+  // template literal, a ternary, or a concatenation.
+  if (calls.length !== 1 || calls[0] !== expr) return null;
+  return keyOf(expr);
+}
+
 /** i18n keys referenced by `t('x')` / `translate('x')` anywhere under `node`. */
 function keyCallsIn(node: unknown): AnyNode[] {
   const out: AnyNode[] = [];
@@ -190,10 +220,14 @@ export function analyzeCollapse(srcDir: string): CollapseReport {
 
     walk(ast, (n) => {
       if (n.type !== 'JSXElement' || !collapses(n)) return;
+      // A child whose key is exactly what this element ANNOUNCES is still
+      // reachable — the string moved to the parent, it did not disappear.
+      const announced = soleLabelKey(n);
       // Only CHILDREN collapse — and only their real render sites.
       for (const call of keyCallsIn(n.children)) {
         if (labelCalls.has(call)) continue;
         const k = keyOf(call);
+        if (k === announced) continue;
         const rec = collapsed.get(k) ?? { count: 0, files: new Set<string>() };
         rec.count += 1;
         rec.files.add(path.relative(path.dirname(srcDir), file));

@@ -1,0 +1,141 @@
+# CI-4c — the STUDY LOOP, end to end. The one flow that exercises the thing the
+# product is for: Home's due queue → reveal → rate → the two post-session
+# screens → back to a repainted Home.
+#
+# Why this is worth a device run at all (the unit tests do NOT cover it):
+# QuizScreen.test.tsx proves the React state machine — phases, rate(), the
+# promo gate — against a virtual DOM. What it cannot prove, and what has
+# actually broken here before, is NATIVE: the quiz is a `fullScreenModal`
+# (src/app/_layout.tsx), so every one of its surfaces sits in a different native
+# layer from the tab tree, and layering/hit-test bugs in that modal are invisible
+# to jest. The known-broken × (see EXIT, below) is exactly that class.
+#
+# SELECTOR POLICY: same as word-capture.yaml (tap by testID, assert by TEXT,
+# whole-text regex). Two ids here are NOT stylistic and must not be swapped for
+# text:
+#   • studyCard — the Pressable declares its own accessibilityLabel ("Study now.
+#     30 words ready for review. …"), so iOS collapses the whole subtree into ONE
+#     accessibility element. Neither the inner "Study now" text NOR the
+#     `studyCtaButton` testID exists in the hierarchy Maestro reads. This is the
+#     case src/test/a11yCollapse.ts was written for; the guard fails any flow
+#     that aims a text selector at `home.studyNow`.
+#   • quizRevealButton — the label is mode-dependent ("Reveal" in recall,
+#     "Tap to reveal" in recognition; QuizCard.QuizRevealButton) and Maestro
+#     matches WHOLE text, so no single text selector covers both branches. The
+#     mock due queue contains BOTH modes (mock.ts QUIZ_CARDS), so this is a live
+#     concern in this flow, not a hypothetical.
+#
+# EXIT (2026-08-06): this flow never taps the quiz's × to leave. That is a known
+# native defect, not an oversight — `tapOn: quizClose` reports SUCCESS and the
+# exit-confirm sheet never appears (observed 2026-08-04, 13:31), while
+# the same logic passes in QuizScreen.test.tsx for both card states. Maestro's
+# iOS `back` is a left-edge swipe, which a fullScreenModal ignores. The flow
+# therefore leaves the quiz only by COMPLETING it, which is also the path that
+# exercises the commit. `quizClose` / `quizExitConfirm` testIDs are correct and
+# still in the app — add the exit leg here once the × is understood.
+#
+# Fixture couplings (update together): mock QUIZ_CARDS (both modes present),
+# PROFILE.quizLength (session length = how many times the loop runs), and the
+# summit DISTRIBUTION that makes anything due at all.
+#
+# Run locally: maestro test .maestro/quiz.yaml
+appId: com.lexicamp.app
+tags:
+  - candidate
+---
+- launchApp:
+    clearState: true
+# Mode gate, same reasoning as smoke.yaml: mock-only flow, and a live build's
+# redirect-to-onboarding would otherwise surface as "Home has no study card".
+- extendedWaitUntil:
+    visible:
+      id: 'dataSource-mock'
+    timeout: 20000
+
+# ── Home: the due queue is offered ───────────────────────────────────────────
+- extendedWaitUntil:
+    visible: '(?i)Word Mastery'
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: 'studyCard'
+    timeout: 20000
+- tapOn:
+    id: 'studyCard'
+
+# ── First card, graded by hand: the ONE iteration we assert in detail ────────
+# The loop below can't assert anything (a `repeat` body that fails ends the
+# flow), so the reveal→rate contract is proven once here, explicitly: the rating
+# gutter must APPEAR as a consequence of the reveal. Asserting the prompt rather
+# than a `rating-*` id is deliberate — an id-only assert passes against an empty
+# render, and this is the moment the card's back is supposed to exist.
+- extendedWaitUntil:
+    visible:
+      id: 'quizRevealButton'
+    timeout: 20000
+- tapOn:
+    id: 'quizRevealButton'
+- assertVisible: 'How well did you recall it\?'
+- tapOn:
+    id: 'rating-got_it'
+
+# ── Grade out the rest of the session ────────────────────────────────────────
+# `while: visible: quizRevealButton` and NOT a fixed `times:`. Session length is
+# a user preference (PROFILE.quizLength, and the free tier caps it lower), so a
+# hard count either leaves cards unrated — no commit, no end screen — or taps
+# past the last card into whatever replaced it.
+#
+# The button is the loop's own terminator: it renders ONLY on a face-down card,
+# so when the last rating flips the phase to 'end' the condition goes false.
+- repeat:
+    while:
+      visible:
+        id: 'quizRevealButton'
+    commands:
+      - tapOn:
+          id: 'quizRevealButton'
+      - tapOn:
+          id: 'rating-got_it'
+
+# ── End splash ('end' phase) ─────────────────────────────────────────────────
+# Rating everything "Got it" puts accuracy at 100, so the `good` branch renders:
+# "Great session!" + the stats row. Assert the STAT LABEL as well as the title —
+# the title alone would pass on a splash whose numbers failed to compute.
+- extendedWaitUntil:
+    visible: 'Great session!'
+    timeout: 20000
+- assertVisible: 'Accuracy'
+- tapOn: 'See results'
+
+# ── Per-word results ('stats' phase) ─────────────────────────────────────────
+# This screen is the payoff the whole session pays for: every word's FSRS
+# outcome. `\d+ strengthened` proves the summary actually counted the ratings
+# (quiz.strengthenedCount) instead of rendering a zeroed header.
+- extendedWaitUntil:
+    visible: 'Session results'
+    timeout: 20000
+- assertVisible: '\d+ strengthened'
+- tapOn: 'Done'
+
+# ── Milestone ('promo' phase) — CONDITIONAL on purpose ──────────────────────
+# `done()` routes to the milestone screen iff ≥1 word actually crossed a tier
+# band this session (sessionPromotions), and otherwise straight back to Home.
+# Which of those happens depends on FSRS math over the fixture's stabilities —
+# i.e. it can legitimately change when the fixtures or the tier bands move — so
+# asserting it unconditionally would make a correct app go red. `runFlow: when:`
+# covers both, and still exercises the screen whenever it is the one that shows.
+- runFlow:
+    when:
+      visible: '.*promoted!'
+    commands:
+      - assertVisible: 'Promoted this session'
+      - tapOn: 'Keep climbing →'
+
+# ── Back on Home, repainted ─────────────────────────────────────────────────
+# The dead-screen-after-modal-dismiss guard: leaving a fullScreenModal is its own
+# native failure class (this is how you'd catch the quiz tearing down onto a
+# blank tab tree), and it is the only assertion here that the commit path didn't
+# hang the app.
+- extendedWaitUntil:
+    visible: '(?i)Word Mastery'
+    timeout: 20000

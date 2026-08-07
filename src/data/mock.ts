@@ -421,6 +421,16 @@ const MOCK_MISS = 'fly123456'; // Azure's own docs miss-example
 // Reserved token that resolves to an identity-echo (target === source) so dev/tests
 // can exercise the unsaveable card path (16 §2 result-quality gate).
 const MOCK_ECHO = 'echoword';
+
+export const FLY_EXAMPLE = {
+  sourcePrefix: 'I mean, for a guy who could ',
+  sourceTerm: 'fly',
+  sourceSuffix: '.',
+  targetPrefix: 'Quiero decir, para un tipo que podía ',
+  targetTerm: 'volar',
+  targetSuffix: '.',
+} as const;
+
 const FLY_SENSES: DictionarySense[] = [
   {
     normalizedTarget: 'volar',
@@ -508,7 +518,21 @@ function mockLookupResult(query: string, direction: SearchDirection): LookupOutc
 // CI smoke-strings guard (src/test/maestroStrings.test.ts): the Maestro flows in
 // `.maestro/` assert these fixture strings, so a fixture drift must fail at jest
 // time — not at 3am in the nightly. Keep in lockstep with the flow headers.
-export const SMOKE_FIXTURES = { WORD_BANK, DISTRIBUTION, MOCK_MISS, MOCK_ECHO, FLY_SENSES } as const;
+// DECK_NAMES/DECK_COUNT are read by `.maestro/decks.yaml` via the guard's
+// TEMPLATE_PARAMS: that flow asserts the deck-tab header count before and after
+// a create ("3 decks" → "4 decks") and taps the 'Travel'/'Business' rows by
+// name.
+const DECK_NAMES = DECK_FIXTURES.map((f) => f.meta.name);
+export const SMOKE_FIXTURES = {
+  WORD_BANK,
+  DISTRIBUTION,
+  MOCK_MISS,
+  MOCK_ECHO,
+  FLY_SENSES,
+  FLY_EXAMPLE,
+  DECK_NAMES,
+  DECK_COUNT: DECK_FIXTURES.length,
+} as const;
 
 const scenario = () => useDevStore.getState();
 
@@ -551,18 +575,7 @@ export const mockDataSource: DataSource = {
     // One canned example so W-03/detail UIs have something to render.
     // (_targetTerm: per-sense examples, 2026-07-17 — mock serves the same
     // sentence for any sense; the real per-sense behavior lives server-side.)
-    return translationId === 'mock-t:fly'
-      ? [
-          {
-            sourcePrefix: 'I mean, for a guy who could ',
-            sourceTerm: 'fly',
-            sourceSuffix: '.',
-            targetPrefix: 'Quiero decir, para un tipo que podía ',
-            targetTerm: 'volar',
-            targetSuffix: '.',
-          },
-        ]
-      : [];
+    return translationId === 'mock-t:fly' ? [FLY_EXAMPLE] : [];
   },
   async getProfile() {
     return { ...PROFILE, targetLang: mockActiveLang as Profile['targetLang'], displayName: mockDisplayName, username: mockUsername, usernameChanges: mockUsernameChanges };

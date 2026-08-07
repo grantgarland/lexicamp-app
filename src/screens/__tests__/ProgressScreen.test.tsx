@@ -149,8 +149,7 @@ describe('Progress redesign (2026-07-30)', () => {
     expect(screen.queryByText('Words by Tier')).toBeNull();
   });
 
-  // The three hooks `.maestro/capture-onboarding-shots.yaml` selects by on this
-  // screen. Text selectors are NOT an option for the pill: SegmentedPills sets
+  // The three hooks `.maestro/progress.yaml` selects by on this screen. Text selectors are NOT an option for the pill: SegmentedPills sets
   // accessibilityLabel ("Projection to your next camp"), which collapses the
   // Pressable into one iOS a11y element and hides the visible "Next camp" text
   // from Maestro entirely. This asserts the ids exist on rendered elements —

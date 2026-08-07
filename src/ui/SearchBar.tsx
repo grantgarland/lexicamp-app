@@ -16,9 +16,28 @@ export interface SearchBarProps {
   filterActive?: boolean;
   autoFocus?: boolean;
   style?: ViewStyle;
+  /** Maestro hook for the text field. The bar is mounted on several surfaces at
+   *  once (Word List, the deck word-picker, the add-to-deck sheet), so its
+   *  a11y label — the PLACEHOLDER — is the only thing distinguishing them, and
+   *  two surfaces with the same placeholder are indistinguishable to a flow. */
+  testID?: string;
+  /** Maestro hook for the trailing filter/sort button. Icon-only: it exposes
+   *  `common.filter` as its a11y label and nothing else, and that one string is
+   *  shared by every filter button in the app. */
+  filterTestID?: string;
 }
 
-export function SearchBar({ value, onChange, placeholder, onFilter, filterActive = false, autoFocus, style }: SearchBarProps) {
+export function SearchBar({
+  value,
+  onChange,
+  placeholder,
+  onFilter,
+  filterActive = false,
+  autoFocus,
+  style,
+  testID,
+  filterTestID,
+}: SearchBarProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   return (
@@ -33,6 +52,7 @@ export function SearchBar({ value, onChange, placeholder, onFilter, filterActive
           autoCapitalize="none"
           autoCorrect={false}
           autoFocus={autoFocus}
+          testID={testID}
           accessibilityLabel={placeholder ?? t('common.search')}
           style={[styles.input, { fontFamily: theme.fonts.sans.regular, color: theme.color.textBody }]}
         />
@@ -46,6 +66,7 @@ export function SearchBar({ value, onChange, placeholder, onFilter, filterActive
         <Pressable
           onPress={onFilter}
           accessibilityRole="button"
+          testID={filterTestID}
           accessibilityLabel={t('common.filter')}
           style={[styles.filterBtn, { backgroundColor: filterActive ? theme.color.brand : theme.color.surfaceSunken }]}
         >

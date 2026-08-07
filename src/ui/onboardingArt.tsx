@@ -10,6 +10,8 @@ import { View } from 'react-native';
 import Svg, { Circle, Line, Polyline, SvgXml, Text as SvgText } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { useTranslation } from '@/i18n';
+
 import { BRAND_MARK_KNOCKOUT_XML } from './brandMark';
 import { RawText } from './Text';
 
@@ -80,6 +82,7 @@ const retention = (elapsed: number, s: number) => Math.exp(-elapsed / s);
  *  pile up in the leftmost fifth and the interesting part is unreadable. */
 export function ForgettingCurveInfo({ maxWidth = 420 }: { maxWidth?: number }) {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   const { color } = theme;
   const axis = color.borderStrong;
   const grid = color.divider;
@@ -110,53 +113,72 @@ export function ForgettingCurveInfo({ maxWidth = 420 }: { maxWidth?: number }) {
   }));
 
   return (
-    <Frame w={340} h={200} maxWidth={maxWidth}>
-      {/* Guides */}
-      <Line x1={L} y1={T} x2={L} y2={B} stroke={axis} strokeWidth={1.5} />
-      <Line x1={L} y1={B} x2={R} y2={B} stroke={axis} strokeWidth={1.5} />
-      <Line x1={L} y1={Y(1)} x2={R} y2={Y(1)} stroke={grid} strokeWidth={1} strokeDasharray="4,4" />
-      {/* The half-forgotten line the reviews cluster around. Drawn in the drop
-          colour and labelled, so the scattered red dots read as "near this",
-          not as three unrelated depths. */}
-      <Line x1={L} y1={Y(REVIEW_THRESHOLD)} x2={R} y2={Y(REVIEW_THRESHOLD)} stroke={drop} strokeWidth={1} strokeDasharray="2,3" opacity={0.7} />
+    <View style={{ alignSelf: 'stretch', alignItems: 'center' }}>
+      {/* Chart caption. Without it the beat asks the reader to infer both axes
+          from the legend alone — the copy above says what the curve MEANS, not
+          what is plotted. */}
+      <RawText style={captionStyles.caption}>{t('onboarding.curveCaption')}</RawText>
+      <Frame w={340} h={200} maxWidth={maxWidth}>
+        {/* Guides */}
+        <Line x1={L} y1={T} x2={L} y2={B} stroke={axis} strokeWidth={1.5} />
+        <Line x1={L} y1={B} x2={R} y2={B} stroke={axis} strokeWidth={1.5} />
+        <Line x1={L} y1={Y(1)} x2={R} y2={Y(1)} stroke={grid} strokeWidth={1} strokeDasharray="4,4" />
+        {/* The half-forgotten line the reviews cluster around. Drawn in the drop
+            colour and labelled, so the scattered red dots read as "near this",
+            not as three unrelated depths. */}
+        <Line x1={L} y1={Y(REVIEW_THRESHOLD)} x2={R} y2={Y(REVIEW_THRESHOLD)} stroke={drop} strokeWidth={1} strokeDasharray="2,3" opacity={0.7} />
 
-      {/* Without review — pure decay to near zero. */}
-      <Polyline points={never} stroke={decay} strokeWidth={1.6} strokeDasharray="5,4" fill="none" strokeLinecap="round" />
+        {/* Without review — pure decay to near zero. */}
+        <Polyline points={never} stroke={decay} strokeWidth={1.6} strokeDasharray="5,4" fill="none" strokeLinecap="round" />
 
-      {/* With Lexicamp — the same decay, interrupted. */}
-      {LEGS.map((l) => (
-        <Polyline key={l.from} points={leg(l.from, l.to, l.s)} stroke={line} strokeWidth={2.6} fill="none" strokeLinecap="round" />
-      ))}
-      {reviews.map((r) => (
-        <Line key={r.day} x1={X(r.day)} y1={Y(r.fallen)} x2={X(r.day)} y2={Y(1)} stroke={up} strokeWidth={1.8} strokeDasharray="3,3" />
-      ))}
-      {reviews.map((r) => (
-        <Circle key={`d${r.day}`} cx={X(r.day)} cy={Y(r.fallen)} r={4} fill={drop} />
-      ))}
-      {reviews.map((r) => (
-        <Circle key={`u${r.day}`} cx={X(r.day)} cy={Y(1)} r={4} fill={up} />
-      ))}
+        {/* With Lexicamp — the same decay, interrupted. */}
+        {LEGS.map((l) => (
+          <Polyline key={l.from} points={leg(l.from, l.to, l.s)} stroke={line} strokeWidth={2.6} fill="none" strokeLinecap="round" />
+        ))}
+        {reviews.map((r) => (
+          <Line key={r.day} x1={X(r.day)} y1={Y(r.fallen)} x2={X(r.day)} y2={Y(1)} stroke={up} strokeWidth={1.8} strokeDasharray="3,3" />
+        ))}
+        {reviews.map((r) => (
+          <Circle key={`d${r.day}`} cx={X(r.day)} cy={Y(r.fallen)} r={4} fill={drop} />
+        ))}
+        {reviews.map((r) => (
+          <Circle key={`u${r.day}`} cx={X(r.day)} cy={Y(1)} r={4} fill={up} />
+        ))}
 
-      {/* Scales */}
-      <SvgText x={L - 6} y={Y(1) + 4} fill={label} fontSize={9} textAnchor="end">100%</SvgText>
-      <SvgText x={L - 6} y={Y(REVIEW_THRESHOLD) + 4} fill={drop} fontSize={9} textAnchor="end">50%</SvgText>
-      {/* Below the threshold line, not above it: above is where the reviewed
-          curve lives and the label collided with it. */}
-      <SvgText x={R} y={Y(REVIEW_THRESHOLD) + 13} fill={drop} fontSize={9} textAnchor="end" opacity={0.9}>half forgotten</SvgText>
-      {[0, 1, 4, 12, HORIZON].map((d) => (
-        <SvgText key={d} x={X(d)} y={B + 15} fill={label} fontSize={9.5} textAnchor="middle">
-          {d === 0 ? 'Day 0' : `${d}`}
-        </SvgText>
-      ))}
+        {/* Scales */}
+        <SvgText x={L - 6} y={Y(1) + 4} fill={label} fontSize={9} textAnchor="end">100%</SvgText>
+        <SvgText x={L - 6} y={Y(REVIEW_THRESHOLD) + 4} fill={drop} fontSize={9} textAnchor="end">50%</SvgText>
+        {/* Below the threshold line, not above it: above is where the reviewed
+            curve lives and the label collided with it. */}
+        <SvgText x={R} y={Y(REVIEW_THRESHOLD) + 13} fill={drop} fontSize={9} textAnchor="end" opacity={0.9}>half forgotten</SvgText>
+        {[0, 1, 4, 12, HORIZON].map((d) => (
+          <SvgText key={d} x={X(d)} y={B + 15} fill={label} fontSize={9.5} textAnchor="middle">
+            {d === 0 ? 'Day 0' : `${d}`}
+          </SvgText>
+        ))}
 
-      {/* Legend */}
-      <Line x1={L} y1={B + 36} x2={L + 20} y2={B + 36} stroke={decay} strokeWidth={1.6} strokeDasharray="5,4" />
-      <SvgText x={L + 26} y={B + 39} fill={label} fontSize={9.5}>without review</SvgText>
-      <Line x1={188} y1={B + 36} x2={208} y2={B + 36} stroke={line} strokeWidth={2.6} />
-      <SvgText x={214} y={B + 39} fill={line} fontSize={9.5}>with Lexicamp</SvgText>
-    </Frame>
+        {/* Legend */}
+        <Line x1={L} y1={B + 36} x2={L + 20} y2={B + 36} stroke={decay} strokeWidth={1.6} strokeDasharray="5,4" />
+        <SvgText x={L + 26} y={B + 39} fill={label} fontSize={9.5}>without review</SvgText>
+        <Line x1={188} y1={B + 36} x2={208} y2={B + 36} stroke={line} strokeWidth={2.6} />
+        <SvgText x={214} y={B + 39} fill={line} fontSize={9.5}>with Lexicamp</SvgText>
+      </Frame>
+    </View>
   );
 }
+
+const captionStyles = StyleSheet.create((theme) => ({
+  caption: {
+    fontFamily: theme.fonts.sans.semibold,
+    fontSize: 12,
+    letterSpacing: 0.3,
+    lineHeight: 17,
+    color: theme.color.textMuted,
+    textAlign: 'center',
+    marginBottom: 10,
+    paddingHorizontal: 8,
+  },
+}));
 
 /** ReminderPreview — what a Lexicamp reminder looks like when it lands, drawn as
  *  a notification card rather than photographed.

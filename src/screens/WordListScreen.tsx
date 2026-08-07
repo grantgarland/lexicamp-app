@@ -317,10 +317,16 @@ export function WordListScreen() {
           active={subTab}
           onChange={(id) => setSubTab(id as 'words' | 'decks')}
           tabs={[
-            { id: 'words', label: t('wordList.tabAllWords') },
+            // Maestro hooks. SegmentedTabs sets accessibilityRole="tab" but no
+            // explicit label, so the visible text IS reachable — the ids are
+            // here for the same reason as `tab-<id>` on the bottom bar: they
+            // survive localization, and "All Words" is not a string this flow
+            // should have to keep in sync with copy.
+            { id: 'words', label: t('wordList.tabAllWords'), testID: 'words-tab-all' },
             {
               id: 'decks',
               label: t('wordList.tabCustomDecks'),
+              testID: 'words-tab-decks',
               badge: !isPaid ? (
                 <View style={styles.proBadge}>
                   <RawText style={styles.proBadgeText}>PRO</RawText>
@@ -342,6 +348,8 @@ export function WordListScreen() {
             placeholder={t('wordList.searchPlaceholder')}
             onFilter={() => setFilterOpen(true)}
             filterActive={filterActive}
+            testID="words-search-input"
+            filterTestID="words-filter"
             style={styles.searchUnderTabs}
           />
         </View>
@@ -399,7 +407,7 @@ export function WordListScreen() {
           <View style={styles.decksBody}>
             {/* Sticky "Create new deck" — consistent with the Add-to-Deck sheet; never scrolls. */}
             <View style={styles.stickyCreate}>
-              <CreateNewDeckRow onPress={() => openCreate()} />
+              <CreateNewDeckRow testID="deck-create-open" onPress={() => openCreate()} />
             </View>
             {decksLoading || !contentReady ? (
               <SkeletonRows count={3} />
@@ -499,7 +507,7 @@ export function WordListScreen() {
       <ConfirmDialog
         visible={pendingDelete != null}
         icon={<IconTrash size={22} color={theme.color.danger} />}
-        title={t('wordList.deleteTitle', { word: pendingDelete?.native ?? '' })}
+        title={t('wordList.deleteTitle', { word: pendingDelete?.target ?? '' })}
         body={t('wordList.deleteBody')}
         confirmLabel={t('wordList.deleteConfirm')}
         destructive
@@ -514,12 +522,12 @@ export function WordListScreen() {
             deleteCard.mutate(w.id, {
               onError: () => {
                 setRemoved((r) => r.filter((id) => id !== w.id));
-                showToast({ variant: 'destructive', message: t('wordList.deleteFailed', { word: w.native }) });
+                showToast({ variant: 'destructive', message: t('wordList.deleteFailed', { word: w.target }) });
               },
             });
             showToast({
               variant: 'destructive',
-              message: t('wordList.wordDeleted', { word: w.native }),
+              message: t('wordList.wordDeleted', { word: w.target }),
             });
           }
           setPendingDelete(null);
@@ -616,7 +624,7 @@ export function WordListScreen() {
       <ConfirmDialog
         visible={pendingRemove != null}
         icon={<IconTrash size={22} color={theme.color.danger} />}
-        title={t('wordList.removeTitle', { word: pendingRemove?.word.native ?? '' })}
+        title={t('wordList.removeTitle', { word: pendingRemove?.word.target ?? '' })}
         body={t('wordList.removeBody')}
         confirmLabel={t('wordList.removeConfirm')}
         destructive
@@ -629,7 +637,7 @@ export function WordListScreen() {
                 onSuccess: () =>
                   showToast({
                     variant: 'destructive',
-                    message: t('wordList.removedFromDeck', { word: pr.word.native, deck: pr.deck.name }),
+                    message: t('wordList.removedFromDeck', { word: pr.word.target, deck: pr.deck.name }),
                     // Undo is honest here — re-adding is a real, idempotent write.
                     action: { label: t('common.undo'), onPress: () => addCardToDeck.mutate({ deckId: pr.deck.id, cardId: pr.word.id }) },
                   }),
@@ -747,6 +755,13 @@ function FilterSortSheet({
               onPress={() =>
                 setLocalSort((cur) => (cur.dim === dim ? { dim, dir: cur.dir === 0 ? 1 : 0 } : { dim, dir: 0 }))
               }
+              // Maestro hook, and NOT optional here: the row declares its own
+              // accessibilityLabel below (sortA11yActive/Inactive), so iOS
+              // collapses the whole row into one element and the visible
+              // "Next review" / "Date added" text is absent from the hierarchy
+              // Maestro reads. Selecting a sort by text is impossible; this is
+              // the a11y-collapse class src/test/a11yCollapse.ts guards.
+              testID={`sort-${dim}`}
               style={styles.optionRow}
               accessibilityRole="radio"
               accessibilityState={{ selected: on }}
@@ -794,6 +809,11 @@ function FilterSortSheet({
           {TIERS.map((tier, i) => (
             <ListItem
               key={tier.id}
+              // Maestro hook. The row's accessible name merges the tier badge in
+              // ("Base Camp tier, BC, Base Camp"), so a whole-text selector for
+              // "Base Camp" cannot match it; the id says which tier without
+              // depending on that merge or on the tier's copy.
+              testID={`tier-filter-${tier.id}`}
               checkbox
               checked={localTiers.has(tier.id)}
               checkColor={tier.color}
@@ -814,24 +834,30 @@ function FilterSortSheet({
             <RawText style={styles.sheetLabel}>{t('wordList.showArchived')}</RawText>
             <RawText style={styles.sheetHint}>{t('wordList.showArchivedHint')}</RawText>
           </View>
-          <Toggle value={localArchived} onValueChange={setLocalArchived} />
+          <Toggle testID="filter-archived" value={localArchived} onValueChange={setLocalArchived} />
         </View>
       </View>
 
       <ButtonRow
         style={styles.sheetActions}
-        left={{ title: t('wordList.reset'), onPress: onReset }}
-        right={{ title: t('wordList.apply'), variant: 'primary', disabled: applyDisabled, onPress: () => onApply(localSort, localTiers, localArchived) }}
+        left={{ title: t('wordList.reset'), onPress: onReset, testID: 'filter-reset' }}
+        right={{
+          title: t('wordList.apply'),
+          variant: 'primary',
+          disabled: applyDisabled,
+          onPress: () => onApply(localSort, localTiers, localArchived),
+          testID: 'filter-apply',
+        }}
       />
     </Sheet>
   );
 }
 
 // Shared "Create new deck…" row (dashed tile + label) — Custom Decks (sticky) + Add-to-Deck.
-function CreateNewDeckRow({ onPress }: { onPress: () => void }) {
+function CreateNewDeckRow({ onPress, testID }: { onPress: () => void; testID?: string }) {
   const { t } = useTranslation();
   return (
-    <Pressable style={({ pressed }) => [styles.createNewRow, pressed && { opacity: 0.6 }]} onPress={onPress} accessibilityRole="button">
+    <Pressable testID={testID} style={({ pressed }) => [styles.createNewRow, pressed && { opacity: 0.6 }]} onPress={onPress} accessibilityRole="button">
       <View style={styles.createNewTile}>
         <RawText style={styles.createNewPlus}>+</RawText>
       </View>
@@ -900,7 +926,16 @@ function WordPicker({
   };
   return (
     <>
-      <SearchBar value={pickerQuery} onChange={setPickerQuery} placeholder={t('wordList.filterPlaceholder')} style={styles.pickerSearch} />
+      {/* `deck-picker-filter`, not the placeholder: this bar is mounted INSIDE a
+          sheet that sits over the Word List's own SearchBar, so at that moment
+          two text fields are in the hierarchy at once. */}
+      <SearchBar
+        value={pickerQuery}
+        onChange={setPickerQuery}
+        placeholder={t('wordList.filterPlaceholder')}
+        testID="deck-picker-filter"
+        style={styles.pickerSearch}
+      />
       {/* Sticky selected-gutter: never scrolls out of view; caps at ~5 rows then scrolls. */}
       {gutter.length > 0 && (
         <View style={styles.gutter}>
@@ -970,13 +1005,17 @@ function CreateDeckSheet({
         placeholder={t('wordList.deckNamePlaceholder')}
         placeholderTextColor={theme.color.textMuted}
         accessibilityLabel={t('wordList.deckNamePlaceholder')}
+        testID="deck-name-input"
         style={[styles.deckNameInput, { fontFamily: theme.fonts.sans.medium, color: theme.color.textStrong }]}
       />
       {error != null && <RawText style={styles.deckNameError}>{error}</RawText>}
       <RawText style={styles.pickerLabel}>{t('wordList.selectWords', { count: selected.size })}</RawText>
       <WordPicker words={words} selected={selected} onToggle={toggle} />
       <View style={styles.pickerCta}>
-        <Button title={t('wordList.create')} variant="primary" disabled={!canCreate} onPress={() => canCreate && onCreate(name.trim(), [...selected])} />
+        {/* `deck-create-confirm` rather than the "Create" text: the same word is
+            the Create button on the Add-to-Deck sheet's own create path, and a
+            text selector cannot tell the two apart when both have been open. */}
+        <Button testID="deck-create-confirm" title={t('wordList.create')} variant="primary" disabled={!canCreate} onPress={() => canCreate && onCreate(name.trim(), [...selected])} />
       </View>
     </Sheet>
   );
@@ -1043,11 +1082,11 @@ function DeckDetailSheet({
           </List>
           <ButtonRow
             style={styles.pickerCta}
-            left={{ title: t('wordList.deleteDeck'), variant: 'destructive', onPress: () => onDelete(deck) }}
+            left={{ title: t('wordList.deleteDeck'), variant: 'destructive', onPress: () => onDelete(deck), testID: 'deck-detail-delete' }}
             // Don't offer a session for a deck that has none — pushing into the
             // quiz just to show an empty state is a worse answer than a button
             // that plainly isn't available yet.
-            right={{ title: t('wordList.studyDeck'), variant: 'primary', disabled: isLoading || studyableCount === 0, onPress: onStudy }}
+            right={{ title: t('wordList.studyDeck'), variant: 'primary', disabled: isLoading || studyableCount === 0, onPress: onStudy, testID: 'deck-detail-study' }}
           />
         </>
       )}
@@ -1081,8 +1120,12 @@ function AddToDeckSheet({
       {word != null && (
         <>
           <RawText style={styles.addToDeckSub}>{`${word.native} · ${word.target}`}</RawText>
+          {/* `deck-add-create-new` is distinct from the Custom Decks tab's sticky
+              row (`deck-create-open`) on purpose: both render the SAME "Create new
+              deck…" text, and this sheet sits OVER that tab, so a text selector is
+              genuinely ambiguous while the sheet is open. */}
           {decks.length === 0 ? (
-            <CreateNewDeckRow onPress={onCreateNew} />
+            <CreateNewDeckRow testID="deck-add-create-new" onPress={onCreateNew} />
           ) : (
             <List>
               {decks.map((d) => {

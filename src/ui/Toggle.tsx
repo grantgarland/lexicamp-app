@@ -8,9 +8,13 @@ export interface ToggleProps {
   value: boolean;
   onValueChange?: (next: boolean) => void;
   disabled?: boolean;
+  /** Maestro hook. A switch renders NO text of its own, and the label beside it
+   *  is a sibling — so a flow has no way to reach a specific toggle except by
+   *  id. Every screen that mounts more than one must pass this. */
+  testID?: string;
 }
 
-export function Toggle({ value, onValueChange, disabled = false }: ToggleProps) {
+export function Toggle({ value, onValueChange, disabled = false, testID }: ToggleProps) {
   const { theme } = useUnistyles();
   // Lazy `useState` init (not `useRef().current`) so the stable Animated.Value can be
   // read during render — `.interpolate` below runs at render time. Never re-set.
@@ -35,6 +39,7 @@ export function Toggle({ value, onValueChange, disabled = false }: ToggleProps) 
     <Pressable
       accessibilityRole="switch"
       accessibilityState={{ checked: value, disabled }}
+      testID={testID}
       disabled={disabled}
       onPress={() => onValueChange?.(!value)}
       style={{ opacity: disabled ? 0.5 : 1 }}

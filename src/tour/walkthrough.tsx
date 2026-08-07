@@ -204,7 +204,33 @@ export function WalkthroughController({ activeTab }: { activeTab: string }) {
     prevButtonText: t('walkthrough.back'),
     skipButtonText: t('walkthrough.skip'),
     doneButtonText: t('walkthrough.done'),
-    enableAccessibility: true,
+    // ⚠️ FALSE ON PURPOSE (2026-08-06) — this setting is misnamed for what it
+    // actually does on iOS, and leaving it on made the tour LESS accessible.
+    //
+    // `true` makes the library apply `getTooltipAccessibilityProps` to the
+    // tooltip BODY: `{ accessible: true, accessibilityRole: 'alert',
+    // accessibilityLabel: "<prefix>, step N of M. <title>. <description>" }`
+    // (node_modules/@wrack/react-native-tour-guide/src/accessibility.ts). On iOS
+    // `accessible: true` collapses that subtree into ONE accessibility element,
+    // which swallows the Next / Back / Skip buttons inside it — buttons that
+    // carry perfectly good labels of their own. A device hierarchy dump of step
+    // 1 contained exactly one app node, the composed sentence; there was no
+    // 'Next' element at all.
+    //
+    // So a VoiceOver user heard the whole step announced and then had no way to
+    // advance, go back, or leave — while the library's own hint told them to
+    // "Swipe right for next step", a gesture it registers no accessibilityAction
+    // for. Turning this off exposes title, description and each button as their
+    // own elements, which is what a screen reader needs to operate the tour.
+    //
+    // It also unblocks `.maestro/walkthrough.yaml`, which can now walk all nine
+    // steps instead of asserting step 1 and relaunching.
+    //
+    // What is lost: the single composed announcement and its polite live-region,
+    // i.e. step changes are no longer announced as one utterance. That is a real
+    // (smaller) cost; the fix if it matters is an accessibilityLiveRegion on the
+    // title alone, not re-collapsing the controls.
+    enableAccessibility: false,
     // The tooltip buttons are the ONLY way through or out. Backdrop taps used to
     // advance; a stray tap could then skip a step whose scene setup the next step
     // depends on, stranding the tour mid-journey (Casey 2026-08-02). The overlay

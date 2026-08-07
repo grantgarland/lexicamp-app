@@ -1,0 +1,190 @@
+# CI-4e — My Words: the BROWSE surface. Search, sort, tier filter, the archived
+# shelf, and the word-detail sheet.
+#
+# Scope split vs. the neighbouring flows (deliberate, so a failure names its own
+# subsystem): word-capture.yaml owns the swipe→delete tray and the word COUNT;
+# decks.yaml owns membership; this flow owns everything that changes WHICH ROWS
+# ARE VISIBLE, plus the detail sheet.
+#
+# Why the filter sheet is worth a device run: every control in it is a
+# client-side derivation over the same fixture list (query, sortBy, filterTiers,
+# showArchived → `visible`), and all of them are invisible to the jest suites,
+# which render the screen but never drive the sheet. The archived shelf in
+# particular is a WRITE (toggleArchive → mockArchived) whose effect is only
+# observable through this sheet's toggle.
+#
+# SELECTOR POLICY: tap by testID, assert by TEXT (see word-capture.yaml). The
+# sort rows are id-only BY NECESSITY, not preference — each Pressable declares
+# its own accessibilityLabel (`wordList.sortA11yActive/Inactive`), so iOS
+# collapses the row and the visible "Next review" / "Alphabetical" text is not in
+# the hierarchy Maestro reads. What IS exposed is that declared label, and it
+# CHANGES WITH STATE: "Sort by Alphabetical" while inactive, "Alphabetical, A–Z.
+# Double-tap to reverse." once selected. A flow cannot hold a selector that
+# rewrites itself when tapped, so the ids (`sort-due` / `sort-added` /
+# `sort-alpha`) are the supported way in.
+#
+# Fixture couplings (update together): WORD_BANK (melancólico/melancholic is the
+# first summit row; 'libertad'/'freedom' is the second), DISTRIBUTION.summit
+# (60 words, and the per-tier split the tier filter asserts against), and the
+# tier registry in theme/tiers.ts (the filter lists TIERS in registry order).
+#
+# Run locally: maestro test .maestro/word-list.yaml
+appId: com.lexicamp.app
+tags:
+  - candidate
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: 'dataSource-mock'
+    timeout: 20000
+- tapOn:
+    id: 'tab-words'
+- assertVisible: 'My Words'
+- assertVisible: '60 words'
+
+# ── SEARCH: narrows the list, and clears back ───────────────────────────────
+# Typing is debounced (the list dims rather than skeletons), so the assert needs
+# to WAIT rather than sample — extendedWaitUntil, not assertVisible.
+- tapOn:
+    id: 'words-search-input'
+- inputText: 'libert'
+- extendedWaitUntil:
+    visible: '.*libertad.*'
+    timeout: 10000
+# The negative half is the half that proves FILTERING rather than mere scrolling:
+# melancólico is row 1 of the unfiltered list, so if the query did nothing it
+# would still be on screen.
+- assertNotVisible: '.*melancólico.*'
+- pressKey: Enter # blur before touching anything below the keyboard line
+
+# ── SORT: alphabetical, and the tap-again reverse ───────────────────────────
+# Clear the query first — sort over a 1-row list proves nothing.
+# NOT `id: search-clear` — that id belongs to the SearchScreen capture sheet
+# (word-capture.yaml). The shared `ui/SearchBar` clear is icon-only and exposes
+# `common.clear` as its accessibility label, which is what this matches.
+- tapOn: 'Clear'
+- tapOn:
+    id: 'words-filter'
+- assertVisible: 'Filter & Sort'
+- tapOn:
+    id: 'sort-alpha'
+- tapOn:
+    id: 'filter-apply'
+# ⚠️ THE SORT IS ASSERTED BY ITS EFFECT ON THE LIST, not by reading the sheet
+# (2026-08-06 device run). The obvious assertion — the direction pill, which
+# renders only on the ACTIVE row — is unreachable: the row declares its own
+# accessibilityLabel, so iOS collapses the subtree and the pill's "A–Z" is not a
+# node of its own. Asserting the ORDER is the stronger test anyway: it proves
+# sortWords ran, not merely that a radio flipped.
+#
+# `alpha` sorts on the TARGET word (sortWords: "the bold lead column the user
+# scans"). Over the 60-word summit fixture that puts 'adventure' first A–Z; the
+# default sort is date-added-newest, under which 'melancólico' leads. So the
+# pair below is exactly "the order changed, in the direction asked for".
+- assertVisible: '60 words' # a sort must not change the SET, only the order
+- assertVisible: '.*adventure.*'
+- assertNotVisible: '.*melancólico.*'
+# Tapping the SELECTED row reverses it (wordList.sortHint) — the drive-pattern
+# the 18-session refactor replaced 3×2 pills with, and nothing else tests it.
+# Z–A over the same fixture leads with 'wisdom', and 'adventure' falls off the
+# first screenful.
+- tapOn:
+    id: 'words-filter'
+- tapOn:
+    id: 'sort-alpha'
+- tapOn:
+    id: 'filter-apply'
+- assertVisible: '.*wisdom.*'
+- assertNotVisible: '.*adventure.*'
+
+# ── FILTER by tier ─────────────────────────────────────────────────────────
+# `tier-filter-bc` and not the tier NAME: the row's accessible name merges its
+# tier badge in ("Base Camp tier, BC, Base Camp"), so a whole-text "Base Camp"
+# matches nothing here.
+- tapOn:
+    id: 'words-filter'
+- tapOn:
+    id: 'tier-filter-bc'
+- tapOn:
+    id: 'filter-apply'
+# ⚠️ DO NOT assert the header count here (2026-08-06 device run). The obvious
+# assertion — Base Camp is 10 of the summit fixture's 60, so the header should
+# read "10 words" — is WRONG ABOUT THE PRODUCT, not about the selector. The
+# count is deliberately ALL saved words and is derived from `present`, before
+# any filter (WordListScreen: "archiving a mastered word removes it from
+# lists/reviews, never from what you've earned — tier counts and this header
+# stay whole", Casey ruling). A filter narrows the LIST; the header is invariant
+# by design, and asserting otherwise would have encoded a misreading of the
+# product as a regression test.
+#
+# So assert the list: melancólico is a Base Camp row (its badge reads "Base Camp
+# tier" in the hierarchy), adventure is Summit Ridge.
+- assertVisible: '60 words'
+- assertVisible: '.*melancólico.*'
+- assertNotVisible: '.*adventure.*'
+# Reset returns the full set — and undoes the Z–A sort too, so 'adventure' is
+# back on the first screenful. `filter-reset` is the sheet's own Reset, distinct
+# from re-toggling every chip by hand.
+- tapOn:
+    id: 'words-filter'
+- tapOn:
+    id: 'filter-reset'
+- assertVisible: '60 words'
+- assertVisible: '.*melancólico.*'
+
+# ── DETAIL SHEET: the read-only card behind a row tap ───────────────────────
+- tapOn: '.*melancólico.*'
+- assertVisible: 'Next review'
+- assertVisible: 'Reviews'
+- assertVisible: 'Added'
+
+# ── ARCHIVE from the detail sheet, then find it on the archived shelf ───────
+# This is the round trip the toggle exists for: archiving REMOVES the word from
+# the default list (it leaves the review queue), and the only way to see it
+# again is the sheet's "Archived words" switch.
+# The TARGET word, "melancholic" — the same field the delete confirm and the
+# deleted/removed toasts now use. Until 2026-08-06 those delete paths
+# interpolated `native` instead, so one row was called "melancólico" when you
+# deleted it and "melancholic" when you archived it.
+- tapOn: 'Archive word'
+# Durable state, not the toast: `ui/Toast` clears after 3.2s and a suite-load
+# poll can miss that window (see the note in decks.yaml). The row leaving the
+# list is the archive; the toast is decoration on top of it.
+- assertNotVisible: '.*melancólico.*'
+# The header stays at 60 — archiving takes a word out of the LIST and the review
+# queue, never out of what you've earned (same Casey ruling as the tier filter
+# above). Asserting the count is UNCHANGED is the point: it pins the ruling.
+- assertVisible: '60 words'
+- assertNotVisible: '“melancholic” archived, out of your review queue' # toast off the filter button
+- tapOn:
+    id: 'words-filter'
+- tapOn:
+    id: 'filter-archived'
+- tapOn:
+    id: 'filter-apply'
+- assertVisible: '.*melancólico.*'
+
+# ── UNARCHIVE, back to the default shelf ───────────────────────────────────
+- tapOn: '.*melancólico.*'
+- assertVisible: 'Restore to reviews'
+- tapOn: 'Restore to reviews'
+- assertNotVisible: '“melancholic” restored to reviews'
+# Turn the shelf back off and confirm the word rejoined the REAL list, rather
+# than only ever having existed on the archived view.
+- tapOn:
+    id: 'words-filter'
+- tapOn:
+    id: 'filter-archived'
+- tapOn:
+    id: 'filter-apply'
+- assertVisible: '60 words'
+- assertVisible: '.*melancólico.*'
+
+# ── Round trip home (same dead-screen guard as smoke.yaml) ─────────────────
+- tapOn:
+    id: 'tab-home'
+- extendedWaitUntil:
+    visible: '(?i)Word Mastery'
+    timeout: 20000
