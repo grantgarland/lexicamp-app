@@ -1,0 +1,52 @@
+{
+  "skill_name": "data-perf-audit",
+  "evals": [
+    {
+      "id": 0,
+      "name": "cold-launch-diagnosis",
+      "prompt": "the app takes forever to open now — like 3 to 4 seconds of blank screen before home paints anything. i'm on the veteran dev scenario with ~5k words saved. it was fine back when i only had a couple hundred. can you work out what's actually causing it and what we'd do about it?",
+      "expected_output": "A diagnosis that identifies the AsyncStorage-persisted query cache (JSON.parse + reviveDates over the whole cache at cold launch) as the prime suspect, distinguishes it from unrelated launch costs, proposes shouldDehydrateQuery filtering and/or a narrower persisted set, notes the buster bump if the cache shape changes, and is honest about what was and wasn't measured.",
+      "files": [],
+      "assertions": [
+        "Identifies the AsyncStorage-persisted query cache (JSON.parse + reviveDates over the whole cache) as the primary cold-launch cost",
+        "Cites src/query/queryClient.ts and/or src/query/reviveDates.ts by path",
+        "Notes there is no shouldDehydrateQuery filter, so the ENTIRE query cache is written to and read from disk",
+        "Proposes persisting less (shouldDehydrateQuery) or moving word data off the JSON/AsyncStorage path",
+        "Flags that the buster must be bumped if the persisted cache shape changes incompatibly",
+        "Separates measured claims from unmeasured suspicions instead of asserting invented millisecond figures",
+        "Warns against the dev-scenario cache multiplier (userState/plan in query keys) inflating cold-launch measurements"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "preemptive-mutation-review",
+      "prompt": "i'm about to add a useBulkArchiveCards mutation to query/hooks.ts that archives a bunch of selected words at once. before i write it — is the invalidation pattern we use on all the other card mutations going to bite us at 5k words? what should the new one do instead?",
+      "expected_output": "Should recognize the existing deckCards/words/dueCards invalidation triple as costly at scale, recommend setQueriesData patching for the word-shaped queries since a bulk archive knows exactly which card ids changed, correctly keep dueCards as an invalidate because of its server-side ordering/limit/fill semantics, and use setQueriesData (plural) rather than setQueryData given the userState/activeLang/uid key variants.",
+      "files": [],
+      "assertions": [
+        "Identifies the existing deckCards/words/dueCards invalidation triple and says plainly that it is costly at 5k words",
+        "Explains the cost concretely (full-library paged refetches, multiple serial round trips per write)",
+        "Recommends patching the word-shaped queries via setQueriesData instead of invalidating them",
+        "Uses setQueriesData (plural) rather than setQueryData, citing the userState/activeLang/uid key variants",
+        "Keeps dueCards as an invalidate and explains why (server-side ordering, limit, and fill semantics cannot be recomputed client-side)",
+        "Provides a concrete useBulkArchiveCards implementation as code",
+        "States the correctness risk or blast radius of the proposed change"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "word-list-audit",
+      "prompt": "audit the word list screen's data path please. scrolling feels sluggish once you're a few hundred rows in, and there's a visible pause after you archive a word before the row updates. want to know what's worth fixing and in what order.",
+      "expected_output": "Should separate the two symptoms (scroll vs. post-archive pause) rather than conflating them, trace the archive pause to useSetCardSuspended's invalidation fan-out triggering full-library refetches, note FlatList is already virtualized so scroll cost is likely fetch/derive/row-render rather than list size, and produce a ranked fix list with risk noted.",
+      "assertions": [
+        "Treats the two symptoms (scroll sluggishness vs. post-archive pause) as separate problems with separate causes",
+        "Traces the post-archive pause to useSetCardSuspended invalidating words/deckCards/dueCards and the refetch that follows",
+        "Notes WordListScreen already uses FlatList, so raw row count is not itself the scroll cause",
+        "Examines row-level re-render cost (memoization, keyExtractor, getItemLayout) or the absence of useQuery select narrowing",
+        "Delivers an explicitly ranked fix order rather than an unordered list of ideas",
+        "States risk or blast radius for at least one proposed fix",
+        "Distinguishes what it measured from what it inferred from reading code"
+      ]
+    }
+  ]
+}

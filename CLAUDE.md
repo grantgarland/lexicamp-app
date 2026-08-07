@@ -91,7 +91,7 @@ GENERATED from the design system — never hand-edit tokens.generated.ts).
 - Metro resolves `require()` statically — no imports of not-installed packages,
   even behind conditionals. The same rule is why `__DEV__` HIDES but never
   EXCLUDES: dev-only modules must be swapped for a stub at resolution time
-  (`metro/devOnlyModules.js`, wired in `metro.config.js`), or they ship to the
+  (`metro/excludedModules.js`, wired in `metro.config.js`), or they ship to the
   App Store inside dead branches. `npm run verify:bundle` exports a real
   production bundle and greps it; CI runs it on every PR.
 - Single-line numeric/display Text: omit lineHeight (RN clips tall glyphs).

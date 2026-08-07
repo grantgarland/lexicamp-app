@@ -20,6 +20,26 @@ declare const Deno: {
 
 const AZURE_BASE = 'https://api.cognitive.microsofttranslator.com';
 
+// Rate limits — UNCACHED generations only (audit item 14, 2026-08-06). Same
+// three-layer shape as translate/, and counted the same way: one
+// 'examples_generated' study_event per Azure call, read back through the
+// existing study_events (event, occurred_at) index.
+//
+// Why the ceilings are higher than translate's 8/min + 60/hr: an examples fetch
+// is triggered by opening a word's detail, not by typing, so the honest burst is
+// "user flicks through their word list" rather than "user is mid-keystroke".
+// Each (term, sense) pair also costs Azure exactly once EVER and is then shared
+// by every user, so the steady state decays toward zero as the cache fills —
+// unlike translate, where every new phrase is a fresh charge.
+const RATE_LIMIT_PER_MINUTE = 12; // per-user burst
+const RATE_LIMIT_PER_HOUR = 120; // per-user abuse ceiling
+// Global budget for THIS function. Deliberately half of translate's 600/hr: the
+// two share one Azure F0 resource and one key, so the combined worst case is
+// 900/hr — still well inside F0's band, and translate is the path that must not
+// starve (a failed lookup is a dead end; a failed examples fetch is a word
+// detail without sentences, which the client already renders).
+const GLOBAL_LIMIT_PER_HOUR = 300;
+
 interface UsageExample {
   sourcePrefix: string;
   sourceTerm: string;
@@ -91,6 +111,29 @@ Deno.serve(async (req: Request) => {
   // entries get an empty list (never free-MT example generation — 16 edge cases).
   let examples: UsageExample[] = [];
   if (row.provider === 'azure_dictionary') {
+    // Rate limits go HERE, not at the top of the handler: everything above this
+    // point is free (a cache hit, or a phrase_mt row that never calls Azure), and
+    // throttling a free path would only break browsing. This is the first line
+    // that can spend money.
+    const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const minuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
+    const countEvents = async (opts: { user?: string; since: string }) => {
+      let q = supabase
+        .from('study_events')
+        .select('id', { count: 'exact', head: true })
+        .eq('event', 'examples_generated')
+        .gte('occurred_at', opts.since);
+      if (opts.user) q = q.eq('user_id', opts.user);
+      const { count } = await q;
+      return count ?? 0;
+    };
+    if ((await countEvents({ user: userId, since: minuteAgo })) >= RATE_LIMIT_PER_MINUTE)
+      return json({ error: 'rate limit exceeded' }, 429);
+    if ((await countEvents({ user: userId, since: hourAgo })) >= RATE_LIMIT_PER_HOUR)
+      return json({ error: 'rate limit exceeded' }, 429);
+    if ((await countEvents({ since: hourAgo })) >= GLOBAL_LIMIT_PER_HOUR)
+      return json({ error: 'examples service busy' }, 429);
+
     const res = await fetch(
       `${AZURE_BASE}/dictionary/examples?api-version=3.0&from=${row.source_lang}&to=${row.target_lang}`,
       {
@@ -146,6 +189,17 @@ Deno.serve(async (req: Request) => {
     .update({ examples: { ...map, [senseKey]: examples } })
     .eq('id', row.id);
   if (upErr) return json({ error: 'cache write failed' }, 500);
+
+  // The rate-limit counter. Written only when Azure was actually called, so the
+  // free paths above (cache hit, phrase_mt) never consume anyone's budget. Logged
+  // after the cache write, mirroring translate/'s ordering: a generation that
+  // failed to persist would otherwise be charged to the user while still
+  // refetching on their next view.
+  if (row.provider === 'azure_dictionary') {
+    await supabase
+      .from('study_events')
+      .insert({ user_id: userId, event: 'examples_generated', props: { translation_id: row.id, sense: senseKey } });
+  }
 
   return json({ examples });
 });
