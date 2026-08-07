@@ -72,7 +72,8 @@
             "es"
           ]
         }
-      ]
+      ],
+      "./plugins/withAsyncStorageDbSize"
     ],
     "experiments": {
       "typedRoutes": true,
