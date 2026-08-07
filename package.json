@@ -81,7 +81,8 @@
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:watch": "jest --watch",
-    "prepare": "git config core.hooksPath .githooks || true"
+    "prepare": "git config core.hooksPath .githooks || true",
+    "verify:bundle": "node scripts/verify-production-bundle.mjs"
   },
   "private": true,
   "allowScripts": {

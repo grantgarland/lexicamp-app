@@ -53,6 +53,18 @@ jobs:
             echo "::warning::lexicamp-design-system not accessible — token drift check skipped (add a DESIGN_SYSTEM_PAT repo secret with read access)"
           fi
 
+      # App Store gate: the DEV scenario switcher must not be in a production
+      # bundle. BLOCKING, and it runs on every PR rather than only on release
+      # tags, because the failure mode is a store submission — by tag time the
+      # regression is already several commits old and the fix is a re-cut build.
+      #
+      # It costs a real `expo export` (~1-2 min on this runner) and needs no
+      # secrets, network beyond npm, or macOS — the JS bundle is
+      # platform-agnostic to build. See scripts/verify-production-bundle.mjs for
+      # why a unit test alone cannot cover this.
+      - name: No dev-only code in the production bundle
+        run: npm run verify:bundle
+
       # Dependency/compat guard. Non-blocking for now (some checks need network
       # or flag false positives); tighten to blocking once it's proven quiet.
       - name: expo-doctor (advisory)

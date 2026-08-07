@@ -8,7 +8,10 @@ module.exports = {
     '^@/assets/(.*)$': '<rootDir>/assets/$1',
     '^@/(.*)$': '<rootDir>/src/$1',
   },
-  testMatch: ['<rootDir>/src/**/*.test.@(ts|tsx)'],
+  // `metro/` is in scope too: the dev-only module swap that keeps the DEV badge
+  // out of App Store bundles lives there, and it is plain CJS because
+  // metro.config.js has to require it.
+  testMatch: ['<rootDir>/src/**/*.test.@(ts|tsx)', '<rootDir>/metro/**/*.test.js'],
   // jest-expo's default allowlist + @wrack (walkthrough lib ships untranspiled
   // ESM; QuizScreen imports it via the tour module — 18 §F2).
   transformIgnorePatterns: [

@@ -54,8 +54,6 @@ export default function RootLayout() {
   // keep the old ink until the session ends, instead of the session being
   // thrown away mid-answer.
   const quizBusy = useUiStore((s) => s.quizInProgress);
-   
-  console.log(`[lexicamp] dataSource=${USE_SUPABASE ? 'live' : 'mock'} EXPO_PUBLIC_USE_SUPABASE=${process.env.EXPO_PUBLIC_USE_SUPABASE ?? 'undefined'}`);
 
   const [rebuildKey, setRebuildKey] = useState(scheme);
   if (!quizBusy && rebuildKey !== scheme) setRebuildKey(scheme);
@@ -140,6 +138,16 @@ export default function RootLayout() {
               pointerEvents="none"
               style={{ position: 'absolute', top: 0, left: 0, width: 1, height: 1 }}
             />
+            {/* DEFENCE IN DEPTH, not the actual exclusion (2026-08-06). In any
+                non-dev bundle this import has already been swapped for a no-op
+                stub at RESOLUTION time — `metro/excludedModules.js` — so the real
+                badge, the RPC names it calls and the inlined
+                EXPO_PUBLIC_DEV_SCENARIO_PASSWORD are absent from the shipped
+                JS, which is what App Store review requires. This guard is what
+                keeps it invisible if that swap is ever bypassed (a bundle built
+                with dev=true and shipped in a Release app), and it costs
+                nothing. Do NOT rely on it alone: `__DEV__` hides, it does not
+                exclude. */}
             {__DEV__ ? <DevBadge /> : null}
           </BottomSheetModalProvider>
         </SafeAreaProvider>

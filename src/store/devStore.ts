@@ -49,20 +49,3 @@ export const useDevStore = create<DevState>()(
     },
   ),
 );
-
-// Every scenario here has BOTH a mock fixture and a live
-// `dev-<scenario>@lexicamp.app` account, so the chips behave identically in
-// either mode. `veteran` was mock-only until 2026-08-05 — a live one looked to
-// need 4,300 gate-approved translations_cache rows in production, which is not
-// a trade worth making for a fixture. It is live now because the cards carry
-// their own mocked pair in custom_front/custom_back (see the
-// dev_veteran_4k_library migration), so the shared dictionary stays untouched.
-export const USER_STATE_LABELS: { value: DevUserState; label: string }[] = [
-  { value: 'empty', label: 'New' },
-  { value: 'bc', label: 'Base Camp' },
-  { value: 'abc', label: 'Adv. Base' },
-  { value: 'hc', label: 'High Camp' },
-  { value: 'sr', label: 'Summit Ridge' },
-  { value: 'summit', label: 'Summit' },
-  { value: 'veteran', label: 'Veteran 4k' },
-];
