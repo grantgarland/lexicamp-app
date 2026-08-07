@@ -6,6 +6,8 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 
 import { supabase } from '@/data/supabase/client';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { unregisterForPush } from '@/notifications/push';
 
 import { AppleSignInCancelled, isAppleSignInAvailable, signInWithApple, signOut } from '../session';
@@ -22,7 +24,12 @@ jest.mock('expo-apple-authentication', () => ({
   AppleAuthenticationScope: { FULL_NAME: 0, EMAIL: 1 },
 }));
 
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  removeItem: jest.fn().mockResolvedValue(undefined),
+}));
+
 jest.mock('@/data/supabase/client', () => ({
+  AUTH_STORAGE_KEY: 'sb-test-auth-token',
   supabase: {
     auth: {
       signInWithIdToken: jest.fn(),
@@ -134,5 +141,51 @@ describe('signOut drops this device from the account', () => {
     (supabase.auth.signOut as jest.Mock).mockResolvedValue({});
     await expect(signOut()).resolves.toBeUndefined();
     expect(supabase.auth.signOut).toHaveBeenCalled();
+  });
+});
+
+
+// Account deletion left the user sitting in the app (Casey, 2026-08-05).
+//
+// supabase-js refreshes an expired token before signing out. Once the account is
+// deleted that refresh can only fail, and `_signOut` then returns the error
+// WITHOUT removing the stored session — so no SIGNED_OUT is emitted, `useSession`
+// never updates, and the tabs guard never redirects.
+describe('signOut recovers when the library refuses to clear the session', () => {
+  beforeEach(() => {
+    (unregisterForPush as jest.Mock).mockResolvedValue(undefined);
+    (AsyncStorage.removeItem as jest.Mock).mockClear().mockResolvedValue(undefined);
+  });
+
+  it('does nothing extra on the happy path', async () => {
+    (supabase.auth.signOut as jest.Mock).mockResolvedValue({ error: null });
+    await signOut();
+    expect(supabase.auth.signOut).toHaveBeenCalledTimes(1);
+    expect(AsyncStorage.removeItem).not.toHaveBeenCalled();
+  });
+
+  it('clears the stored session and signs out AGAIN when the first attempt errors', async () => {
+    // The second call is the point: with storage empty it takes the
+    // session-missing path, which DOES emit SIGNED_OUT — and that event is what
+    // actually moves the UI. Clearing storage alone fixes only the next launch.
+    (supabase.auth.signOut as jest.Mock)
+      .mockResolvedValueOnce({ error: { message: 'Invalid Refresh Token' } })
+      .mockResolvedValueOnce({ error: null });
+
+    await signOut();
+
+    expect(AsyncStorage.removeItem).toHaveBeenCalledWith('sb-test-auth-token');
+    expect(supabase.auth.signOut).toHaveBeenCalledTimes(2);
+    // Order matters: clearing storage AFTER the retry would leave the retry
+    // seeing the same dead session and taking the same early return.
+    const clearOrder = (AsyncStorage.removeItem as jest.Mock).mock.invocationCallOrder[0];
+    const secondSignOut = (supabase.auth.signOut as jest.Mock).mock.invocationCallOrder[1];
+    expect(clearOrder).toBeLessThan(secondSignOut);
+  });
+
+  it('still resolves when even the storage clear fails', async () => {
+    (supabase.auth.signOut as jest.Mock).mockResolvedValue({ error: { message: 'boom' } });
+    (AsyncStorage.removeItem as jest.Mock).mockRejectedValueOnce(new Error('disk'));
+    await expect(signOut()).resolves.toBeUndefined();
   });
 });

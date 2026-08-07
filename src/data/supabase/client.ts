@@ -11,6 +11,17 @@ const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://wtscflpwxq
 const SUPABASE_ANON_KEY =
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? 'sb_publishable_geZHp6NdZZUfx_t55mStfg_CxN3EaX-';
 
+/** Where supabase-js persists the session in AsyncStorage.
+ *
+ *  MIRRORS the library's own default: `sb-<first hostname label>-auth-token`
+ *  (supabase-js SupabaseClient, `defaultStorageKey`). Deliberately NOT passed as
+ *  `storageKey` below — setting it explicitly would change the key for any
+ *  client whose URL differs and sign every existing user out on upgrade. It is
+ *  exported only so `signOut` can clear a session the library refuses to
+ *  (see auth/session.ts). If a supabase-js upgrade ever changes that default,
+ *  the recovery path in signOut goes quiet — the test there pins the shape. */
+export const AUTH_STORAGE_KEY = `sb-${new URL(SUPABASE_URL).hostname.split('.')[0]}-auth-token`;
+
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     storage: AsyncStorage,

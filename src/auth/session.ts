@@ -8,7 +8,9 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 
-import { supabase } from '@/data/supabase/client';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import { AUTH_STORAGE_KEY, supabase } from '@/data/supabase/client';
 import { unregisterForPush } from '@/notifications/push';
 
 export async function signUpWithEmail(email: string, password: string): Promise<void> {
@@ -38,7 +40,36 @@ export async function signOut(): Promise<void> {
   // "sign-out always completes", and it should hold here rather than depend on
   // a callee keeping its own promise.
   await unregisterForPush().catch(() => {});
-  await supabase.auth.signOut();
+
+  const { error } = await supabase.auth.signOut();
+  if (error == null) return;
+
+  // RECOVERY PATH — the reason this function is not a one-liner.
+  //
+  // supabase-js refreshes an expired token before signing out, and if that
+  // refresh fails NON-retryably (which it always does once the account is
+  // deleted, and can after any long backgrounding) `_signOut` returns the error
+  // and RETURNS EARLY — without removing the stored session. Nothing emits
+  // SIGNED_OUT, `useSession` keeps its last value, and the tabs guard never
+  // redirects: the user is left sitting in an app backed by an account that no
+  // longer exists (reported 2026-08-05, account deletion on the simulator).
+  //
+  // So: drop the persisted session ourselves, then sign out AGAIN. With storage
+  // empty the second call takes the session-missing path, which does emit
+  // SIGNED_OUT — and that event is what actually moves the UI. Clearing storage
+  // alone would fix the next launch and leave THIS screen stranded.
+  // try/catch rather than `.catch()`: a throw HERE would propagate to the caller,
+  // which swallows it — stranding the user in exactly the state this recovers.
+  try {
+    await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch {
+    /* keep going — the retry below is still worth attempting */
+  }
+  try {
+    await supabase.auth.signOut();
+  } catch {
+    /* nothing left to try */
+  }
 }
 
 /** Where recovery emails deep-link back into the app (DF-3). MUST be listed in

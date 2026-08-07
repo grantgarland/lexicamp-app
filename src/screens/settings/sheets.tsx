@@ -14,6 +14,8 @@ import { useIsDark } from '@/theme/appearance';
 import type { LanguageCode, NotificationPrefs, Profile } from '@/domain/types';
 import { formatUsername, generateUsernameCandidate } from '@/domain/username';
 import { useTranslation } from '@/i18n';
+import { router } from 'expo-router';
+
 import { signOut } from '@/auth/session';
 import { dataSource } from '@/data';
 import { registerForPush } from '@/notifications/push';
@@ -292,12 +294,20 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
               showToast({ variant: 'warning', message: t('settings.deleteFailed') });
               return;
             }
-            // Row is gone; the cached JWT is now worthless. Sign out to clear it,
-            // then the tabs session guard bounces to /onboarding on its own.
+            // Row is gone; the cached JWT is now worthless. Sign out to clear it.
             await signOut().catch(() => {});
             setDeleting(false);
             setConfirmDelete(false);
             onClose();
+            // NAVIGATE EXPLICITLY (2026-08-05). This used to lean entirely on the
+            // tabs session guard noticing `session` go null — a side effect of
+            // sign-out. When sign-out could not clear the session (see
+            // auth/session.ts), nothing moved and the user was left in Settings
+            // with their account already deleted. `signOut` is hardened too, but
+            // the destination of "delete my account" should not be an emergent
+            // property of something else succeeding. `replace`, not `push`: there
+            // is no account to go back to.
+            router.replace('/onboarding');
           })();
         }}
         onClose={() => setConfirmDelete(false)}
