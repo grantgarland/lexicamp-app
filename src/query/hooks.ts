@@ -4,9 +4,10 @@
 // as `useMutation` when those screens are built.
 import { useEffect } from 'react';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { dataSource as ds } from '@/data';
+import type { WordListItem } from '@/data/DataSource';
 import { commitWithOutbox } from '@/data/outbox';
 import { type HomeSnapshot, homeSnapshot } from '@/domain/derive';
 import type { BufferedRating } from '@/domain/quiz';
@@ -408,6 +409,65 @@ function invalidateDeckReads(qc: ReturnType<typeof useQueryClient>): void {
   qc.invalidateQueries({ queryKey: ['dueCards'] });
 }
 
+// ── Surgical cache updates (data-perf audit, 2026-08-06) ────────────────────────────
+//
+// A card mutation that already KNOWS what changed does not need to ask the server what
+// changed. `invalidateQueries({ queryKey: ['words'] })` schedules a refetch of the whole
+// library — at 4,300 saved words that is a paged PostgREST read of every row, in response
+// to flipping one boolean. It is also why archiving a word leaves a visible pause before
+// the row updates: the UI waits on a round trip for information it could have written
+// itself.
+//
+// These helpers patch the cached rows instead. The safety argument is that a patch is
+// self-healing: the entry keeps its normal staleTime and refetches on the next mount or
+// pull-to-refresh, so a patch that is subtly wrong converges rather than corrupting.
+// That asymmetry is what makes this the safe direction — it is NOT an argument for
+// patching things whose new value the client cannot derive (see useSaveCard and
+// useCommitQuizSession, which deliberately still invalidate).
+//
+// `setQueriesData` (plural) is load-bearing: every word key carries userState, activeLang
+// and uid (and deckWords a deckId), so the singular form would need the exact key and
+// would silently miss every other variant — including the one the user is looking at
+// after a language switch.
+
+/** Patch one card's row in every cached word list — `words` AND `deckWords`, across all
+ *  key variants. `patch` returns the replacement row; return the input to leave it. */
+function patchWordRow(qc: QueryClient, cardId: string, patch: (w: WordListItem) => WordListItem): void {
+  for (const root of ['words', 'deckWords']) {
+    qc.setQueriesData<WordListItem[]>({ queryKey: [root] }, (prev) =>
+      prev == null ? prev : prev.map((w) => (w.id === cardId ? patch(w) : w)),
+    );
+  }
+}
+
+/** Drop one card from every cached word list. */
+function removeWordRow(qc: QueryClient, cardId: string): void {
+  for (const root of ['words', 'deckWords']) {
+    qc.setQueriesData<WordListItem[]>({ queryKey: [root] }, (prev) =>
+      prev == null ? prev : prev.filter((w) => w.id !== cardId),
+    );
+  }
+}
+
+/** Patch the Home/Progress projection. `deckCards` is `{cards, states}`, and `homeSnapshot`
+ *  reads `suspended`/`createdAt` off cards and the FSRS state alongside — so a suspend
+ *  toggle must reach BOTH this and the word lists or the Words header disagrees with the
+ *  Home counts (the 07-17c class of bug, arrived at from the other direction). */
+function patchDeckCard(qc: QueryClient, cardId: string, patch: (c: Card) => Card): void {
+  qc.setQueriesData<{ cards: Card[]; states: CardFsrsState[] }>({ queryKey: ['deckCards'] }, (prev) =>
+    prev == null ? prev : { ...prev, cards: prev.cards.map((c) => (c.id === cardId ? patch(c) : c)) },
+  );
+}
+
+/** Drop one card from the Home/Progress projection, state included. */
+function removeDeckCard(qc: QueryClient, cardId: string): void {
+  qc.setQueriesData<{ cards: Card[]; states: CardFsrsState[] }>({ queryKey: ['deckCards'] }, (prev) =>
+    prev == null
+      ? prev
+      : { cards: prev.cards.filter((c) => c.id !== cardId), states: prev.states.filter((s) => s.cardId !== cardId) },
+  );
+}
+
 /** Create a custom deck, optionally seeded with words (Premium). Rejects with
  *  Error(DeckWriteError) — the sheet surfaces `deck_name_taken` inline. */
 export function useCreateDeck() {
@@ -544,11 +604,16 @@ export function useSetCardSuspended() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: { cardId: string; suspended: boolean }) => ds.setCardSuspended(input.cardId, input.suspended),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['deckCards'] });
-      qc.invalidateQueries({ queryKey: ['words'] });
+    onSuccess: (_res, { cardId, suspended }) => {
+      // The new value IS the input — nothing to go and ask the server for. Patching also
+      // removes the pause between tapping Archive and the row restyling.
+      patchWordRow(qc, cardId, (w) => ({ ...w, suspended }));
+      patchDeckCard(qc, cardId, (c) => ({ ...c, suspended }));
+      // dueCards stays an invalidate: it is a server-ORDERED, server-LIMITED queue with
+      // fill semantics (18 §2c). Archiving frees a slot, and which card fills it is a
+      // server decision — the client cannot recompute it without reimplementing the two
+      // ordered pulls, which is the bug getDueCards' comment documents.
       qc.invalidateQueries({ queryKey: ['dueCards'] });
-      qc.invalidateQueries({ queryKey: ['deckWords'] }); // archived rows render in deck lists
     },
   });
 }
@@ -562,13 +627,22 @@ export function useSetCardTargetOverride() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: { cardId: string; target: string | null }) => ds.setCardTargetOverride(input.cardId, input.target),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['deckCards'] });
-      qc.invalidateQueries({ queryKey: ['words'] });
+    onSuccess: (_res, { cardId, target }) => {
+      // `target` on the row is ALREADY-RESOLVED text (override ?? original), and
+      // `originalTarget` holds what a reset restores — so both the set and the clear are
+      // fully derivable here. Clearing (target === null) restores originalTarget, which is
+      // exactly what "Reset to original" promises. This is the read path Casey's
+      // сахара → сахар report surfaced; patching keeps deck lists in step with the sheet.
+      patchWordRow(qc, cardId, (w) => ({
+        ...w,
+        targetOverride: target,
+        target: target ?? w.originalTarget,
+      }));
+      // deckCards carries no target text (homeSnapshot is counts only), so it needs
+      // nothing here — it was in the old invalidation list without cause.
+      // dueCards does render the target and sizes the recall input from it, but it is a
+      // server-ordered queue, so it refetches rather than being patched.
       qc.invalidateQueries({ queryKey: ['dueCards'] });
-      // The edited text is rendered inside deck lists too (this is the read
-      // path Casey's сахара → сахар report surfaced).
-      qc.invalidateQueries({ queryKey: ['deckWords'] });
     },
   });
 }
@@ -579,12 +653,14 @@ export function useDeleteCard() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (cardId: string) => ds.deleteCard(cardId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['deckCards'] });
-      qc.invalidateQueries({ queryKey: ['words'] });
-      qc.invalidateQueries({ queryKey: ['dueCards'] });
-      // deck_cards cascades on the card — every deck that held it must refetch,
-      // list AND count.
+    onSuccess: (_res, cardId) => {
+      // A removal is as derivable as an edit — drop the row from the lists we hold.
+      removeWordRow(qc, cardId);
+      removeDeckCard(qc, cardId);
+      // deck_cards cascades on the card, so every deck that held it must refetch its
+      // COUNT (which we cannot derive without knowing the memberships). invalidateDeckReads
+      // covers decks/deckWords/cardDecks/dueCards; deckWords is re-fetched rather than
+      // trusted to the patch above precisely because its count is rendered beside it.
       invalidateDeckReads(qc);
     },
   });

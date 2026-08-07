@@ -904,6 +904,8 @@ function WordPicker({
     return q === '' ? words : words.filter((w) => w.native.toLowerCase().includes(q) || w.target.toLowerCase().includes(q));
   }, [words, pickerQuery]);
   // Selected-gutter: selected items rise to the top, separated from the rest.
+  // The gutter is capped at ~5 rows by its own styling, so mapping it is bounded; `rest`
+  // is the whole library and is virtualized below.
   const gutter = filtered.filter((w) => selected.has(w.id));
   const rest = filtered.filter((w) => !selected.has(w.id));
   const renderItem = (w: WordListItem) => {
@@ -945,15 +947,31 @@ function WordPicker({
           <View style={styles.gutterDivider} />
         </View>
       )}
-      <List
-        scroll
-        style={styles.pickerList}
-        isEmpty={filtered.length === 0}
-        emptyTitle={words.length === 0 ? t('wordList.pickerEmptyTitle') : t('wordList.noMatch')}
-        emptyBody={words.length === 0 ? t('wordList.pickerEmptyBody') : undefined}
-      >
-        {rest.map(renderItem)}
-      </List>
+      {/* VIRTUALIZED (data-perf audit, 2026-08-06). This was `<List scroll>` wrapping
+          `{rest.map(renderItem)}` — a plain ScrollView, so opening Add-to-Deck mounted a
+          row component for EVERY saved word at once. At 4,300 words that is 4,300
+          synchronous mounts before the sheet can paint. The main Word List was already a
+          FlatList; this second, unvirtualized path through the same data was the one
+          nobody had looked at. Same rows, same order, same empty states. */}
+      {filtered.length === 0 ? (
+        <List
+          isEmpty
+          style={styles.pickerList}
+          emptyTitle={words.length === 0 ? t('wordList.pickerEmptyTitle') : t('wordList.noMatch')}
+          emptyBody={words.length === 0 ? t('wordList.pickerEmptyBody') : undefined}
+        />
+      ) : (
+        <FlatList
+          style={styles.pickerList}
+          data={rest}
+          keyExtractor={(w) => w.id}
+          renderItem={({ item }) => renderItem(item)}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          initialNumToRender={12}
+          windowSize={7}
+        />
+      )}
     </>
   );
 }

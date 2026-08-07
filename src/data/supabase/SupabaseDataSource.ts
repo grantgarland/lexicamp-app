@@ -105,6 +105,23 @@ const CARD_JOIN =
  *  rows (a plain embed filter only nulls the embed — the cards would all return). */
 const DUE_JOIN = CARD_JOIN.replace('card_fsrs_state (', 'card_fsrs_state!inner (');
 
+/** Stats projection for `getDeckCards` (data-perf audit, 2026-08-06).
+ *
+ *  `getDeckCards` feeds Home and Progress through `homeSnapshot`, which reads only card
+ *  identity/suspended/createdAt plus the FSRS state — it never touches a translation.
+ *  It was nonetheless reusing CARD_JOIN, dragging `translations_cache.examples`,
+ *  `alt_translations` and `back_translations` (jsonb blobs) plus the override row across
+ *  the wire for EVERY card in the library, on every Home and Progress load.
+ *
+ *  These are exactly the columns `mapCard` + `mapFsrsState` consume and nothing else, so
+ *  the domain output is byte-identical — same rows, same order, same types. Only the
+ *  payload shrinks. `decks!…!inner` stays: it is what scopes the read to the active
+ *  language, not a nicety. */
+const CARD_STATS_JOIN =
+  'id, deck_id, user_id, translation_id, user_note, custom_front, custom_back, suspended, created_at, ' +
+  'decks!cards_deck_id_fkey!inner ( target_lang ), ' +
+  'card_fsrs_state ( card_id, user_id, stability, difficulty, due_at, last_review_at, state, reps, lapses, learning_steps )';
+
 /** Custom-deck-membership variant (2026-07-30): the same card projection, inner-
  *  joined through `deck_cards` so only the deck's members come back. `!inner` is
  *  load-bearing here for the same reason it is on DUE_JOIN — a plain embed filter
@@ -327,10 +344,13 @@ export const supabaseDataSource: DataSource = {
     // Home/Progress/Settings totals disagree with the Words header and the
     // server cap by the archived count). homeSnapshot excludes suspended from
     // the due-queue numbers only.
+    // CARD_STATS_JOIN, not CARD_JOIN: homeSnapshot reads no translation fields, so the
+    // jsonb example/alt/back-translation blobs in the full projection were pure waste on
+    // every Home and Progress load. Same rows, same order, same mapped output.
     const rows = await fetchAllPages<JoinedCardRow>((from, to) =>
       supabase
         .from('cards')
-        .select(CARD_JOIN)
+        .select(CARD_STATS_JOIN)
         .eq('decks.target_lang', target)
         // Ordered ONLY so the paging is stable — nothing downstream depends on
         // it (Home/Progress derive from the whole set).
