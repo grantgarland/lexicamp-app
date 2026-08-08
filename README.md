@@ -5,6 +5,7 @@ Lexicamp is a vocabulary learning app built with Expo / React Native. It helps u
 This repo contains the **app source code**. Business docs, architecture decisions, roadmap, and project context live in [lexicamp-project](https://github.com/grantgarland/lexicamp-project).
 
 [![Smoke Test (Maestro + EAS)](https://github.com/grantgarland/lexicamp-app/actions/workflows/nightly-smoke.yml/badge.svg)](https://github.com/grantgarland/lexicamp-app/actions/workflows/nightly-smoke.yml)
+[![Release iOS (TestFlight)](https://github.com/grantgarland/lexicamp-app/actions/workflows/release-ios.yml/badge.svg)](https://github.com/grantgarland/lexicamp-app/actions/workflows/release-ios.yml)
 
 ---
 
@@ -68,18 +69,36 @@ npm run typecheck && npm run lint && npm test
 
 ## Release — production build for TestFlight
 
+**The release path is a manual GitHub Actions dispatch:** Actions →
+**Release iOS (TestFlight)** → **Run workflow**. That is the whole procedure. The
+rest of this section explains what the workflow does, what it depends on, and how
+to recover when a step fails.
+
+`.github/workflows/release-ios.yml` runs a cheap Linux preflight — `typecheck` ·
+`jest --ci` · `verify:bundle` — and only then spends an EAS build slot on:
+
+```bash
+eas build --platform ios --profile production --non-interactive --auto-submit --wait
+```
+
+There is deliberately **no `push:` trigger**; see the budget note at the end. A red
+run files a rolling `release-failure` GitHub issue whose body carries the triage
+order — the important distinction being that a *submit* failure is recoverable with
+`eas submit --latest` and does not need a rebuild.
+
 Managed workflow: `ios/` and `android/` are gitignored, so EAS runs `prebuild` on its
 own servers. Nothing local is uploaded except what git tracks.
 
-### 1. Clean the tree first
+### 1. Get the work onto `main` first
 
-**EAS uploads committed files only.** Untracked files are silently omitted, which
-produces either a red build or, worse, a green build running stale code.
+**EAS uploads committed files only**, and the workflow builds whatever `main` points
+at. Untracked files are silently omitted, which produces either a red build or,
+worse, a green build running stale code.
 
 ```bash
 npm run typecheck && npm run lint && npm test
 git status --short          # untracked (??) files will NOT reach the build
-git add <files> && git commit -m "..."
+git add <files> && git commit -m "..." && git push
 npx expo-doctor             # optional but cheap
 ```
 
@@ -94,15 +113,31 @@ npx eas-cli env:list --environment production
 ```
 
 Expected: `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`,
-`EXPO_PUBLIC_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`.
-(`EXPO_PUBLIC_USE_SUPABASE=1` comes from `eas.json`, not from env.)
+`EXPO_PUBLIC_SENTRY_DSN` (all `plaintext`) and `SENTRY_AUTH_TOKEN` (`secret`).
+`EXPO_PUBLIC_USE_SUPABASE=1` is set in `eas.json` *and* in the production
+environment; the `eas.json` value wins, and either alone is sufficient.
 
 ```bash
-npx eas-cli env:create --name EXPO_PUBLIC_SUPABASE_URL --value <url> \
+npx eas-cli env:set --name EXPO_PUBLIC_SUPABASE_URL --value <url> \
   --visibility plaintext --environment production
-npx eas-cli env:create --name SENTRY_AUTH_TOKEN --value <token> \
-  --visibility sensitive --environment production
+npx eas-cli env:set --name SENTRY_AUTH_TOKEN --value <token> \
+  --visibility secret --environment production
 ```
+
+Two things that are easy to get wrong here:
+
+- **`eas secret:*` no longer exists.** It was replaced by `eas env:*`, with
+  visibility levels `plaintext` / `sensitive` / `secret` in place of the old
+  secret/non-secret split. `env:set` both creates and updates.
+- **`eas.json`'s production profile must carry `"environment": "production"`** or
+  none of these reach the build at all. That field is the join between the profile
+  and the environment; without it `env:list` looks perfectly healthy and the build
+  still gets `undefined`.
+
+⚠️ Never bulk-push `.env.local` with `env:push`. It also holds server-only keys
+(Supabase service role, Azure Translator, Resend, RevenueCat secret) that belong in
+Supabase Edge Function secrets — and anything prefixed `EXPO_PUBLIC_` is inlined
+into the shipped bundle in plaintext, readable by anyone who unzips the `.ipa`.
 
 ⚠️ The `production` profile deliberately does **not** set `SENTRY_DISABLE_AUTO_UPLOAD`
 (unlike `preview` / `development` / `smoke`), so a missing `SENTRY_AUTH_TOKEN` fails the
@@ -115,23 +150,39 @@ EAS owns the build number and increments it per build. Bump `expo.version` in `a
 only for a user-visible release. **Never add `buildNumber` to `app.json`** — it would
 fight the remote source, and `appInfo.ts` is written to degrade gracefully without it.
 
-### 4. Build
+### 4. Dispatch the workflow
+
+Actions → **Release iOS (TestFlight)** → **Run workflow**. Preflight is ~4 min; the
+EAS build is ~15–25 min queued + built, and `--auto-submit` hands the `.ipa` to App
+Store Connect without a second command.
+
+The equivalent local path, for when you want to watch it or the runner is
+unavailable:
 
 ```bash
-npx eas-cli build --platform ios --profile production
+npx eas-cli build --platform ios --profile production --auto-submit
 ```
 
-~15–25 min queued + built. Add `--auto-submit` to chain step 5 automatically.
-
 ### 5. Submit to TestFlight
+
+The workflow does this via `--auto-submit`. Run it by hand only to recover a build
+that succeeded and then failed at the submit stage — the `.ipa` still exists on EAS,
+so this is much cheaper than rebuilding:
 
 ```bash
 npx eas-cli submit --platform ios --profile production --latest
 ```
 
-Uses the stored App Store Connect API key (Key ID `3GNP9R5GZH`). Then App Store Connect
-→ TestFlight: processing takes 5–20 min. Export compliance should auto-clear —
-`ITSAppUsesNonExemptEncryption: false` is already in `app.json`.
+Targets `submit.production.ios.ascAppId` (`6792857650`) in `eas.json` and
+authenticates with the stored App Store Connect API key (Key ID `7Q48NHBNG2`, team
+`V39Q75LCX6`). Then App Store Connect → TestFlight: processing takes 5–20 min.
+Export compliance should auto-clear — `ITSAppUsesNonExemptEncryption: false` is
+already in `app.json`.
+
+Signing credentials live on EAS and must exist before any `--non-interactive` run,
+which fails rather than prompting to create them. Current distribution certificate
+and provisioning profile both expire **2027-06-19**; check with
+`npx eas-cli credentials --platform ios`.
 
 ### 6. Install and sanity-check on device
 
@@ -142,9 +193,15 @@ schema agree).
 
 ### Budget note
 
-The EAS free tier is ~15 builds/month and the nightly Maestro smoke job draws from the
-same pool. Production builds are tag-worthy events, not an iteration loop — use
-`preview`/simulator builds for anything you can.
+The EAS free tier is 15 iOS + 15 Android builds/month, and the Mon/Wed/Fri Maestro
+smoke job already spends ~13 of the Android half. 15 iOS builds is ~3.4/week, so
+production builds are release events, not an iteration loop — use `preview` /
+simulator builds for anything you can.
+
+This is why the workflow has no `push:` trigger. A manual dispatch means a slot is
+spent only when someone means to spend it, which is stricter than the tag-triggered
+policy it replaced (a stray tag push can't burn a build). If cadence ever justifies
+automating it, the honest version is `push: tags: ['v*']` — not push-to-main.
 
 ---
 

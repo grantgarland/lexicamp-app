@@ -259,7 +259,11 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
       <ConfirmDialog
         visible={confirmDelete}
         title={t('settings.deleteAccountTitle')}
-        body={`${t('settings.deleteAccountBody')}\n\n${t('settings.deleteAccountWarn')}`}
+        body={t('settings.deleteAccountBody')}
+        // Split out of `body` rather than concatenated after a blank line: the
+        // billing consequence is the one thing here the user can still act on,
+        // and as a second muted paragraph it read as more of the same warning.
+        notice={t('settings.deleteAccountWarn')}
         confirmLabel={t('settings.deleteConfirm')}
         cancelLabel={t('settings.cancel')}
         destructive

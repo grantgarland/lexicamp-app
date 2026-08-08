@@ -12,6 +12,7 @@ import { StyleSheet } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
 import { Button } from './Button';
+import { Callout } from './Callout';
 import { Input } from './Input';
 import { Sheet } from './Sheet';
 import { RawText as Text } from './Text';
@@ -27,6 +28,11 @@ export interface ConfirmDialogProps {
   visible: boolean;
   title: string;
   body?: string;
+  /** A consequence the body must not bury — rendered in a bordered `Callout`
+   *  below it. Use for caveats with a cost attached (an active subscription that
+   *  keeps billing, data that leaves with the account), NOT to re-state the body
+   *  louder; a dialog where everything is demarcated demarcates nothing. */
+  notice?: string;
   /** Optional icon rendered in a soft circle above the title. */
   icon?: ReactNode;
   confirmLabel: string;
@@ -42,7 +48,7 @@ export interface ConfirmDialogProps {
   onClose: () => void;
 }
 
-export function ConfirmDialog({ visible, title, body, icon, confirmLabel, cancelLabel, destructive = false, typeToConfirm, onConfirm, onClose }: ConfirmDialogProps) {
+export function ConfirmDialog({ visible, title, body, notice, icon, confirmLabel, cancelLabel, destructive = false, typeToConfirm, onConfirm, onClose }: ConfirmDialogProps) {
   const { t } = useTranslation();
   const [typed, setTyped] = useState('');
   // Render-adjust (the kit's Sheet pattern, not an effect): a reopened dialog
@@ -60,7 +66,8 @@ export function ConfirmDialog({ visible, title, body, icon, confirmLabel, cancel
       <View style={styles.wrap}>
         {icon != null && <View style={styles.icon}>{icon}</View>}
         <Text style={styles.title}>{title}</Text>
-        {body != null && <Text style={styles.body}>{body}</Text>}
+        {body != null && <Text style={[styles.body, notice != null && styles.bodyTight]}>{body}</Text>}
+        {notice != null && <Callout text={notice} tone="warning" style={styles.notice} testID="confirm-notice" />}
         {typeToConfirm != null && (
           <View style={styles.gate}>
             <Input
@@ -97,6 +104,12 @@ const styles = StyleSheet.create((theme) => ({
   icon: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(209, 73, 91, 0.12)', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   title: { fontFamily: theme.fonts.sans.bold, fontSize: 17, color: theme.color.textStrong, textAlign: 'center', marginBottom: 8 },
   body: { fontFamily: theme.fonts.sans.regular, fontSize: 14, lineHeight: 21, color: theme.color.textMuted, textAlign: 'center', marginBottom: 22 },
+  // With a notice below it the body no longer owns the gap to the next block —
+  // the two read as one unit, and the notice carries the 22 instead.
+  bodyTight: { marginBottom: 12 },
+  // Stretches to the sheet's width like the gate and buttons; left-aligned text
+  // inside a centred dialog is part of what marks it as a separate object.
+  notice: { alignSelf: 'stretch', marginBottom: 22 },
   // Stretches to the sheet's width like the buttons below it; the body's bottom
   // margin already provides the gap above.
   gate: { alignSelf: 'stretch', marginBottom: 18 },

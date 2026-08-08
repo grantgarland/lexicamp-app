@@ -2,11 +2,11 @@
 // scenario, so every home/progress number is DERIVED by `derive.ts` (not hardcoded).
 // Swappable for SupabaseDataSource later behind the same interface.
 import { evaluateCaptureInput } from '@/domain/capture';
-import { directionLangs, homeSnapshot } from '@/domain/derive';
+import { directionLangs, freeTierUsage, homeSnapshot } from '@/domain/derive';
 import { decomposeUsername } from '@/domain/username';
 import type { BufferedRating, QuizCardItem } from '@/domain/quiz';
 import { assessResultQuality, type DictionarySense, type LookupOutcome, type LookupResult } from '@/domain/translation';
-import type { Card, CardFsrsState, Deck, Entitlement, NotificationPrefs, Profile, SearchDirection } from '@/domain/types';
+import { isPaid, type Card, type CardFsrsState, type Deck, type Entitlement, type NotificationPrefs, type Profile, type SearchDirection } from '@/domain/types';
 import { type DevPlan, type DevUserState, useDevStore } from '@/store/devStore';
 import { getTierByStability, TIERS } from '@/theme/tiers';
 
@@ -194,6 +194,35 @@ function buildDeckCards(userState: DevUserState): DeckCards {
   });
 
   return { cards, states };
+}
+
+// Saves made in THIS mock session. The fixtures' `addedToday` is a static
+// scenario property, so without a counter the cap would be all-or-nothing: a
+// scenario at 5/5 could never save and one at 2/5 could save forever. Reset on
+// scenario change for the same reason decks re-seed — a different scenario is a
+// different user, and carrying a counter across would cap the wrong one.
+let mockSavesToday = 0;
+let mockSavesCountedFor: string | null = null;
+
+/** Mirrors `save_card`'s free-tier cap (spec 19 / migration
+ *  `daily_free_save_allowance`): 50-word starter allotment, then 5/day. Paid
+ *  plans are uncapped. Same `freeTierUsage` the Settings meter reads, so the
+ *  number on screen and the refusal can never disagree. */
+function freeSaveExhausted(): boolean {
+  const { plan, userState } = scenario();
+  // Keyed on plan too, not just userState: flipping the dev plan knob is the
+  // operator saying "show me the other user", and carrying a spent counter into
+  // that is the kind of stale-state surprise the knob exists to avoid.
+  const key = `${userState}:${plan}`;
+  if (mockSavesCountedFor !== key) {
+    mockSavesCountedFor = key;
+    mockSavesToday = 0;
+  }
+  if (isPaid(entitlementFor(plan))) return false;
+  const deck = buildDeckCards(userState);
+  const snap = homeSnapshot(deck.cards, deck.states);
+  const usage = freeTierUsage(snap.wordsSaved + mockSavesToday, snap.addedToday + mockSavesToday);
+  return usage.phase === 'starter' ? usage.saved >= usage.limit : usage.usedToday >= usage.limit;
 }
 
 function entitlementFor(plan: DevPlan): Entitlement {
@@ -565,7 +594,19 @@ export const mockDataSource: DataSource = {
     return mockLookupResult(query, direction);
   },
   async saveCard(_translationId, _custom) {
-    // Mock: screens keep their own optimistic saved-state; nothing to persist.
+    // The free-tier cap is MIRRORED here, not persisted state (see above). The
+    // rest of this method stays a no-op: screens keep their own optimistic
+    // saved-state and there is nothing to write.
+    //
+    // Why the mirror is worth its weight: the cap is server-enforced (02/3.2),
+    // so before this existed mock mode had no cap AT ALL. A capped free scenario
+    // would render "5 of 5 saves used today" in Settings and still accept every
+    // save — the optimistic "Saved!" stuck (nothing threw, so SearchScreen's
+    // onError rollback never ran), the word never appeared in the deck, and the
+    // paywall never opened, because the ONLY thing that routes to it is the
+    // `free_word_cap` error. Three symptoms, one missing throw.
+    if (freeSaveExhausted()) throw new Error('free_word_cap');
+    mockSavesToday += 1;
     return null; // no card id in mock mode (A12b — screens fall back to local masks)
   },
   async deleteCard(_cardId) {

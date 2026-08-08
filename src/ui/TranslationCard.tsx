@@ -310,7 +310,7 @@ function TranslationItem({
                  only when the caller says the user is entitled, so it is never
                  a dead affordance. */
               <View style={styles.saveSplit}>
-                <Pressable onPress={onSave} style={[styles.action, styles.actionSave, onSaveWithEdit != null && styles.actionSaveSplit]} accessibilityRole="button" testID="result-save">
+                <Pressable onPress={onSave} style={[styles.action, styles.actionSave, styles.actionSavePrimary, onSaveWithEdit != null && styles.actionSaveSplit]} accessibilityRole="button" testID="result-save">
                   <IconBook size={16} color={theme.color.textOnAccentCta} />
                   <RNText style={styles.actionTextOnAccent}>{t('translationCard.saveWord')}</RNText>
                 </Pressable>
@@ -466,7 +466,14 @@ const styles = StyleSheet.create((theme) => {
       borderColor: 'transparent',
     },
     saveSplit: { flexDirection: 'row', gap: 2 },
-    actionSaveSplit: { flex: 1, borderTopRightRadius: 0, borderBottomRightRadius: 0 },
+    // `saveSplit` is a ROW, so the save button has to claim the width itself —
+    // a row child with no flex shrinks to its text. Every other button state
+    // (saved / delete / can't-save) is a direct child of the COLUMN `actionWrap`
+    // and stretches for free, which is why only this one rendered narrow.
+    // Unconditional: the free (unsplit) case needs it just as much as the split
+    // one. Splitting only changes the CORNERS.
+    actionSavePrimary: { flex: 1 },
+    actionSaveSplit: { borderTopRightRadius: 0, borderBottomRightRadius: 0 },
     actionSaveEdit: { flexGrow: 0, paddingHorizontal: 18, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 },
     actionSave: { backgroundColor: color.accentCta, boxShadow: theme.shadow.accent },
     actionSaved: { backgroundColor: palette.green[500] },

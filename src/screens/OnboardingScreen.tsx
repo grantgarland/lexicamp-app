@@ -28,6 +28,7 @@ import {
   LanguagePickerSheet,
   ProgressDots,
   RawText,
+  RouteSummary,
   Screen,
   SCREEN_MAX_WIDTH,
   SummitScene,
@@ -55,6 +56,25 @@ const NATIVE_LANG = 'en';
 // `noteKey` is the footnote the body's `*` points at — the two beats that
 // introduce a term of art (memory strength, FSRS) and the one that makes a
 // research claim have to say where it comes from, quietly.
+/** `Illustration` is a zero-prop ComponentType, but RouteSummary renders LABELS
+ *  and those have to be translated. Wrapping it here keeps the copy in i18n
+ *  (where the en/es parity test can see it) instead of baking English into the
+ *  art — and keeps STORY's shape uniform. */
+function RouteSummaryArt() {
+  const { t } = useTranslation();
+  return (
+    <RouteSummary
+      stages={[t('onboarding.s6Stage1'), t('onboarding.s6Stage2'), t('onboarding.s6Stage3')]}
+      summit={t('onboarding.s6Summit')}
+    />
+  );
+}
+
+// ORDER (Casey 2026-08-08): the summit claim opens the arc. "3,000 words is 95%
+// of everyday speech" is the only beat that states a DESTINATION, and it earns
+// the rest — a forgetting curve is a problem worth solving only once you know
+// what you are climbing toward. The three method beats then answer it in turn,
+// and s6 closes by naming the whole loop.
 const STORY: {
   titleKey: string;
   bodyKey: string;
@@ -62,11 +82,15 @@ const STORY: {
   Illustration: ComponentType;
   shot?: OnboardingShotName;
 }[] = [
+  { titleKey: 's5Title', bodyKey: 's5Body', Illustration: SummitScene, shot: 'projection' },
   { titleKey: 's1Title', bodyKey: 's1Body', noteKey: 's1Note', Illustration: ForgettingCurveInfo },
   { titleKey: 's2Title', bodyKey: 's2Body', noteKey: 's2Note', Illustration: CardSorter, shot: 'wordlist' },
   { titleKey: 's3Title', bodyKey: 's3Body', Illustration: IntervalTrack, shot: 'quiz' },
   { titleKey: 's4Title', bodyKey: 's4Body', noteKey: 's4Note', Illustration: SummitScene, shot: 'results' },
-  { titleKey: 's5Title', bodyKey: 's5Body', Illustration: SummitScene, shot: 'projection' },
+  // Closing beat: what the app IS, after four beats of why. Vector art rather
+  // than a shot on purpose — there is no single screen that shows the whole
+  // loop, and a screenshot of one of them would under-claim it.
+  { titleKey: 's6Title', bodyKey: 's6Body', Illustration: RouteSummaryArt },
 ];
 
 const WELCOME = 0;
@@ -343,7 +367,12 @@ const styles = StyleSheet.create((theme) => {
     // flexGrow + a flexing art block centres the screenshot in whatever space is
     // left under the copy, instead of stranding it against a tall bottom gap.
     storyScroll: { flexGrow: 1, paddingHorizontal: 28, paddingTop: 16, paddingBottom: 8, alignItems: 'center' },
-    storyTitle: { alignSelf: 'stretch', fontFamily: fonts.serif.semibold, fontSize: 27, lineHeight: 33, letterSpacing: -0.5, color: color.brandStrong, textAlign: 'center', marginBottom: 10 },
+    // LEFT, not centred (Casey 2026-08-08). These are instructional headers on
+    // the skippable beats: they wrap to two or three lines in en and longer in
+    // es, and a centred multi-line serif header gives every beat a different
+    // ragged silhouette. Flush-left they start at the same x as the dots above
+    // and the buttons below, so the eye lands in one place across all six.
+    storyTitle: { alignSelf: 'stretch', fontFamily: fonts.serif.semibold, fontSize: 27, lineHeight: 33, letterSpacing: -0.5, color: color.brandStrong, textAlign: 'left', marginBottom: 10 },
     storyBody: { alignSelf: 'stretch', fontFamily: fonts.sans.regular, fontSize: 15, lineHeight: 23, color: color.textBody, textAlign: 'center', marginBottom: 20 },
     storyArt: { alignSelf: 'stretch', flex: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
     // The `*` in the body points here. Faint on purpose: it is a citation, not a

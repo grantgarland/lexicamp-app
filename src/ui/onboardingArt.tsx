@@ -239,6 +239,60 @@ const previewStyles = StyleSheet.create((theme) => ({
   body: { fontFamily: theme.fonts.sans.regular, fontSize: 13, lineHeight: 18, color: theme.color.textBody, marginTop: 1 },
 }));
 
+/** RouteSummary — the closing beat's art: the three things the app actually does,
+ *  drawn as stages ON the same dashed route the welcome screen opens with, ending
+ *  at the accent summit. The visual rhyme is the argument — the flow starts by
+ *  showing the mountain and ends by showing the way up it.
+ *
+ *  Labels are PROPS, not literals: this renders localized copy, and hardcoding
+ *  English into an SVG is how a graphic silently stops being translated (the
+ *  i18n parity test cannot see inside a path). Kept to three stages because the
+ *  loop IS three steps — a fourth would be padding, and the summit is a
+ *  destination, not a stage. */
+export function RouteSummary({ stages, summit, maxWidth = 360 }: { stages: [string, string, string]; summit: string; maxWidth?: number }) {
+  const { theme } = useUnistyles();
+  const { color } = theme;
+  // Stages climb left→right so the route reads as ascent, with the summit set
+  // apart above the last one rather than in line with it. The rise is steep on
+  // purpose: this beat sits in the same tall art slot as the screenshot beats,
+  // and a shallow ridge left the graphic stranded in white space.
+  const NODES: [number, number][] = [
+    [34, 168],
+    [116, 126],
+    [198, 84],
+  ];
+  const SUMMIT: [number, number] = [276, 34];
+  return (
+    <Frame w={320} h={205} maxWidth={maxWidth}>
+      {/* Ridge behind the route — same low-contrast horizon as MountainRoute. */}
+      <Polyline points="0,196 58,120 100,150 196,52 248,104 300,26 320,196" fill="none" stroke={color.borderStrong} strokeWidth={1.4} strokeLinejoin="round" opacity={0.35} />
+      <Polyline
+        points={`${NODES.map(([x, y]) => `${x},${y}`).join(' ')} ${SUMMIT[0]},${SUMMIT[1]}`}
+        fill="none"
+        stroke={color.brand}
+        strokeWidth={1.6}
+        strokeDasharray="4,5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity={0.85}
+      />
+      {NODES.map(([x, y]) => (
+        <Circle key={x} cx={x} cy={y} r={5.5} fill={color.brand} opacity={0.9} />
+      ))}
+      {NODES.map(([x, y], i) => (
+        // Below the node, so a label never sits on the route line above it.
+        <SvgText key={`l${x}`} x={x} y={y + 22} fontSize={13} fontFamily={theme.fonts.sans.semibold} fill={color.textMuted} textAnchor="middle">
+          {stages[i]}
+        </SvgText>
+      ))}
+      <Circle cx={SUMMIT[0]} cy={SUMMIT[1]} r={7.5} fill={color.accent} />
+      <SvgText x={SUMMIT[0]} y={SUMMIT[1] - 15} fontSize={13} fontFamily={theme.fonts.sans.bold} fill={color.accent} textAnchor="middle">
+        {summit}
+      </SvgText>
+    </Frame>
+  );
+}
+
 /** MountainRoute — the welcome screen's quiet horizon: a ridge line with the
  *  route drawn up it and a camp marked at each of the five mastery tiers, the
  *  summit in accent. Deliberately low-contrast; it sits under the wordmark and

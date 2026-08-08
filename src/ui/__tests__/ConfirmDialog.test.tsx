@@ -145,6 +145,30 @@ describe('ConfirmDialog type-to-confirm gate', () => {
   });
 });
 
+describe('ConfirmDialog notice', () => {
+  const WARN = 'If you have an active subscription, cancel it in the App Store before deleting to avoid further charges.';
+
+  it('renders the notice as its own demarcated block, not appended to the body', () => {
+    // The regression this guards: the warning used to be concatenated onto
+    // `body` after a blank line, where it rendered as a second muted centred
+    // paragraph and read as more of the same. Asserting BOTH that the text is
+    // present and that the Callout is the thing carrying it — a future refactor
+    // that folds it back into `body` would keep the text and lose the point.
+    show({ body: 'This permanently deletes your account.', notice: WARN });
+
+    expect(screen.getByTestId('confirm-notice')).toBeTruthy();
+    expect(screen.getByText(WARN)).toBeTruthy();
+    expect(screen.queryByText(`This permanently deletes your account.\n\n${WARN}`)).toBeNull();
+  });
+
+  it('renders nothing extra when no notice is passed', () => {
+    // Every other confirm dialog (delete word, delete deck, sign out) has no
+    // consequence worth demarcating; a callout on all of them demarcates none.
+    show({ body: 'Delete this word?' });
+    expect(screen.queryByTestId('confirm-notice')).toBeNull();
+  });
+});
+
 describe('matchesConfirmWord', () => {
   it('compares two arbitrary strings, not a known constant', () => {
     expect(matchesConfirmWord('Törlés', 'törlés')).toBe(true);

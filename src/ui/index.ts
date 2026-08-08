@@ -7,6 +7,7 @@ export { Tooltip, InfoDot, type TooltipProps } from './Tooltip';
 export { Confetti, type ConfettiProps } from './Confetti';
 export { Button, type ButtonProps, type ButtonVariant } from './Button';
 export { Card, type CardProps } from './Card';
+export { Callout, type CalloutProps, type CalloutTone } from './Callout';
 export { TierBadge, type TierBadgeProps, type TierBadgeVariant } from './TierBadge';
 export { Toggle, type ToggleProps } from './Toggle';
 export { EmptyState, type EmptyStateProps } from './EmptyState';
@@ -111,4 +112,4 @@ export {
 } from './QuizCard';
 export { BrandMark, Wordmark } from './Wordmark';
 export { OnboardingShot, type OnboardingShotName } from './OnboardingShot';
-export { ForgettingCurveInfo, MountainRoute, ReminderPreview } from './onboardingArt';
+export { ForgettingCurveInfo, MountainRoute, ReminderPreview, RouteSummary } from './onboardingArt';
