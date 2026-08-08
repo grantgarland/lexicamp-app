@@ -57,11 +57,12 @@ export default function RootLayout() {
   // Same deferral, second reason: an open sheet/dialog. The rebuild resets the
   // screen state that says a sheet is open, so a scheme change while one is up
   // made it vanish in one frame — no slide-down, user back on the screen behind
-  // it. That is precisely what tapping Light/Dark in Settings → Edit Profile
-  // does, i.e. the one place the app INVITES a mid-sheet scheme change
-  // (2026-08-08). Holding here keeps the sheet on screen; PortalHost keys
-  // overlays on the scheme so they still repaint cleanly, and the held rebuild
-  // runs the instant the last overlay finishes closing.
+  // it (2026-08-08). Settings applies appearance on Save and closes the sheet in
+  // the same gesture, so the hold is what lets that close ANIMATE: the theme
+  // switches immediately, the sheet slides away over it, and the held rebuild
+  // runs the instant the last overlay unmounts. PortalHost additionally keys its
+  // items on the scheme, for the paths where a sheet stays open across the
+  // change (a failed save, or the OS flipping at sunset).
   const overlayOpen = useOverlayOpen();
   const holdRebuild = quizBusy || overlayOpen;
 

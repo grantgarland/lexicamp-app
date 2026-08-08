@@ -53,13 +53,18 @@ export function Portal({ children }: { children: ReactNode }) {
  *
  * Read by the ROOT LAYOUT, which defers its light↔dark rebuild while this is
  * true. That rebuild remounts the whole tree, which resets the screen state
- * holding "which sheet is open" — so flipping appearance from inside Settings →
- * Edit Profile used to blink the sheet out of existence in a single frame and
- * dump the user back on the Settings hub, with no slide-down and the picker they
- * were using gone (reported 2026-08-08). Holding the rebuild keeps the sheet up:
- * the theme still switches instantly underneath it (Unistyles), the user sees
- * the result of their tap in place, and the deferred rebuild lands the moment
- * the sheet is dismissed normally — behind the closing animation.
+ * holding "which sheet is open" — so a scheme change with a sheet up blinked it
+ * out of existence in a single frame, with no slide-down, dumping the user back
+ * on the screen behind it (reported 2026-08-08 on Settings → Edit Profile, which
+ * is where the appearance picker lives).
+ *
+ * Settings now applies appearance on Save, which closes the sheet in the same
+ * gesture — so the hold is what buys that close its animation: the theme
+ * switches immediately (Unistyles), the sheet slides away over it, and the
+ * remount lands the instant the last overlay unmounts. The hold also covers the
+ * paths where the sheet legitimately STAYS open across a scheme change: a failed
+ * username save alongside an appearance change, and the OS flipping to dark at
+ * sunset while any sheet is up.
  */
 export function useOverlayOpen(): boolean {
   return usePortalStore((s) => s.items.length > 0);

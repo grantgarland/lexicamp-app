@@ -143,8 +143,9 @@ describe('the theme remount boundary stays at the root', () => {
     // Same class of bug, different victim: the rebuild resets the screen state
     // that says a sheet is open, so a scheme change threw an open sheet off
     // screen in one frame — no slide-down, user dumped back on the screen
-    // behind it. Settings → Edit Profile hosts the appearance picker, so this
-    // was the ordinary path, not an edge case (2026-08-08).
+    // behind it (2026-08-08). Settings → Edit Profile applies appearance on
+    // Save and closes itself, so without this hold the sheet the user just
+    // saved would be destroyed rather than dismissed.
     const src = readFileSync(join(__dirname, '../../app/_layout.tsx'), 'utf8');
     expect(src).toMatch(/useOverlayOpen\(\)/);
   });

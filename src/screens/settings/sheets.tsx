@@ -23,7 +23,7 @@ import { LEGAL_URLS, SUPPORT_EMAIL, SUPPORT_URLS } from '@/constants/legal';
 import { appVersionLabel } from '@/constants/appInfo';
 import { BRAND_MARK_KNOCKOUT_XML, BRAND_MARK_XML } from '@/ui/brandMark';
 import { useAccountIdentity, useNotificationPrefs, useSetUsername, useUpdateNotificationPrefs, useUpdateProfile } from '@/query/hooks';
-import { APPEARANCE_MODES, useAppearanceStore } from '@/store/appearanceStore';
+import { APPEARANCE_MODES, type AppearanceMode, useAppearanceStore } from '@/store/appearanceStore';
 import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
 import { useUiStore } from '@/store/uiStore';
 import {
@@ -127,6 +127,14 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
   const current = profile?.username ?? '';
   const changesUsed = profile?.usernameChanges ?? 0;
   const [draft, setDraft] = useState(current);
+  // Appearance is DRAFTED like the username, not applied on tap (2026-08-08).
+  // It used to write straight through, which made it the one control in Settings
+  // that committed without Save — and, because applying a scheme rebuilds the app
+  // tree, the one control that destroyed the sheet it lives in. Same gate as
+  // everything else here: the tap moves the draft, Save applies it and closes.
+  const mode = useAppearanceStore((s) => s.mode);
+  const setMode = useAppearanceStore((s) => s.setMode);
+  const [modeDraft, setModeDraft] = useState(mode);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmFreeChange, setConfirmFreeChange] = useState(false);
@@ -141,17 +149,32 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
   if (visible && !seededOpen) {
     setSeededOpen(true);
     setDraft(current);
+    setModeDraft(mode);
     setConfirmFreeChange(false);
     setRateLimited(false);
   }
 
-  const dirty = draft !== current && draft !== '';
+  const usernameDirty = draft !== current && draft !== '';
+  const appearanceDirty = modeDraft !== mode;
+  const dirty = usernameDirty || appearanceDirty;
   const canCycle = !rateLimited && (isPaid || changesUsed === 0);
 
   const cycle = () => setDraft(generateUsernameCandidate(Math.random, draft));
 
   const commit = () => {
     setConfirmFreeChange(false);
+    // The appearance half of the save is local and cannot fail, so it lands
+    // first and unconditionally. Applying it switches the theme under the sheet;
+    // the root layout holds its rebuild until the last overlay has closed (see
+    // ui/Portal `useOverlayOpen`), so the sheet gets its slide-down and the tree
+    // repaints cleanly behind it — including on the username-failure path below,
+    // where the sheet deliberately stays open.
+    if (appearanceDirty) setMode(modeDraft);
+    if (!usernameDirty) {
+      showToast({ variant: 'success', message: t('settings.profileSaved') });
+      onClose();
+      return;
+    }
     setUsername.mutate(draft, {
       onSuccess: () => {
         showToast({ variant: 'success', message: t('settings.profileSaved') });
@@ -181,8 +204,9 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
 
   const save = () => {
     // Free tier: the one-change warning sheet stands between Save and commit
-    // (premium saves directly — no interstitial).
-    if (!isPaid) setConfirmFreeChange(true);
+    // (premium saves directly — no interstitial). It is about the USERNAME's
+    // one free change, so an appearance-only save never sees it.
+    if (usernameDirty && !isPaid) setConfirmFreeChange(true);
     else commit();
   };
 
@@ -196,7 +220,7 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
         />
 
         <FieldLabel>{t('settings.username')}</FieldLabel>
-        <View style={[styles.usernameBox, dirty && { borderColor: theme.color.brand }]}>
+        <View style={[styles.usernameBox, usernameDirty && { borderColor: theme.color.brand }]}>
           <RawText style={styles.usernameValue} numberOfLines={1}>{formatUsername(draft)}</RawText>
           {canCycle && (
             <Pressable
@@ -214,7 +238,7 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
         <RawText style={styles.usernameNote}>
           {rateLimited
             ? t('settings.usernameRateLimitedHint')
-            : dirty
+            : usernameDirty
               ? t('settings.usernameDirtyHint')
               : t('settings.usernameNote')}
         </RawText>
@@ -228,14 +252,14 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
         <FieldLabel>{t('settings.nativeLanguage')}</FieldLabel>
         <ReadOnlyField value={languageName((profile?.nativeLang ?? 'en') as LanguageCode)} note={t('settings.nativeNote')} />
 
-        {/* Appearance (2026-08-04). Deliberately NOT dirty-gated behind Save:
-            the whole value of an appearance switch is seeing it, so it applies
-            the instant it is tapped and persists itself. */}
+        {/* Appearance (2026-08-04; dirty-gated 2026-08-08 — see `modeDraft`). */}
         <FieldLabel>{t('settings.appearance')}</FieldLabel>
-        <AppearancePicker />
+        <AppearancePicker value={modeDraft} onChange={setModeDraft} />
 
         <View style={styles.saveWrap}>
-          <Button title={t('settings.save')} variant="primary" disabled={!dirty || !canCycle || setUsername.isPending} onPress={save} />
+          {/* `canCycle` gates the USERNAME half only: a free user who has spent
+              their one change can still save an appearance change. */}
+          <Button title={t('settings.save')} variant="primary" disabled={!dirty || (usernameDirty && !canCycle) || setUsername.isPending} onPress={save} />
         </View>
         <Pressable testID="settingsDeleteAccount" onPress={() => setConfirmDelete(true)} style={({ pressed }) => [styles.deleteRow, pressed && { opacity: 0.7 }]} accessibilityRole="button">
           <RawText style={styles.deleteText}>{t('settings.deleteAccount')}</RawText>
@@ -719,13 +743,13 @@ function FieldLabel({ children }: { children: ReactNode }) {
  *  readable before the labels are. */
 const APPEARANCE_ICON = { system: IconMonitor, light: IconSun, dark: IconMoon } as const;
 
-/** System / Light / Dark. Writes straight to `appearanceStore`; theme/appearance
- *  subscribes and applies it, so there is nothing to save and nothing to undo. */
-function AppearancePicker() {
+/** System / Light / Dark — CONTROLLED. The owner holds the draft and writes it to
+ *  `appearanceStore` on Save (theme/appearance subscribes and applies it), so
+ *  appearance is gated exactly like every other field in this sheet and a
+ *  dismissed sheet discards the change. */
+function AppearancePicker({ value: mode, onChange: setMode }: { value: AppearanceMode; onChange: (mode: AppearanceMode) => void }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
-  const mode = useAppearanceStore((s) => s.mode);
-  const setMode = useAppearanceStore((s) => s.setMode);
   return (
     <View style={styles.readOnlyWrap}>
       <View style={styles.appearanceRow} accessibilityRole="radiogroup">
