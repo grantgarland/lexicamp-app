@@ -34,7 +34,7 @@ export {
   type RevealGeometry,
 } from './ScrollIntoView';
 export { ConfirmDialog, type ConfirmDialogProps } from './ConfirmDialog';
-export { Portal, PortalHost } from './Portal';
+export { Portal, PortalHost, useOverlayOpen } from './Portal';
 export { Toast } from './Toast';
 export { DetailStats, type DetailStat } from './DetailStats';
 export { PremiumBadge, type PremiumBadgeProps } from './PremiumBadge';

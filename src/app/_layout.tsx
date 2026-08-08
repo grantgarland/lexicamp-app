@@ -32,7 +32,7 @@ import { DevBadge } from '@/dev/DevBadge';
 import { queryClient } from '@/query/queryClient';
 import { startAppearanceSync, useAppliedScheme } from '@/theme/appearance';
 import { useUiStore } from '@/store/uiStore';
-import { PortalHost, Toast } from '@/ui';
+import { PortalHost, Toast, useOverlayOpen } from '@/ui';
 import { WalkthroughProvider } from '@/tour/walkthrough';
 
 // Minimal root. Real navigation (NavShell / tabs) lands in P3–P4.
@@ -54,9 +54,19 @@ export default function RootLayout() {
   // keep the old ink until the session ends, instead of the session being
   // thrown away mid-answer.
   const quizBusy = useUiStore((s) => s.quizInProgress);
+  // Same deferral, second reason: an open sheet/dialog. The rebuild resets the
+  // screen state that says a sheet is open, so a scheme change while one is up
+  // made it vanish in one frame — no slide-down, user back on the screen behind
+  // it. That is precisely what tapping Light/Dark in Settings → Edit Profile
+  // does, i.e. the one place the app INVITES a mid-sheet scheme change
+  // (2026-08-08). Holding here keeps the sheet on screen; PortalHost keys
+  // overlays on the scheme so they still repaint cleanly, and the held rebuild
+  // runs the instant the last overlay finishes closing.
+  const overlayOpen = useOverlayOpen();
+  const holdRebuild = quizBusy || overlayOpen;
 
   const [rebuildKey, setRebuildKey] = useState(scheme);
-  if (!quizBusy && rebuildKey !== scheme) setRebuildKey(scheme);
+  if (!holdRebuild && rebuildKey !== scheme) setRebuildKey(scheme);
   const [fontsLoaded] = useFonts({
     Spectral: Spectral_400Regular,
     'Spectral-Medium': Spectral_500Medium,
@@ -98,8 +108,11 @@ export default function RootLayout() {
 
               It fires only when the applied scheme changes — a rare, already
               full-screen repaint — so the rebuild is invisible inside it. Cost:
-              in-screen state resets, and an open sheet closes (PortalHost is
-              inside the key deliberately, so portalled content repaints too).
+              in-screen state resets. Because that reset also closes any open
+              sheet (the "is it open" flag lives in the screen), the rebuild is
+              HELD while an overlay is up — see `holdRebuild` above; PortalHost
+              is still inside the key, and additionally keys its own items on the
+              scheme so overlays repaint during that hold.
               Delete the key the day Unistyles registers every node reliably. */}
           <BottomSheetModalProvider key={rebuildKey}>
             {/* Walkthrough context at the ROOT: the quiz fullScreenModal mounts its

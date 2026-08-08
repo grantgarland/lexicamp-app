@@ -135,7 +135,18 @@ describe('the theme remount boundary stays at the root', () => {
     // study session would lose its answers.
     const src = readFileSync(join(__dirname, '../../app/_layout.tsx'), 'utf8');
     expect(src).toMatch(/quizInProgress/);
-    expect(src).toMatch(/!quizBusy && rebuildKey !== scheme/);
+    expect(src).toMatch(/quizBusy \|\| overlayOpen/);
+    expect(src).toMatch(/!holdRebuild && rebuildKey !== scheme/);
+  });
+
+  it('also defers the rebuild while a sheet or dialog is open', () => {
+    // Same class of bug, different victim: the rebuild resets the screen state
+    // that says a sheet is open, so a scheme change threw an open sheet off
+    // screen in one frame — no slide-down, user dumped back on the screen
+    // behind it. Settings → Edit Profile hosts the appearance picker, so this
+    // was the ordinary path, not an edge case (2026-08-08).
+    const src = readFileSync(join(__dirname, '../../app/_layout.tsx'), 'utf8');
+    expect(src).toMatch(/useOverlayOpen\(\)/);
   });
 
   it('does not re-add a key on Screen, which was measured not to work', () => {
