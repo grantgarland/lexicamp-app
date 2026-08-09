@@ -710,6 +710,12 @@ export const mockDataSource: DataSource = {
     // 18 §2c fill semantics, mirrored from the live source: the first items are
     // DUE (staggered overdue, oldest first), the tail is UPCOMING (next-due
     // ascending) — the session tops up to `limit` from the future queue.
+    //
+    // The live source's third tier (the just-reviewed cards it demotes rather
+    // than excludes, so a caught-up queue can never come back empty — 2026-08-09)
+    // has no counterpart here and needs none: `commitQuizSession` is a no-op in
+    // mock, so no card is ever "recently reviewed" and the fixture already
+    // satisfies the never-runs-dry contract unconditionally.
     const tierIdxOf: Record<string, number> = { bc: 0, abc: 1, hc: 2, sr: 3, summit: 4 };
     const now = Date.now();
     const dueCount = Math.ceil(QUIZ_SESSION.length / 2); // first half due, rest upcoming

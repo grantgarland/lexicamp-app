@@ -130,10 +130,16 @@ const CARD_STATS_JOIN =
  *  replaces, just sourced from the server instead of a slice). */
 const DECK_MEMBER_JOIN = CARD_JOIN + ', deck_cards!inner ( deck_id )';
 
-/** How recently a card must have been reviewed to be held OUT of the study-ahead
+/** How recently a card must have been reviewed to be DEMOTED in the study-ahead
  *  fill (see getDueCards). Long enough to cover "finish a session, immediately
  *  start another", short enough that a genuine later-in-the-day top-up session
- *  can still reach ahead. */
+ *  can still reach ahead.
+ *
+ *  Demoted, not excluded — that distinction is the whole feature (2026-08-09).
+ *  As a hard exclusion this emptied the queue in exactly the state that makes
+ *  "Study ahead" the CTA: being caught up MEANS having just reviewed everything,
+ *  so a user who finished a session and wanted to keep going was handed "All
+ *  caught up!" and a back button for half an hour. */
 const FILL_COOLDOWN_MS = 30 * 60 * 1000;
 
 /** Deck-scoped DUE variant — both `!inner`s matter, for different reasons:
@@ -514,11 +520,21 @@ export const supabaseDataSource: DataSource = {
     // be skipped in favour of one due an hour ago. Only visible when the due (or
     // upcoming) count exceeds the session cap. Fixed 2026-07-30.
     //
-    // 18 §2c fill composition — two ordered pulls: (1) everything due now,
-    // oldest overdue first; (2) if the due count is under the session cap,
-    // top up with the NEXT-due upcoming cards (dueAt asc). Reviewing ahead is
-    // FSRS-legitimate (ts-fsrs schedules from actual elapsed time), and the
-    // ordering guarantees the fill is always the highest-priority words.
+    // 18 §2c fill composition — three ordered pulls, each topping up what the
+    // previous left short, every one of them dueAt ASC so the queue is always
+    // FSRS-prioritised no matter which tier a card comes from:
+    //   (1) everything DUE now, oldest overdue first;
+    //   (2) the next-due UPCOMING cards, minus anything reviewed inside the
+    //       cooldown — the ordinary "study ahead";
+    //   (3) last resort: the upcoming cards the cooldown just held back.
+    // Reviewing ahead is FSRS-legitimate (ts-fsrs schedules from actual elapsed
+    // time), and tier 3 is what makes the queue INEXHAUSTIBLE while the library
+    // has unsuspended cards — continuous review is the product, so running out
+    // of scheduled words must never be a dead end (2026-08-09).
+    //
+    // The three tiers are disjoint by construction, so the result never needs
+    // de-duplicating: (1) is dueAt ≤ now, (2) and (3) are both dueAt > now and
+    // split on the cooldown predicate and its exact complement.
     const target = lang ?? (await this.getProfile()).targetLang;
     const nowIso = new Date().toISOString();
     // 2026-07-30: `deckId` narrows the same two pulls to one custom deck's
@@ -538,33 +554,56 @@ export const supabaseDataSource: DataSource = {
     bail(dueErr);
     const rows = ((dueData ?? []) as unknown as JoinedCardRow[]).filter((r) => r.card_fsrs_state != null);
 
-    const remaining = limit - rows.length;
-    if (remaining > 0) {
-      // The fill is "study ahead", and a word answered minutes ago is not ahead
-      // of anything: FSRS schedules from ACTUAL elapsed time, so re-rating at
-      // elapsed ≈ 0 teaches the model nothing and the user just sees the session
-      // they only just finished. Excluding the cooldown window is what makes a
-      // short queue end in "All caught up!" instead of a rerun (Casey,
-      // quiz-repeat bug 2026-08-04 — this is the second route into that symptom;
-      // the first was a stale snapshot in QuizScreen).
-      //
-      // Only the FILL is filtered. A lapsed card put into relearning is due
-      // again in minutes BY DESIGN, and it comes back through the due pull
-      // above, which this does not touch.
-      const cooldownIso = new Date(Date.now() - FILL_COOLDOWN_MS).toISOString();
-      const nextQuery = supabase
+    // Shared shape of both fill pulls: not due yet, same scope as the due pull.
+    // Only the cooldown predicate differs between them.
+    const cooldownIso = new Date(Date.now() - FILL_COOLDOWN_MS).toISOString();
+    const upcomingQuery = () => {
+      const q = supabase
         .from('cards')
         .select(deckId != null ? DECK_DUE_JOIN : DUE_JOIN)
         .eq('suspended', false)
         .eq('decks.target_lang', target)
-        .gt('card_fsrs_state.due_at', nowIso)
-        .or(`last_review_at.is.null,last_review_at.lt.${cooldownIso}`, { referencedTable: 'card_fsrs_state' });
-      if (deckId != null) nextQuery.eq('deck_cards.deck_id', deckId);
-      const { data: nextData, error: nextErr } = await nextQuery
-        .order('card_fsrs_state(due_at)', { ascending: true })
-        .limit(remaining);
-      bail(nextErr);
-      rows.push(...((nextData ?? []) as unknown as JoinedCardRow[]).filter((r) => r.card_fsrs_state != null));
+        .gt('card_fsrs_state.due_at', nowIso);
+      if (deckId != null) q.eq('deck_cards.deck_id', deckId);
+      return q;
+    };
+    const pushFill = async (query: ReturnType<typeof upcomingQuery>, take: number) => {
+      const { data, error } = await query.order('card_fsrs_state(due_at)', { ascending: true }).limit(take);
+      bail(error);
+      rows.push(...((data ?? []) as unknown as JoinedCardRow[]).filter((r) => r.card_fsrs_state != null));
+    };
+
+    const remaining = limit - rows.length;
+    if (remaining > 0) {
+      // Tier 2. A word answered minutes ago is not "ahead" of anything: FSRS
+      // schedules from ACTUAL elapsed time, so re-rating at elapsed ≈ 0 teaches
+      // the model nothing and the user just sees the session they only just
+      // finished. So the ordinary fill skips the cooldown window (Casey,
+      // quiz-repeat bug 2026-08-04 — the other route into that symptom was a
+      // stale snapshot in QuizScreen).
+      //
+      // Only the FILL is filtered. A lapsed card put into relearning is due
+      // again in minutes BY DESIGN, and it comes back through the due pull
+      // above, which this does not touch.
+      await pushFill(
+        upcomingQuery().or(`last_review_at.is.null,last_review_at.lt.${cooldownIso}`, { referencedTable: 'card_fsrs_state' }),
+        remaining,
+      );
+    }
+
+    const stillShort = limit - rows.length;
+    if (stillShort > 0) {
+      // Tier 3 — the cooldown's complement, and the reason a queue can no longer
+      // come back empty. Skipping a just-reviewed word is only worth doing when
+      // there is something better to study; when there is not, refusing to serve
+      // it doesn't protect the schedule, it just ends the session. The user
+      // asked to keep going, and a slightly early re-review is a far smaller
+      // cost than a dead end (2026-08-09).
+      //
+      // Ordered by dueAt like every other tier, so what surfaces first is the
+      // weakest material — the words closest to falling due — rather than
+      // whatever happened to be answered longest ago.
+      await pushFill(upcomingQuery().gte('card_fsrs_state.last_review_at', cooldownIso), stillShort);
     }
     return rows.map((r) => mapQuizItem(r, r.translations_cache, r.card_fsrs_state, target, overrideText(r.card_target_overrides)));
   },

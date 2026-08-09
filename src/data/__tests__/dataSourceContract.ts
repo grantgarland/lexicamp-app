@@ -114,6 +114,23 @@ export function describeDataSourceContract(name: string, source: DataSource): vo
       expect(capped.map((c) => c.id)).toEqual(all.slice(0, capped.length).map((c) => c.id));
     });
 
+    // Continuous review is the product (00 §value-prop): running out of
+    // SCHEDULED words is the normal, healthy state, and it must never be a dead
+    // end. The live source reaches this through a three-tier fill whose last
+    // tier is the just-reviewed cards it would otherwise hold back — so a
+    // caught-up user who taps "Study ahead" always gets a session (2026-08-09).
+    it('getDueCards never runs dry while the library has unsuspended words', async () => {
+      const first = await source.getDueCards(20);
+      expect(first.length).toBeGreaterThan(0);
+
+      // ...including immediately after answering the whole thing, which is
+      // exactly when "All caught up!" used to become inescapable.
+      await source.commitQuizSession({
+        ratings: first.map((q, i) => ({ cardId: q.id, rating: (['again', 'almost', 'got_it'] as const)[i % 3] })),
+      });
+      expect((await source.getDueCards(20)).length).toBeGreaterThan(0);
+    });
+
     it('getDueCards returns valid quiz view-models (registry tiers, known modes)', async () => {
       const due = await source.getDueCards(20);
       for (const q of due) {

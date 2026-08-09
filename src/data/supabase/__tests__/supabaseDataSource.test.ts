@@ -34,7 +34,7 @@ function mockMakeChain(rec: RecordedCall) {
       return chain;
     };
   const chain: Record<string, unknown> = {};
-  for (const m of ['select', 'eq', 'gt', 'lte', 'in', 'or', 'order', 'limit', 'range', 'update', 'upsert', 'insert', 'delete']) {
+  for (const m of ['select', 'eq', 'gt', 'gte', 'lte', 'in', 'or', 'order', 'limit', 'range', 'update', 'upsert', 'insert', 'delete']) {
     chain[m] = record(m);
   }
   chain.maybeSingle = () => {
@@ -268,11 +268,12 @@ describe('getDueCards — deck-scoped session (2026-07-30)', () => {
     // cap — the same "deck shows words that aren't in it" bug, one layer down.
     mockQueue.push(ok([{ ...CARD_ROW('m1'), card_fsrs_state: FSRS_ROW('m1', '2026-07-17T00:00:00Z') }]));
     mockQueue.push(ok([{ ...CARD_ROW('m2'), card_fsrs_state: FSRS_ROW('m2', '2026-07-25T00:00:00Z') }]));
+    mockQueue.push(ok([])); // last-resort pull: still short of 5, so it runs too
     const items = await supabaseDataSource.getDueCards(5, 'es', 'travel');
     expect(items.map((i) => i.id)).toEqual(['m1', 'm2']);
 
     const cardCalls = mockCalls.filter((c) => c.table === 'cards');
-    expect(cardCalls).toHaveLength(2); // due pull + fill pull
+    expect(cardCalls).toHaveLength(3); // due pull + fill pull + last-resort pull
     cardCalls.forEach((call) => {
       expect(String(call.ops.find(([op]) => op === 'select')![1][0])).toContain('deck_cards!inner ( deck_id )');
       expect(call.ops).toContainEqual(['eq', ['deck_cards.deck_id', 'travel']]);
@@ -364,11 +365,14 @@ describe('getDueCards', () => {
       ]),
     );
     mockQueue.push(ok([{ ...CARD_ROW('next1'), card_fsrs_state: FSRS_ROW('next1', '2026-07-20T00:00:00Z') }]));
+    mockQueue.push(ok([])); // last resort: nothing held back by the cooldown
     const items = await supabaseDataSource.getDueCards(3, 'es');
     expect(items.map((i) => i.id)).toEqual(['due1', 'next1']);
     // The top-up pull asked only for the REMAINING slots (3 due-limit − 1 kept).
-    const [, topUp] = mockCalls.filter((c) => c.table === 'cards');
+    const [, topUp, lastResort] = mockCalls.filter((c) => c.table === 'cards');
     expect(topUp!.ops).toContainEqual(['limit', [2]]);
+    // ...and the last-resort pull for what BOTH of them left over (3 − 2).
+    expect(lastResort!.ops).toContainEqual(['limit', [1]]);
   });
 
   it('skips the top-up pull entirely when the due pull fills the cap', async () => {
@@ -381,10 +385,11 @@ describe('getDueCards', () => {
   // Quiz-repeat bug, 2026-08-04. The fill is "study ahead", and a word answered
   // minutes ago is not ahead of anything — FSRS schedules off ACTUAL elapsed
   // time, so re-rating at elapsed ≈ 0 teaches the model nothing while the user
-  // is handed back the session they just finished. A short queue must end in
-  // "All caught up!", not a rerun.
-  it('holds just-reviewed cards OUT of the study-ahead fill', async () => {
+  // is handed back the session they just finished. So the ORDINARY fill skips
+  // the cooldown window.
+  it('holds just-reviewed cards out of the ordinary study-ahead fill', async () => {
     mockQueue.push(ok([{ ...CARD_ROW('due1'), card_fsrs_state: FSRS_ROW('due1', '2026-07-17T00:00:00Z') }]));
+    mockQueue.push(ok([{ ...CARD_ROW('n1'), card_fsrs_state: FSRS_ROW('n1', '2026-07-20T00:00:00Z') }]));
     mockQueue.push(ok([]));
     await supabaseDataSource.getDueCards(3, 'es');
 
@@ -396,6 +401,53 @@ describe('getDueCards', () => {
     expect(filter).toContain('last_review_at.is.null');
     expect(filter).toContain('last_review_at.lt.');
     expect(opts.referencedTable).toBe('card_fsrs_state');
+  });
+
+  // ...but held back is not thrown away (2026-08-09). As a hard exclusion the
+  // cooldown emptied the queue in exactly the state that makes "Study ahead" the
+  // CTA — being caught up MEANS having just reviewed everything — so finishing a
+  // session and asking to keep going produced "All caught up!" and a back
+  // button. Continuous review is the product; the queue must not run dry while
+  // the library still has cards.
+  it('falls back to the just-reviewed cards rather than returning an empty queue', async () => {
+    mockQueue.push(ok([])); // nothing due
+    mockQueue.push(ok([])); // nothing upcoming that escapes the cooldown
+    mockQueue.push(ok([{ ...CARD_ROW('recent1'), card_fsrs_state: FSRS_ROW('recent1', '2026-08-20T00:00:00Z') }]));
+
+    const items = await supabaseDataSource.getDueCards(3, 'es');
+    expect(items.map((i) => i.id)).toEqual(['recent1']);
+
+    // The last-resort pull is the cooldown predicate's exact complement, so the
+    // three tiers stay disjoint and the queue never needs de-duplicating.
+    const lastResort = mockCalls.filter((c) => c.table === 'cards').at(-1)!;
+    const gte = lastResort.ops.find(([name]) => name === 'gte');
+    expect(gte![1][0]).toBe('card_fsrs_state.last_review_at');
+    expect(lastResort.ops.find(([name]) => name === 'or')).toBeUndefined();
+    // Still FSRS-ordered, and still only the upcoming half of the library.
+    expect(lastResort.ops).toContainEqual(['order', ['card_fsrs_state(due_at)', { ascending: true }]]);
+    expect(lastResort.ops.find(([name, args]) => name === 'gt' && args[0] === 'card_fsrs_state.due_at')).toBeDefined();
+  });
+
+  it('skips the last-resort pull once the cap is already met', async () => {
+    // It exists to prevent a dead end, not to lengthen a healthy session.
+    mockQueue.push(ok([{ ...CARD_ROW('d1'), card_fsrs_state: FSRS_ROW('d1', '2026-07-17T00:00:00Z') }]));
+    mockQueue.push(ok([{ ...CARD_ROW('n1'), card_fsrs_state: FSRS_ROW('n1', '2026-07-20T00:00:00Z') }]));
+    await supabaseDataSource.getDueCards(2, 'es');
+    expect(mockCalls.filter((c) => c.table === 'cards')).toHaveLength(2);
+  });
+
+  it('keeps the deck scope on the last-resort pull', async () => {
+    // Same trap as the fill pull: an unscoped last resort would let a small deck
+    // borrow the rest of the library to keep a session going.
+    mockQueue.push(ok([]));
+    mockQueue.push(ok([]));
+    mockQueue.push(ok([]));
+    await supabaseDataSource.getDueCards(3, 'es', 'travel');
+    const lastResort = mockCalls.filter((c) => c.table === 'cards').at(-1)!;
+    expect(String(lastResort.ops.find(([op]) => op === 'select')![1][0])).toContain('deck_cards!inner ( deck_id )');
+    expect(lastResort.ops).toContainEqual(['eq', ['deck_cards.deck_id', 'travel']]);
+    expect(lastResort.ops).toContainEqual(['eq', ['decks.target_lang', 'es']]);
+    expect(lastResort.ops).toContainEqual(['eq', ['suspended', false]]);
   });
 
   it('leaves the DUE pull unfiltered by the cooldown', async () => {
