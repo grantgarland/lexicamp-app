@@ -136,10 +136,11 @@ export default function RootLayout() {
                 of the persistent nav — see ui/Portal + ui/Sheet + ui/Toast. */}
             <PortalHost />
             <Toast />
-            {/* Mode beacon. Zero-size and pointerEvents="none" so it can never
-                intercept a tap; present in EVERY build (not __DEV__-gated) —
-                its whole job is to let a flow assert what it is running
-                against BEFORE it asserts anything about the UI. */}
+            {/* Mode beacon. Draws nothing (no backgroundColor) and
+                pointerEvents="none" so it can never intercept a tap; present in
+                EVERY build (not __DEV__-gated) — its whole job is to let a flow
+                assert what it is running against BEFORE it asserts anything
+                about the UI. */}
             <View
               testID={`dataSource-${USE_SUPABASE ? 'live' : 'mock'}`}
               // `accessible` + a label are REQUIRED, not decoration. A bare
@@ -149,7 +150,30 @@ export default function RootLayout() {
               accessible
               accessibilityLabel={`dataSource ${USE_SUPABASE ? 'live' : 'mock'}`}
               pointerEvents="none"
-              style={{ position: 'absolute', top: 0, left: 0, width: 1, height: 1 }}
+              // SIZE IS LOAD-BEARING (2026-08-11, run 31373413201). This was
+              // 1x1dp at exactly (0,0), and that made the gate UNPASSABLE ON
+              // ANDROID — it took 7 of the 8 nightly flows down at their FIRST
+              // command while iOS stayed green locally. The node reached Maestro
+              // with the right id and label; the framework just refused to call
+              // it visible, and Maestro's Android driver drops those ("Skipping
+              // invisible child", from that run's logcat):
+              //   boundsInScreen: Rect(0, 0 - 3, 3); viewIdResName: dataSource-mock;
+              //   contentDescription: dataSource mock;
+              //   importantForAccessibility: true; visible: false
+              // (`visible:` there is AccessibilityNodeInfo.isVisibleToUser().) It
+              // was the ONLY non-degenerate app node in the whole dump marked
+              // invisible — everything else Maestro skipped was 0-width,
+              // 0-height, or system decor.
+              //
+              // 48dp clears both candidate causes at once rather than betting on
+              // one: it is far past any minimum-area threshold, and it extends
+              // well below the status bar / display cutout, so a top inset can no
+              // longer clip the visible rect to nothing. iOS has no equivalent
+              // filter, which is exactly why a simulator run cannot catch a
+              // regression here. Do not shrink it back toward zero — and it costs
+              // nothing to keep: the View has no background, so it renders no
+              // pixels at any size.
+              style={{ position: 'absolute', top: 0, left: 0, width: 48, height: 48 }}
             />
             {/* DEFENCE IN DEPTH, not the actual exclusion (2026-08-06). In any
                 non-dev bundle this import has already been swapped for a no-op

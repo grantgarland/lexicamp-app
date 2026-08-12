@@ -189,7 +189,9 @@ function flowHas(rendered: string): boolean {
 
 describe("Maestro word-capture selectors match what the components actually render", () => {
   it('the flow file still contains the selectors this suite pins', () => {
-    for (const s of ['volar', 'la mosca', 'Save word', 'Saved!', "Can't save this", 'buenos dias·es', 'melancólico'])
+    // 'Delete word', not 'Saved!' — see the saved-state test below for why the
+    // flow cannot assert the confirmation string.
+    for (const s of ['volar', 'la mosca', 'Save word', 'Delete word', "Can't save this", 'buenos dias·es', 'melancólico'])
       expect({ selector: s, present: flowHas(s) }).toEqual({ selector: s, present: true });
   });
 
@@ -210,11 +212,25 @@ describe("Maestro word-capture selectors match what the components actually rend
     expect(flowHas(noun.displayTarget) && !flowHas(`la ${noun.displayTarget}`)).toBe(false);
   });
 
-  it("'fly' card: the just-saved state renders the 'Saved!' the flow asserts", async () => {
+  // Both post-save states, because the flow deliberately asserts the SECOND one.
+  // "Saved!" renders only while `justSavedId` matches, and SearchScreen clears
+  // that after 1500ms — so on device it is a 1.5-SECOND TRANSIENT that expires
+  // into "Delete word". The CI Android emulator loses that race (2026-08-11, run
+  // 31373413201); no timeout can win it, because the element disappears rather
+  // than arriving late. Pinning both here keeps the flow's choice legible: this
+  // is the string the card shows, that is the string it settles to, and only the
+  // settled one is assertable. If you ever point the flow back at 'Saved!', the
+  // pin list above will accept it — this comment is the guard.
+  it("'fly' card: 'Saved!' holds only while justSavedId matches, then settles to 'Delete word'", async () => {
     const result = await lookup('fly');
     const primary = result.translations[0];
+
     renderCard(result, { savedIds: new Set([primary.id]), justSavedId: primary.id });
     expectSelectorHits('Saved!', renderedTexts());
+
+    // Same saved word, transient expired — what the flow actually waits for.
+    renderCard(result, { savedIds: new Set([primary.id]), justSavedId: null });
+    expectSelectorHits('Delete word', renderedTexts());
   });
 
   it("phrase path: 'buenos dias' renders the fabricated headword and a saveable action", async () => {

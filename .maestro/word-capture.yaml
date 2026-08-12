@@ -12,6 +12,14 @@
 # fixes are all selector-loosening or platform-neutral, but a first Android
 # failure after 08-06 should be read against these notes before the app.
 #
+# ANDROID LEG, first run (2026-08-11, run 31373413201). It got 1m58s deep —
+# lookup, 'la mosca', the lazy example fetch, the scroll and the tap on
+# result-save all passed — and died on the very next line, `assertVisible:
+# 'Saved!'`. That was a RACE, not a selector bug and not the app: see the ⚠️ at
+# the CREATE step. The assertion is now on the durable end state. Everything
+# after that step is STILL unexecuted on Android; a failure below the CREATE
+# block is a genuine first run, not a regression.
+#
 # SELECTOR POLICY (2026-07-17): tap by testID, assert by TEXT.
 #   - Taps/gestures only need to FIND an element → ids are locale-proof, immune
 #     to copy changes, and collision-free (the 2026-07-16 system-Home-button bug;
@@ -33,10 +41,12 @@
 #     the fixture field holds.
 #
 # What this verifies vs. what it CAN'T (mock-mode reality, 2026-07-13):
-#   CREATE — lookup renders + Save flips to "Saved!". Mock saveCard() is a
-#            no-op and getWords() serves fixtures, so the saved word does NOT
-#            appear in Word List. True create→read persistence needs the live
-#            (Supabase) path + a seeded account — CI-7, deferred.
+#   CREATE — lookup renders + Save flips the card into its saved state (asserted
+#            as "Delete word", the DURABLE end state — see the ⚠️ at that step
+#            for why the "Saved!" confirmation itself is unassertable). Mock
+#            saveCard() is a no-op and getWords() serves fixtures, so the saved
+#            word does NOT appear in Word List. True create→read persistence
+#            needs the live (Supabase) path + a seeded account — CI-7, deferred.
 #   READ   — deterministic mock fixtures: 'fly' → volar + "la mosca" (Azure docs
 #            example; the noun sense carries prefixWord 'la' and RENDERS with
 #            it), phrase path fabricates '<phrase>·es'.
@@ -152,7 +162,27 @@ tags:
     timeout: 15000
 - tapOn:
     id: 'result-save'
-- assertVisible: 'Saved!'
+# ⚠️ DO NOT assert 'Saved!' HERE — it is a 1.5-SECOND TRANSIENT and no timeout
+# can make it reliable (2026-08-11, run 31373413201). SearchScreen does
+# `setJustSaved(id); setTimeout(() => setJustSaved(null), 1500)`, and
+# TranslationCard's buttonState is save → saved (while justSavedId matches) →
+# delete. So "Saved!" EXPIRES; a polling assert that arrives late finds "Delete
+# word" and fails, and extending the timeout makes it strictly worse.
+#
+# The local iOS simulator wins that race and the CI Android emulator loses it,
+# which is the whole local-green / nightly-red asymmetry for this flow: the
+# emulator is software-rendered (`Failed to find ColorBuffer` in that run), every
+# hierarchy dump walks hundreds of nodes, and Maestro's post-tap settle wait runs
+# BEFORE the assert — with the saved chip entering under a Reanimated
+# FadeIn.duration(200) to keep that wait alive.
+#
+# Asserting the DURABLE end state instead is also a strictly stronger check:
+# "Saved!" only proves the transient fired, whereas "Delete word" proves the sense
+# is in `savedIds` — i.e. the save actually stuck. extendedWaitUntil because the
+# 1.5s transient has to expire first on a device fast enough to have shown it.
+- extendedWaitUntil:
+    visible: 'Delete word'
+    timeout: 10000
 
 # ── READ: phrase path (unknown Latin phrase → fabricated '<phrase>·es') ──────
 - tapOn:

@@ -3,7 +3,8 @@
 #
 # WHY THIS FLOW EARNS ITS RUNTIME (and word-capture's CREATE leg does not):
 # mock `saveCard()` is a no-op and `getWords()` serves fixtures, so a saved word
-# never appears anywhere — word-capture can only assert the optimistic "Saved!".
+# never appears anywhere — word-capture can only assert the card's own optimistic
+# saved state ("Delete word" replacing "Save word").
 # Decks are the opposite: `createDeck`/`deleteDeck`/`addCardToDeck`/
 # `removeCardFromDeck` genuinely mutate `mockDeckMeta` + `mockDeckMembers`,
 # `wordCount` is DERIVED from membership, and createDeck throws the SAME
