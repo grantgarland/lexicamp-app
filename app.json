@@ -73,7 +73,8 @@
           ]
         }
       ],
-      "./plugins/withAsyncStorageDbSize"
+      "./plugins/withAsyncStorageDbSize",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
