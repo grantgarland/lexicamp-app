@@ -84,7 +84,8 @@
       "router": {},
       "eas": {
         "projectId": "6357fe7b-f4ba-4045-b15e-933fcb1d30af"
-      }
+      },
+      "sentryDsn": "https://0c01b90f2533e5f157a6206ca6799f77@o4511678496636928.ingest.us.sentry.io/4511678499389440"
     },
     "owner": "lexicamp"
   }

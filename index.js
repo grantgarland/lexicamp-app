@@ -1,4 +1,12 @@
-// App entry shim. Guarantees Unistyles is configured (and i18n initialized) BEFORE
+// App entry shim.
+//
+// ⚠️ `./src/observability/sentryInit` MUST STAY THE FIRST IMPORT. Imports are
+// hoisted, so whatever sits at the top of this list is the first code that runs
+// in the app — and Sentry has to be listening before the modules below it are
+// evaluated, or a startup crash in any of them goes unreported. See that file.
+import './src/observability/sentryInit';
+
+// Guarantees Unistyles is configured (and i18n initialized) BEFORE
 // expo-router's require.context evaluates any route module. Route files under app/ are
 // required in path-sort order, and `app/(tabs)/…` sorts before `app/_layout.tsx`
 // ('(' < '_'), so the layout's own config import runs too late for the first
@@ -7,9 +15,6 @@
 import './src/theme/unistyles';
 import './src/i18n';
 
-// Crash reporting (CI-3). No-op in dev or until EXPO_PUBLIC_SENTRY_DSN /
-// extra.sentryDsn is configured — see src/observability/sentry.ts.
-import { initSentry } from './src/observability/sentry';
 // Offline outbox (2.4): replay queued quiz commits on start/foreground.
 import { initOutbox } from './src/data/outboxInit';
 // Push (2.5): foreground presentation + tap → deep-link routing.
@@ -21,7 +26,6 @@ import { initSessionSync } from './src/auth/sessionSync';
 
 import 'expo-router/entry';
 
-initSentry();
 initOutbox();
 initNotifications();
 initSessionSync();
