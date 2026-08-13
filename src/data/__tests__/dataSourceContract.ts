@@ -252,6 +252,36 @@ export function describeDataSourceContract(name: string, source: DataSource): vo
       expect(reset?.target).toBe(w.originalTarget);
     });
 
+    it('a newly created deck reports 0 reviews / never reviewed, even when built from studied words', async () => {
+      // 2026-08-13: the deck's counters belong to the DECK, not to the words in
+      // it. get_deck_stats joined review_logs on card_id with no time bound, so
+      // seeding a deck with words you had already studied handed it their whole
+      // history — a deck created seconds ago opened on "REVIEWS 22 / LAST
+      // REVIEWED 4 days ago". The membership window (reviewed_at >=
+      // deck_cards.created_at) is what makes this hold server-side.
+      const words = await source.getWords();
+      if (words.length === 0) return; // empty scenario — nothing to seed with
+      // Seed from the MOST-studied words on purpose: if any history leaks in,
+      // these are the words that make it leak loudest.
+      const studied = [...words].sort((a, b) => b.reps - a.reps).slice(0, 3);
+      expect(studied[0]!.reps).toBeGreaterThan(0); // otherwise the test proves nothing
+
+      const name = `Contract ${Date.now()}`;
+      const id = await source.createDeck(
+        name,
+        studied.map((w) => w.id),
+      );
+      try {
+        const deck = (await source.getDecks()).find((d) => d.id === id);
+        expect(deck).toBeDefined();
+        expect(deck!.wordCount).toBe(studied.length); // the words ARE in it…
+        expect(deck!.reviews).toBe(0); // …but none of their reviews are its own
+        expect(deck!.lastReviewedAt).toBeNull();
+      } finally {
+        await source.deleteDeck(id);
+      }
+    });
+
     it('every word resolves target = targetOverride ?? originalTarget', async () => {
       for (const w of await source.getWords()) {
         expect(w.target).toBe(w.targetOverride ?? w.originalTarget);
