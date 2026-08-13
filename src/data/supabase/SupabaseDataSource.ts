@@ -244,12 +244,19 @@ export const supabaseDataSource: DataSource = {
     bail(error);
   },
 
-  async updateProfile(patch: { displayName?: string; quizLength?: number }): Promise<void> {
+  async updateProfile(patch: { displayName?: string; quizLength?: number; timezone?: string }): Promise<void> {
     // D6 / UX-17e: direct PostgREST update under the own-profile-update policy.
     const row: Record<string, unknown> = {};
     if (patch.displayName != null) row.display_name = patch.displayName.trim() === '' ? null : patch.displayName.trim();
     // UX-17b: ladder-validated client-side too (the column CHECK is the backstop).
     if (patch.quizLength != null && (QUIZ_LENGTHS as readonly number[]).includes(patch.quizLength)) row.quiz_length = patch.quizLength;
+    // Sent by the session-start sync, not by any screen (2026-08-12). Passed
+    // through unvalidated ON PURPOSE: the client cannot know which zone names
+    // this server's tzdata carries, so the `profiles_normalize_timezone`
+    // trigger is the authority — it keeps the last good value rather than
+    // rejecting, because one unknown zone in `profiles` would raise inside
+    // run_push_scheduler() and kill reminders for every user at once.
+    if (patch.timezone != null && patch.timezone.trim() !== '') row.timezone = patch.timezone.trim();
     if (Object.keys(row).length === 0) return;
     const { error } = await supabase.from('profiles').update(row).eq('id', await uid());
     bail(error);
@@ -634,10 +641,13 @@ export const supabaseDataSource: DataSource = {
   },
 
   async registerPushToken(token: string, platform: 'ios' | 'android'): Promise<void> {
-    const userId = await uid();
-    const { error } = await supabase
-      .from('push_tokens')
-      .upsert({ user_id: userId, token, platform, updated_at: new Date().toISOString() }, { onConflict: 'user_id,token' });
+    // RPC, not an upsert: `push_tokens` is keyed by TOKEN (one device = one
+    // account), so registering may have to take the row over from whichever
+    // account held this phone before. The own-push-tokens RLS policy blocks
+    // that by design — the pre-image row fails `using auth.uid() = user_id` —
+    // so the transfer runs SECURITY DEFINER server-side. It still only ever
+    // writes auth.uid(), so it cannot hand a device to anyone else.
+    const { error } = await supabase.rpc('register_push_token', { p_token: token, p_platform: platform });
     bail(error);
   },
 

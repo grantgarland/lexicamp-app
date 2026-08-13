@@ -21,6 +21,9 @@ const DECK_ID = 'dev-deck';
 let mockLearningLangs: string[] = ['es', 'fr'];
 let mockActiveLang = 'es';
 let mockDisplayName = 'Casey';
+// Re-synced from the device on every session start (2026-08-12) rather than
+// frozen at onboarding, so it has to be mutable here too.
+let mockTimezone = 'America/New_York';
 // 20 §3 v2: username identity. The taken fixtures make the save-race
 // ("snapped up just now") path demo-able offline — cycle until one of these
 // appears (or hardcode a draft in dev) and Save to see the taken toast.
@@ -619,7 +622,7 @@ export const mockDataSource: DataSource = {
     return translationId === 'mock-t:fly' ? [FLY_EXAMPLE] : [];
   },
   async getProfile() {
-    return { ...PROFILE, targetLang: mockActiveLang as Profile['targetLang'], displayName: mockDisplayName, username: mockUsername, usernameChanges: mockUsernameChanges };
+    return { ...PROFILE, targetLang: mockActiveLang as Profile['targetLang'], displayName: mockDisplayName, timezone: mockTimezone, username: mockUsername, usernameChanges: mockUsernameChanges };
   },
   async getEntitlement() {
     return entitlementFor(scenario().plan);
@@ -773,6 +776,7 @@ export const mockDataSource: DataSource = {
   },
   async updateProfile(patch) {
     if (patch.displayName != null) mockDisplayName = patch.displayName.trim() || 'Casey';
+    if (patch.timezone != null && patch.timezone.trim() !== '') mockTimezone = patch.timezone.trim();
     // quizLength mirror is a server concern; mock keeps the prefsStore value authoritative.
   },
 

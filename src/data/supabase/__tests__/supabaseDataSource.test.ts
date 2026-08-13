@@ -509,6 +509,18 @@ describe('updateProfile', () => {
     const upd = mockCalls.find((c) => c.table === 'profiles')!;
     expect(upd.ops).toContainEqual(['update', [{ display_name: null }]]);
   });
+
+  it('writes a timezone (the reminder scheduler reads it; it used to be frozen at onboarding)', async () => {
+    mockQueue.push(ok(null));
+    await supabaseDataSource.updateProfile({ timezone: 'Europe/Madrid' });
+    const upd = mockCalls.find((c) => c.table === 'profiles')!;
+    expect(upd.ops).toContainEqual(['update', [{ timezone: 'Europe/Madrid' }]]);
+  });
+
+  it('skips a blank timezone rather than writing an empty zone the scheduler would choke on', async () => {
+    await supabaseDataSource.updateProfile({ timezone: '   ' });
+    expect(mockCalls).toHaveLength(0);
+  });
 });
 
 describe('logEvent', () => {
@@ -554,6 +566,21 @@ describe('lookup error mapping', () => {
     const out = await supabaseDataSource.lookup('hola', 'target_to_native'); // learning→native = es→en
     expect(out).toEqual({ status: 'not_found' });
     expect(mockInvokeCalls[0]).toEqual(['translate', { body: { text: 'hola', from: 'es', to: 'en' } }]);
+  });
+});
+
+describe('registerPushToken', () => {
+  it('goes through the takeover RPC, never a table write', async () => {
+    // `push_tokens` is keyed by TOKEN (one device = one account), so registering
+    // has to move the row off whichever account held this phone before. RLS
+    // blocks that from the client — the pre-image row fails
+    // `using auth.uid() = user_id` — so a direct upsert here would silently
+    // leave the device registered to the previous account, which is exactly the
+    // 2026-08-12 wrong-time-reminder bug.
+    mockQueue.push(ok(null));
+    await supabaseDataSource.registerPushToken('ExponentPushToken[abc]', 'ios');
+    expect(mockRpcCalls).toContainEqual(['register_push_token', { p_token: 'ExponentPushToken[abc]', p_platform: 'ios' }]);
+    expect(mockCalls.filter((c) => c.table === 'push_tokens')).toHaveLength(0);
   });
 });
 

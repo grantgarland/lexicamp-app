@@ -67,6 +67,33 @@ export async function registerForPush(): Promise<boolean> {
   return true;
 }
 
+/**
+ * Re-assert THIS device's token for the account currently signed in — without
+ * ever raising the OS permission prompt.
+ *
+ * `registerForPush` is the opt-in action: it asks. This is the maintenance pass
+ * that runs on every session start, so it stays silent and returns early unless
+ * permission is ALREADY granted.
+ *
+ * It exists because a push token identifies a DEVICE, not an account, and the
+ * server keys `push_tokens` by token — whoever registered last owns the phone.
+ * Registration used to happen only at onboarding and on a Settings → Reminders
+ * save, so signing into another account left the device registered to the
+ * PREVIOUS one indefinitely. Reminders then arrived on that account's schedule,
+ * carrying its due-count, while Settings showed the signed-in account's time
+ * (diagnosed 2026-08-12 — see the migration of the same date).
+ */
+export async function syncPushRegistration(): Promise<boolean> {
+  if (!USE_SUPABASE || !Device.isDevice) return false; // mock mode / simulator
+  // Deliberately NOT requestPushPermission(): that one asks. A background sync
+  // must never surface a system prompt the user did not trigger.
+  if (!(await Notifications.getPermissionsAsync()).granted) return false;
+  const token = await expoPushToken();
+  if (token == null) return false;
+  await dataSource.registerPushToken(token, Platform.OS === 'ios' ? 'ios' : 'android');
+  return true;
+}
+
 /** This device's Expo push token, or null when it cannot be obtained. */
 async function expoPushToken(): Promise<string | null> {
   const projectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefined;

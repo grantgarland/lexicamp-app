@@ -14,9 +14,14 @@ import { initSentry } from './src/observability/sentry';
 import { initOutbox } from './src/data/outboxInit';
 // Push (2.5): foreground presentation + tap → deep-link routing.
 import { initNotifications } from './src/notifications/push';
+// Session reconciliation (2026-08-12): keep the reminder scheduler's device
+// inputs — push-token ownership and the profile timezone — true on every
+// session start and foreground.
+import { initSessionSync } from './src/auth/sessionSync';
 
 import 'expo-router/entry';
 
 initSentry();
 initOutbox();
 initNotifications();
+initSessionSync();

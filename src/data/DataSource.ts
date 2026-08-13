@@ -222,13 +222,16 @@ export interface DataSource {
   /** Notification prefs (2.5) — read + partial update. */
   getNotificationPrefs(): Promise<NotificationPrefs>;
   updateNotificationPrefs(prefs: Partial<NotificationPrefs>): Promise<void>;
-  /** Register this device's Expo push token (called once expo-notifications
-   *  lands app-side; the server scheduler no-ops for users without tokens). */
+  /** Claim this device's Expo push token for the CURRENT account. Idempotent,
+   *  and a TAKEOVER: `push_tokens` is keyed by token (one device = one account),
+   *  so registering moves the phone off whichever account held it before. The
+   *  client re-asserts this on every session start — see
+   *  `notifications/push.syncPushRegistration`. */
   registerPushToken(token: string, platform: 'ios' | 'android'): Promise<void>;
   /** Drop THIS account's registration for this device. Called on sign-out:
-   *  `push_tokens` is keyed (user_id, token) and signing out used to leave the
-   *  row behind, so every account that had ever signed in on a phone kept a live
-   *  registration and the device got one reminder per account (2026-08-05). */
+   *  signing out used to leave the row behind, so every account that had ever
+   *  signed in on a phone kept a live registration and the device got one
+   *  reminder per account (2026-08-05). */
   unregisterPushToken(token: string): Promise<void>;
   // ── Phase D: multi-language (18 §2a) ──────────────────────────────────────
   /** Enrolled learning languages, oldest first. Free = 1; premium ≤ 5. */
@@ -244,8 +247,14 @@ export interface DataSource {
    *  deleted — cards/decks/history all stay; addLearningLanguage restores. */
   removeLearningLanguage(lang: string): Promise<void>;
   /** Update editable profile fields (D6 / UX-17e). (displayName retired from
-   *  UI per 20 §8 R1 — still accepted for the onboarding path.) */
-  updateProfile(patch: { displayName?: string; quizLength?: number }): Promise<void>;
+   *  UI per 20 §8 R1 — still accepted for the onboarding path.)
+   *
+   *  `timezone` comes from the session-start sync, never from a screen: it used
+   *  to be written once by complete_onboarding and never again, so every
+   *  reminder resolved against the zone captured on the user's first day and a
+   *  move (or a wrong zone at onboarding) skewed them all, forever and silently
+   *  (2026-08-12). */
+  updateProfile(patch: { displayName?: string; quizLength?: number; timezone?: string }): Promise<void>;
   // ── 20 §3 v2: username identity (cycle locally / save once) ──────────────
   /** Who am I signed in as (email + auth provider) — read-only Account block. */
   getAccountIdentity(): Promise<AccountIdentity>;

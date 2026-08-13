@@ -162,6 +162,8 @@ export function useUpdateProfile() {
   const qc = useQueryClient();
   const uid = useUserKey();
   return useMutation({
+    // No `timezone` here on purpose: it is reconciled from the device by
+    // auth/sessionSync, never edited from a screen.
     mutationFn: (patch: { displayName?: string; quizLength?: number }) => ds.updateProfile(patch),
     onMutate: async (patch) => {
       await qc.cancelQueries({ queryKey: ['profile', uid] });
