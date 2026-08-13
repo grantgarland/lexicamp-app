@@ -93,9 +93,9 @@ export function SaveWithEditSheet({ word, onClose, onConfirm, isSaving = false, 
           />
 
           {/* The original stays visible so an edit is always a comparison, and
-              so a user who mistyped can see what they started from. */}
+              so a user who mistyped can see what they started from. This is the
+              LAST thing in the body — the footer owns the gap below it. */}
           <Text style={styles.original}>{t('saveWithEdit.originalLabel', { word: word.target })}</Text>
-          <Text style={styles.note}>{t('saveWithEdit.note')}</Text>
         </View>
       )}
     </Sheet>
@@ -108,8 +108,11 @@ const styles = StyleSheet.create((theme) => {
     headword: { fontFamily: fonts.serif.bold, fontSize: 24, color: color.textStrong },
     help: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 19, color: color.textMuted, marginTop: 4, marginBottom: 16 },
     original: { fontFamily: fonts.sans.regular, fontSize: 12, color: color.textMuted, marginTop: 10 },
-    note: { fontFamily: fonts.sans.regular, fontSize: 12, lineHeight: 17, color: color.textFaint, marginTop: 10 },
-    ctas: { flexDirection: 'row', gap: 10 },
+    // The gap above the CTAs lives on the PINNED footer, not on the body's last
+    // child: Sheet gives its body no bottom padding, so whatever ends the body
+    // sits flush against the buttons. Putting it here (as EditTranslationSheet
+    // already does) keeps the gap correct no matter what the body ends with.
+    ctas: { flexDirection: 'row', gap: 10, paddingTop: 16 },
     cta: { flex: 1 },
   };
 });

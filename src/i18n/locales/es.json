@@ -854,7 +854,6 @@
     "help": "A veces el diccionario devuelve una forma flexionada. Guarda la versión que quieres estudiar.",
     "fieldLabel": "Palabra para estudiar",
     "originalLabel": "El diccionario devolvió: {{word}}",
-    "note": "Solo cambia el texto que estudias. La frase de ejemplo y tu historial de repasos siguen con la entrada original.",
     "confirm": "Guardar palabra",
     "tooLong": "Máximo {{max}} caracteres.",
     "a11y": "Editar la traducción antes de guardar"

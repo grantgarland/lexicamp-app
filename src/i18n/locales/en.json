@@ -854,7 +854,6 @@
     "help": "Dictionaries sometimes return an inflected form. Save the version you actually want to study.",
     "fieldLabel": "Word to study",
     "originalLabel": "Dictionary returned: {{word}}",
-    "note": "Only the text you study changes. The example sentence and your review history stay with the original entry.",
     "confirm": "Save word",
     "tooLong": "Keep it under {{max}} characters.",
     "a11y": "Edit the translation before saving"
