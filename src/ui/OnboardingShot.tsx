@@ -75,11 +75,16 @@ const SHOTS = {
     ratio: 900 / 559,
     frame: true,
   },
-  // Re-cut 2026-08-08 from the Projection tab's **Summit** pill (it was the
-  // "Next camp" view, which showed a 100-word A2 threshold). The beat it serves
-  // opens the arc with "3,000 words is 95% of everyday speech", so the shot has
-  // to show the 3,000-word summit line — a next-camp crop argued for a
-  // different number than the sentence above it.
+  // Re-cut from the Projection tab's **Summit** pill (it was the "Next camp"
+  // view, which showed a 100-word A2 threshold). The beat it serves opens the
+  // arc with "3,000 words is 95% of everyday speech", so the shot has to show
+  // the 3,000-word summit line — a next-camp crop argued for a different number
+  // than the sentence above it.
+  //
+  // Re-cut a second time after `MOCK_CAPTURE_PER_DAY` went to 17 (data/mock.ts).
+  // At the old 1.0-word/day fixture the same view read **8.3 years**, which is a
+  // deterrent to open an onboarding arc with; it now reads **7 months**. If that
+  // constant moves again, this pair is stale — re-cut it.
   projection: {
     light: require('../../assets/images/onboarding/onboarding-projection.png'),
     dark: require('../../assets/images/onboarding/onboarding-projection-dark.png'),

@@ -373,7 +373,10 @@ const styles = StyleSheet.create((theme) => {
     // ragged silhouette. Flush-left they start at the same x as the dots above
     // and the buttons below, so the eye lands in one place across all six.
     storyTitle: { alignSelf: 'stretch', fontFamily: fonts.serif.semibold, fontSize: 27, lineHeight: 33, letterSpacing: -0.5, color: color.brandStrong, textAlign: 'left', marginBottom: 10 },
-    storyBody: { alignSelf: 'stretch', fontFamily: fonts.sans.regular, fontSize: 15, lineHeight: 23, color: color.textBody, textAlign: 'center', marginBottom: 20 },
+    // Left too, for the same reason as the title above it — and because a
+    // flush-left header over centred body copy reads as a layout bug rather
+    // than a choice. Title, body and note now share one left edge.
+    storyBody: { alignSelf: 'stretch', fontFamily: fonts.sans.regular, fontSize: 15, lineHeight: 23, color: color.textBody, textAlign: 'left', marginBottom: 20 },
     storyArt: { alignSelf: 'stretch', flex: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
     // The `*` in the body points here. Faint on purpose: it is a citation, not a
     // second sentence competing with the caption above the art.
