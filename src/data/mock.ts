@@ -148,6 +148,28 @@ function realisticFsrs(tierIdx: number, g: number, now: number): MockFsrsSample 
   return { stability, difficulty, reps, lapses, createdAt: new Date(now - ageDays * DAY), lastReviewAt, dueAt };
 }
 
+/** Words per day the seeded scenarios were captured at.
+ *
+ *  `projectionBase` derives the capture rate as `cards.length / librarySpan`,
+ *  so the ONLY thing that sets a fixture's pace is how far apart the synthetic
+ *  `createdAt` values sit. They used to be one day apart, which made every
+ *  scenario a 1.0-word/day learner — and at 1.0/day the Summit projection is
+ *  **8.3 years**, which is the number the onboarding shot was showing.
+ *
+ *  17/day is a plausible-but-committed learner (a few minutes of capture a
+ *  day), and it lands the Summit estimate around 7 months. Used by BOTH
+ *  builders below; they must agree, or Home's stats and My Words disagree
+ *  about the same library. */
+const MOCK_CAPTURE_PER_DAY = 17;
+
+/** Synthetic capture date for the g-th seeded card. Every 6th word is an hour
+ *  old so "added today" is never zero; the rest walk backwards at the pace
+ *  above rather than one-per-day. */
+function seededCreatedAt(g: number, now: number): Date {
+  if (g % 6 === 0) return new Date(now - 1 * HOUR);
+  return new Date(now - ((g + 2) / MOCK_CAPTURE_PER_DAY) * DAY);
+}
+
 function buildDeckCards(userState: DevUserState): DeckCards {
   const cards: Card[] = [];
   const states: CardFsrsState[] = [];
@@ -168,7 +190,7 @@ function buildDeckCards(userState: DevUserState): DeckCards {
         : g % 4 === 1 ? new Date(now - 3 * DAY) // overdue backlog
         : g % 4 === 2 ? new Date(now + 6 * HOUR) // due in next 24h
         : new Date(now + 5 * DAY); // future
-      const createdAt = s != null ? s.createdAt : g % 6 === 0 ? new Date(now - 1 * HOUR) : new Date(now - (g + 2) * DAY);
+      const createdAt = s != null ? s.createdAt : seededCreatedAt(g, now);
 
       cards.push({
         id,
@@ -318,7 +340,7 @@ function buildWords(userState: DevUserState): WordListItem[] {
       const pass = Math.floor(g / WORD_BANK.length);
       const w = pass === 0 ? bank : { native: `${bank.native} (${pass + 1})`, target: `${bank.target} (${pass + 1})` };
       const s = realistic ? realisticFsrs(tierIdx, g, now) : null;
-      const createdAt = s != null ? s.createdAt : g % 6 === 0 ? new Date(now - 1 * HOUR) : new Date(now - (g + 2) * DAY);
+      const createdAt = s != null ? s.createdAt : seededCreatedAt(g, now);
       const dueAt =
         s != null ? s.dueAt
         : g % 4 === 0 ? new Date(now - 2 * HOUR)
