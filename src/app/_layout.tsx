@@ -151,30 +151,32 @@ export default function RootLayout() {
               accessible
               accessibilityLabel={`dataSource ${USE_SUPABASE ? 'live' : 'mock'}`}
               pointerEvents="none"
-              // SIZE IS LOAD-BEARING (2026-08-11, run 31373413201). This was
-              // 1x1dp at exactly (0,0), and that made the gate UNPASSABLE ON
-              // ANDROID — it took 7 of the 8 nightly flows down at their FIRST
-              // command while iOS stayed green locally. The node reached Maestro
-              // with the right id and label; the framework just refused to call
-              // it visible, and Maestro's Android driver drops those ("Skipping
-              // invisible child", from that run's logcat):
-              //   boundsInScreen: Rect(0, 0 - 3, 3); viewIdResName: dataSource-mock;
-              //   contentDescription: dataSource mock;
-              //   importantForAccessibility: true; visible: false
-              // (`visible:` there is AccessibilityNodeInfo.isVisibleToUser().) It
-              // was the ONLY non-degenerate app node in the whole dump marked
-              // invisible — everything else Maestro skipped was 0-width,
-              // 0-height, or system decor.
+              // POSITION IS LOAD-BEARING — it must not sit under the status bar.
+              // (2026-08-11 run 31373413201, root-caused locally 2026-08-14.)
               //
-              // 48dp clears both candidate causes at once rather than betting on
-              // one: it is far past any minimum-area threshold, and it extends
-              // well below the status bar / display cutout, so a top inset can no
-              // longer clip the visible rect to nothing. iOS has no equivalent
-              // filter, which is exactly why a simulator run cannot catch a
-              // regression here. Do not shrink it back toward zero — and it costs
-              // nothing to keep: the View has no background, so it renders no
-              // pixels at any size.
-              style={{ position: 'absolute', top: 0, left: 0, width: 48, height: 48 }}
+              // Android's accessibility tree drops a node that is entirely
+              // covered by another WINDOW, and the systemui StatusBar is its own
+              // window. On a Pixel 6 emulator (density 420):
+              //   InsetsSource type=statusBars frame=[0,0][1080,128]
+              // Anchored at top:0, this View was fully inside that 128px band, so
+              // every accessibility consumer — Maestro AND `uiautomator dump` —
+              // pruned it, taking 7 of the 8 nightly flows down at their FIRST
+              // command while iOS stayed green.
+              //
+              // This is NOT View-level visibility: `dumpsys activity top` reports
+              // the View as `V` with correct bounds the whole time, which is why
+              // the a11y node showed a healthy boundsInScreen next to
+              // `visible: false`, and why growing it 1dp -> 48dp fixed nothing —
+              // 48dp is 126px at this density, still 2px inside a 128px status
+              // bar. Measured with probe Views at several offsets: every probe at
+              // top:0 was pruned regardless of size, background or pointerEvents;
+              // every probe below the status bar survived.
+              //
+              // Hence top:'50%' — the one anchor guaranteed clear of BOTH system
+              // bars on any device, rather than a dp offset that a taller status
+              // bar or cutout could swallow again. iOS has no such filter, which
+              // is why a simulator run cannot catch a regression here.
+              style={{ position: 'absolute', top: '50%', left: 0, width: 48, height: 48 }}
             />
             {/* DEFENCE IN DEPTH, not the actual exclusion (2026-08-06). In any
                 non-dev bundle this import has already been swapped for a no-op

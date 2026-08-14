@@ -265,8 +265,22 @@ tags:
 - assertVisible: 'Delete “melancholic”\?'
 - tapOn:
     id: 'confirm-accept' # ConfirmDialog confirm — no `below:` anchor needed
-- assertVisible: 'Deleted “melancholic”'
-- assertVisible: '59 words'
+# ⚠️ The "Deleted “melancholic”" TOAST was asserted here and is gone for the same
+# reason 'Saved!' is gone from the CREATE step: it is a TRANSIENT. ui/Toast
+# auto-dismisses after AUTO_MS = 3200ms, so the assertion is a race the CI
+# emulator loses — and it did, on 2026-08-14 (run 86232564483), at the very last
+# gesture of a 10-minute flow.
+#
+# ui/Toast (3200ms) and SearchScreen's justSaved (1500ms) are the ONLY two timed
+# transients in the screens this suite touches — `grep -rn setTimeout src/ui
+# src/screens` is the whole list, and the third hit is the search debounce, which
+# no flow asserts. If a new one appears, it must not become an assertion.
+#
+# The count decrement below is the durable proof the delete happened, and it is
+# what the toast was standing in for anyway.
+- extendedWaitUntil:
+    visible: '59 words'
+    timeout: 10000
 
 # ── Round trip home (same dead-screen guard as smoke.yaml) ───────────────────
 - tapOn:
