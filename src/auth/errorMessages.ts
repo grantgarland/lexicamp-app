@@ -52,6 +52,24 @@ export function authErrorKey(message: string | null | undefined): string {
   return AUTH_ERROR_FALLBACK;
 }
 
+/** GoTrue's minimum password length (Supabase → Auth → Providers → Email).
+ *  THREE things quote this number and must move together: the server enforces
+ *  it, `auth.err.weakPassword` names it in the refusal, and `auth.passwordHint`
+ *  states it up front so the user meets it on the first try. */
+export const MIN_PASSWORD_LENGTH = 6;
+
+/** Client-side pre-flight for the set-a-new-password form (DF-3), the sibling of
+ *  `localAuthErrorKey`. Same job: name what's wrong precisely instead of
+ *  spending a round trip to be told, or — worse — leaving a dead Save button to
+ *  explain itself. Order matters: the empty field is the likeliest mistake, and
+ *  a mismatch is only worth reporting once the password itself is valid. */
+export function localPasswordErrorKey(opts: { password: string; confirm: string }): string | null {
+  if (opts.password === '') return 'auth.err.missingPassword';
+  if (opts.password.length < MIN_PASSWORD_LENGTH) return 'auth.err.weakPassword';
+  if (opts.confirm !== opts.password) return 'auth.passwordMismatch';
+  return null;
+}
+
 /** Client-side pre-flight so the obvious cases never reach the network (and so
  *  the user gets a precise message instead of a generic server refusal). */
 export function localAuthErrorKey(opts: {

@@ -752,6 +752,7 @@
     "confirmPassword": "Confirm password",
     "confirmPasswordPlaceholder": "Re-enter the new password",
     "passwordMismatch": "Passwords don't match.",
+    "passwordHint": "At least {{min}} characters.",
     "resetSave": "Save new password",
     "resetSuccess": "Password updated. You're signed in.",
     "resetExpiredTitle": "Link expired or invalid",

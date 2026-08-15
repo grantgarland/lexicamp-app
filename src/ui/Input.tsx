@@ -1,6 +1,6 @@
 // Input — text field, ported from Foundation's canonical `InputField`.
 // Label (sans semibold) · framed field (1.5px border → brand on focus, danger on
-// error, focus ring via boxShadow) · optional left icon · error line.
+// error, focus ring via boxShadow) · optional left icon · hint/error line.
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { TextInput, type TextInputProps, View, type ViewStyle } from 'react-native';
@@ -11,11 +11,15 @@ import { FONT_SCALE_MAX, Text } from './Text';
 export interface InputProps extends Omit<TextInputProps, 'style'> {
   label?: string;
   error?: string;
+  /** Helper text under the field — states a rule BEFORE the user trips it (e.g.
+   *  a password minimum). Yields to `error`: the slot shows one line at a time,
+   *  so a correction never has to compete with the rule it just broke. */
+  hint?: string;
   iconLeft?: ReactNode;
   containerStyle?: ViewStyle;
 }
 
-export function Input({ label, error, iconLeft, containerStyle, onFocus, onBlur, ...rest }: InputProps) {
+export function Input({ label, error, hint, iconLeft, containerStyle, onFocus, onBlur, ...rest }: InputProps) {
   const { theme } = useUnistyles();
   const [focused, setFocused] = useState(false);
 
@@ -44,7 +48,11 @@ export function Input({ label, error, iconLeft, containerStyle, onFocus, onBlur,
           {...rest}
         />
       </View>
-      {error != null && <Text style={styles.error}>{error}</Text>}
+      {error != null ? (
+        <Text style={styles.error}>{error}</Text>
+      ) : hint != null ? (
+        <Text style={styles.hint}>{hint}</Text>
+      ) : null}
     </View>
   );
 }
@@ -70,4 +78,5 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.color.textStrong,
   },
   error: { fontFamily: theme.fonts.sans.regular, fontSize: theme.size.xs, color: theme.color.danger },
+  hint: { fontFamily: theme.fonts.sans.regular, fontSize: theme.size.xs, color: theme.color.textMuted },
 }));

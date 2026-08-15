@@ -1,7 +1,13 @@
 // authErrorKey — the guard that stops GoTrue's internal English reaching users.
 import en from '@/i18n/locales/en.json';
 
-import { AUTH_ERROR_FALLBACK, authErrorKey, localAuthErrorKey } from '../errorMessages';
+import {
+  AUTH_ERROR_FALLBACK,
+  authErrorKey,
+  localAuthErrorKey,
+  localPasswordErrorKey,
+  MIN_PASSWORD_LENGTH,
+} from '../errorMessages';
 
 const KEYS = Object.keys(en.auth.err).map((k) => `auth.err.${k}`);
 
@@ -56,5 +62,45 @@ describe('localAuthErrorKey', () => {
 
   it('passes a well-formed pair through', () => {
     expect(localAuthErrorKey({ email: ' a@b.co ', password: 'hunter2', requirePassword: true })).toBeNull();
+  });
+});
+
+describe('localPasswordErrorKey', () => {
+  const long = 'x'.repeat(MIN_PASSWORD_LENGTH);
+  const short = 'x'.repeat(MIN_PASSWORD_LENGTH - 1);
+
+  it('catches an empty field before the dead-button era returns', () => {
+    expect(localPasswordErrorKey({ password: '', confirm: '' })).toBe('auth.err.missingPassword');
+  });
+
+  it('catches a too-short password locally — the same refusal GoTrue would send', () => {
+    expect(localPasswordErrorKey({ password: short, confirm: short })).toBe('auth.err.weakPassword');
+  });
+
+  it('reports the mismatch only once the password itself is valid', () => {
+    expect(localPasswordErrorKey({ password: long, confirm: `${long}!` })).toBe('auth.passwordMismatch');
+    // A short password that also mismatches reports the SHORT one: fixing the
+    // length is the step that has to happen either way.
+    expect(localPasswordErrorKey({ password: short, confirm: 'different' })).toBe('auth.err.weakPassword');
+  });
+
+  it('passes a valid, matching pair through', () => {
+    expect(localPasswordErrorKey({ password: long, confirm: long })).toBeNull();
+  });
+
+  it('never invents a key that is missing from en.json', () => {
+    const KEY_PATHS = [...KEYS, 'auth.passwordMismatch'];
+    const cases = [
+      { password: '', confirm: '' },
+      { password: short, confirm: short },
+      { password: long, confirm: 'nope' },
+    ];
+    for (const c of cases) expect(KEY_PATHS).toContain(localPasswordErrorKey(c));
+  });
+
+  it('does not trim — a leading/trailing space is a legitimate password character', () => {
+    const spaced = ` ${long} `;
+    expect(localPasswordErrorKey({ password: spaced, confirm: spaced })).toBeNull();
+    expect(localPasswordErrorKey({ password: spaced, confirm: long })).toBe('auth.passwordMismatch');
   });
 });

@@ -5,17 +5,18 @@
 // Mock mode: form works and simply routes home (no backend to update).
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, View } from 'react-native';
-import { StyleSheet } from 'react-native-unistyles';
+import { Pressable, ScrollView, View } from 'react-native';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
-import { authErrorKey } from '@/auth/errorMessages';
-import { updatePassword, useSession } from '@/auth/session';
+import { authErrorKey, localPasswordErrorKey, MIN_PASSWORD_LENGTH } from '@/auth/errorMessages';
+import { signOut, updatePassword, useSession } from '@/auth/session';
 import { USE_SUPABASE } from '@/data';
 import { useTranslation } from '@/i18n';
 import { useUiStore } from '@/store/uiStore';
-import { Button, EmptyState, Input, RawText, Screen } from '@/ui';
+import { Button, EmptyState, IconX, Input, RawText, Screen, Wordmark } from '@/ui';
 
 export function ResetPasswordScreen() {
+  const { theme } = useUnistyles();
   const { t } = useTranslation();
   const router = useRouter();
   const { session, isLoading } = useSession();
@@ -41,10 +42,30 @@ export function ResetPasswordScreen() {
   }
 
   const mismatch = confirm.length > 0 && password !== confirm;
-  const canSubmit = password.length > 0 && password === confirm && !busy;
+
+  // Abandoning the reset must ALSO drop the recovery session, not just navigate.
+  // That session is a real signed-in one (it is what authenticates
+  // updatePassword), so leaving it alive behind an exit would turn the emailed
+  // link into a way into the account WITHOUT setting a password — open link,
+  // tap X, walk into the app. Until this screen had an exit, finishing the form
+  // was the only way off it, so the session was always earned; the exit is what
+  // makes the sign-out load-bearing rather than tidy.
+  const cancel = () => {
+    if (busy) return;
+    // Best-effort: a failed sign-out must not trap the user on this screen — the
+    // whole point of the control is that it always gets them out.
+    if (USE_SUPABASE) void signOut().catch(() => {});
+    router.replace('/auth');
+  };
 
   const submit = async () => {
-    if (!canSubmit) return;
+    if (busy) return;
+    // Pre-flight FIRST, exactly as AuthScreen does. The Save button used to go
+    // inert until the form was valid, which left the two commonest mistakes —
+    // an empty field and a too-short password — with nothing to say for
+    // themselves: the button simply didn't respond.
+    const localKey = localPasswordErrorKey({ password, confirm });
+    if (localKey != null) return setError(t(localKey));
     setBusy(true);
     setError(null);
     try {
@@ -64,8 +85,28 @@ export function ResetPasswordScreen() {
 
   return (
     <Screen edges={['top', 'bottom']}>
+      {/* The only way off this screen that isn't "set a password". The route is
+          registered with gestureEnabled:false and no header, so without this
+          control the emailed link is a one-way door (reported by Casey). */}
+      <View style={styles.header}>
+        <Pressable
+          onPress={cancel}
+          hitSlop={10}
+          style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.6 }]}
+          accessibilityRole="button"
+          accessibilityLabel={t('auth.backToSignIn')}
+          testID="resetCancel"
+        >
+          <IconX size={18} color={theme.color.textMuted} />
+        </Pressable>
+      </View>
+
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
-        <RawText style={styles.wordmark}>Lexicamp</RawText>
+        {/* The real lockup, as on AuthScreen — this was the word "Lexicamp" set
+            in sans ExtraBold, which is not the wordmark in any weight. */}
+        <View style={styles.wordmarkWrap}>
+          <Wordmark width={196} />
+        </View>
         <RawText style={styles.title}>{t('auth.resetTitle')}</RawText>
         <RawText style={styles.sub}>{t('auth.resetSub')}</RawText>
 
@@ -76,6 +117,10 @@ export function ResetPasswordScreen() {
           onChangeText={setPassword}
           secureTextEntry
           autoCapitalize="none"
+          testID="resetPassword"
+          // State the rule up front rather than letting GoTrue deliver it as a
+          // refusal after a round trip.
+          hint={t('auth.passwordHint', { min: MIN_PASSWORD_LENGTH })}
         />
         <View style={styles.gap} />
         <Input
@@ -85,17 +130,28 @@ export function ResetPasswordScreen() {
           onChangeText={setConfirm}
           secureTextEntry
           autoCapitalize="none"
+          testID="resetConfirm"
           error={mismatch ? t('auth.passwordMismatch') : undefined}
         />
 
         {error != null && <RawText style={styles.error}>{error}</RawText>}
 
-        <View style={styles.gapLarge} />
-        <Button
-          title={busy ? t('auth.working') : t('auth.resetSave')}
-          variant="primary"
-          onPress={canSubmit ? submit : undefined}
-        />
+        <View style={styles.cta}>
+          <Button
+            title={busy ? t('auth.working') : t('auth.resetSave')}
+            variant="primary"
+            testID="resetSubmit"
+            onPress={busy ? undefined : submit}
+          />
+        </View>
+
+        {/* Second exit, in the place AuthScreen's forgot mode puts the same
+            link — the X is fast, this one is legible. */}
+        <View style={styles.switchRow}>
+          <Pressable onPress={cancel} hitSlop={6} accessibilityRole="button">
+            <RawText style={styles.switchLink}>{t('auth.backToSignIn')}</RawText>
+          </Pressable>
+        </View>
       </ScrollView>
     </Screen>
   );
@@ -104,12 +160,28 @@ export function ResetPasswordScreen() {
 const styles = StyleSheet.create((theme) => {
   const { color, fonts } = theme;
   return {
-    scroll: { paddingHorizontal: 24, paddingTop: 40, paddingBottom: 24 },
-    wordmark: { fontFamily: fonts.sans.extra, fontSize: 26, letterSpacing: -0.5, color: color.brandStrong, textAlign: 'center', marginBottom: 22 },
+    // Header sits OUTSIDE the ScrollView, so the exit stays put while the form
+    // scrolls under the keyboard.
+    //
+    // RIGHT-anchored, like every other close × in the app (Paywall, Quiz). Not a
+    // style preference: DevBadge is a zIndex:9999 pill pinned to left:8 on the
+    // reasoning that "top-left only overlaps non-interactive header text". A
+    // left-anchored × sits underneath it, and the only exit from this screen is
+    // unreachable in every dev build — which is where this flow gets tested.
+    header: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, paddingTop: 6 },
+    closeBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: color.surfaceSunken },
+
+    // Everything below matches AuthScreen — same screen, same step of the flow.
+    // The exception is paddingTop: AuthScreen's 40 measures from the safe area,
+    // and here the 38pt header already covers most of that.
+    scroll: { paddingHorizontal: 24, paddingTop: 14, paddingBottom: 24 },
+    wordmarkWrap: { alignItems: 'center', marginBottom: 26 },
     title: { fontFamily: fonts.serif.semibold, fontSize: 26, letterSpacing: -0.5, color: color.brandStrong, textAlign: 'center', marginBottom: 6 },
     sub: { fontFamily: fonts.sans.regular, fontSize: 14, color: color.textMuted, textAlign: 'center', marginBottom: 26 },
-    gap: { height: 14 },
-    gapLarge: { height: 20 },
+    gap: { height: 16 },
     error: { fontFamily: fonts.sans.medium, fontSize: 13, color: color.danger, textAlign: 'center', marginTop: 14 },
+    cta: { marginTop: 24 },
+    switchRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 20 },
+    switchLink: { fontFamily: fonts.sans.bold, fontSize: 14, color: color.brand },
   };
 });
