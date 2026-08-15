@@ -47,10 +47,15 @@ import {
   DeckRow,
   DetailStats,
   EditTranslationSheet,
-  EmptyState,
+  EmptyOverlay,
+  EmptyStateCard,
+  GhostRows,
   IconList,
   IconLock,
   IconTrash,
+  IllustEmptyDeck,
+  IllustSearchEmpty,
+  IllustWordCards,
   List,
   ListItem,
   RawText,
@@ -58,7 +63,6 @@ import {
   SearchBar,
   SegmentedTabs,
   Sheet,
-  SkeletonRows,
   TAB_BAR_FAB_OVERHANG,
   TierBadge,
   Toggle,
@@ -360,16 +364,25 @@ export function WordListScreen() {
           mounts right after interactions settle. */}
       {subTab === 'words' &&
         (wordsLoading || !contentReady ? (
-          // Skeleton is for genuinely heavy work — first load, tab traversal, a
+          // PULSING ghosts — genuinely heavy work: first load, tab traversal, a
           // filter apply. NOT for typing: with the debounce above, a keystroke no
           // longer reaches this branch, so the list stays put and merely dims.
-          <SkeletonRows />
+          <GhostRows variant="word" animated />
         ) : noneSaved && !showArchived ? (
-          <EmptyState title={t('wordList.emptyTitle')} body={t('wordList.emptyBody')} style={styles.empty} />
+          // STATIC ghosts under the card: the library is confirmed empty, and the
+          // silhouettes show what a filled list looks like. Same shape, no pulse.
+          <EmptyOverlay ghost={<GhostRows variant="word" count={14} />} style={styles.emptyFill}>
+            <EmptyStateCard illustration={<IllustWordCards />} title={t('wordList.emptyTitle')} body={t('wordList.emptyBody')} />
+          </EmptyOverlay>
         ) : visible.length === 0 ? (
-          <View style={styles.noMatch}>
-            <RawText style={styles.noMatchText}>{showArchived ? t('wordList.archivedEmpty') : t('wordList.noMatch')}</RawText>
-          </View>
+          // A filtered-to-nothing list is NOT an empty library — no ghosts here,
+          // or the user would read it as having lost their words.
+          <EmptyStateCard
+            style={styles.emptyPad}
+            illustration={showArchived ? undefined : <IllustSearchEmpty />}
+            title={showArchived ? t('wordList.archivedEmptyTitle') : t('wordList.noMatch')}
+            body={showArchived ? t('wordList.archivedEmptyBody') : t('wordList.noMatchBody')}
+          />
         ) : (
           // Virtualized (18 §2b perf guardrail): rows mount lazily instead of
           // all-at-once — a plain ScrollView built every swipeable row
@@ -410,12 +423,13 @@ export function WordListScreen() {
               <CreateNewDeckRow testID="deck-create-open" onPress={() => openCreate()} />
             </View>
             {decksLoading || !contentReady ? (
-              <SkeletonRows count={3} />
+              <GhostRows variant="deck" count={3} animated />
             ) : allDecks.length === 0 ? (
-              <View style={styles.decksEmpty}>
-                <RawText style={styles.decksEmptyTitle}>{t('wordList.decksEmptyTitle')}</RawText>
-                <RawText style={styles.decksEmptyBody}>{t('wordList.decksEmptyBody')}</RawText>
-              </View>
+              // Deliberately more rows than fit — EmptyOverlay clips, so the
+              // silhouettes run off the bottom the way a real deck list would.
+              <EmptyOverlay ghost={<GhostRows variant="deck" count={12} />} style={styles.emptyFill}>
+                <EmptyStateCard illustration={<IllustEmptyDeck />} title={t('wordList.decksEmptyTitle')} body={t('wordList.decksEmptyBody')} />
+              </EmptyOverlay>
             ) : (
               <ScrollView showsVerticalScrollIndicator={false} refreshControl={refreshControl} contentContainerStyle={styles.decksList}>
                 {allDecks.map((d) => (
@@ -1191,7 +1205,10 @@ const styles = StyleSheet.create((theme) => {
     // + the FAB's overhang: the nav's height is spacer-reserved, the FAB is not.
     listFill: { flex: 1 },
   listContent: { paddingBottom: 16 + TAB_BAR_FAB_OVERHANG },
-    empty: { paddingTop: 64 },
+    // Empty states fill the pane so the ghost layer runs the height of the list
+    // it stands in for, rather than stopping wherever the row count happens to end.
+    emptyFill: { flex: 1 },
+    emptyPad: { paddingTop: 48 },
     proBadge: { backgroundColor: color.accentSoft, borderRadius: 3, paddingHorizontal: 5, paddingVertical: 1 },
     proBadgeText: { fontFamily: fonts.sans.bold, fontSize: 9, letterSpacing: 0.3, color: color.accentStrong },
 
@@ -1204,9 +1221,6 @@ const styles = StyleSheet.create((theme) => {
     gutterDivider: { height: 1.5, backgroundColor: color.borderStrong, marginTop: 2, marginBottom: 4, borderRadius: 1 },
     deckStats: { marginBottom: 14 },
     deckWordScroll: { maxHeight: 340 },
-    decksEmpty: { alignItems: 'center', paddingTop: 60, paddingHorizontal: 24 },
-    decksEmptyTitle: { fontFamily: fonts.serif.semibold, fontSize: 18, color: color.textStrong, marginBottom: 6 },
-    decksEmptyBody: { fontFamily: fonts.sans.regular, fontSize: 14, color: color.textMuted, textAlign: 'center' },
     gate: { alignItems: 'center', paddingHorizontal: 24, paddingTop: 48 },
     gateLock: { width: 64, height: 64, borderRadius: 32, backgroundColor: color.accentSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
     gateTitle: { fontFamily: fonts.sans.bold, fontSize: 17, color: color.textStrong, marginBottom: 8 },
@@ -1231,8 +1245,6 @@ const styles = StyleSheet.create((theme) => {
     createNewText: { fontFamily: fonts.sans.semibold, fontSize: 14, color: color.brand },
     archivedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
     archivedText: { flex: 1 },
-    noMatch: { paddingVertical: 48, paddingHorizontal: 24, alignItems: 'center' },
-    noMatchText: { fontFamily: fonts.sans.regular, fontSize: 15, color: color.textMuted },
 
     // Filter/sort sheet
     sheetSection: { paddingTop: 6 },

@@ -24,7 +24,7 @@ import { useWalkthroughActive } from '@/tour/walkthrough';
 import { useIsDark } from '@/theme/appearance';
 import { TIERS, tierView } from '@/theme/tiers';
 import { studyTimeParts } from '@/lib/studyTime';
-import { EmptyState, IconBook, IconCalendar, IconChart, IconCheck, IconClock, IconInfo, IconLock, IconMountain, IconRefresh, IconStar, RawText, Screen, ForecastChart, SegmentedPills, SegmentedTabs, Sheet, SkeletonRows, TAB_BAR_FAB_OVERHANG, Tooltip } from '@/ui';
+import { EmptyOverlay, EmptyStateCard, GhostRows, IconBook, IconCalendar, IconChart, IconCheck, IconClock, IconInfo, IconLock, IconMountain, IconRefresh, IconStar, RawText, Screen, ForecastChart, SegmentedPills, SegmentedTabs, Sheet, TAB_BAR_FAB_OVERHANG, Tooltip } from '@/ui';
 
 type SubTab = 'route' | 'projection' | 'leaders';
 type InfoKey = 'cefr';
@@ -114,7 +114,9 @@ function RouteTab({ data, t, onInfo }: TabProps) {
   const saved = data.totalSaved;
 
   if (saved === 0) {
-    return <EmptyState style={styles.empty} illustration={<IconMountain size={52} color={theme.color.evergreen} />} title={t('progress.emptyRouteTitle')} body={t('progress.emptyRouteBody')} />;
+    // No ghosts: the ladder is a one-off, not a list. A silhouette of it would
+    // suggest a route that failed to load rather than one not yet started.
+    return <EmptyStateCard style={styles.empty} illustration={<IconMountain size={52} color={theme.color.evergreen} />} title={t('progress.emptyRouteTitle')} body={t('progress.emptyRouteBody')} />;
   }
 
   // SOURCE OF TRUTH: mountain rank derives from mastered-word count (03 / derive.ts),
@@ -261,7 +263,7 @@ function ProjectionTab({ data, t }: TabProps) {
   }, [data.cards, data.states, data.avgAccuracy, data.daysActive, now]);
 
   if (data.totalSaved === 0) {
-    return <EmptyState style={styles.empty} illustration={<IconChart size={48} color={theme.color.textMuted} />} title={t('progress.emptyProjectionTitle')} body={t('progress.emptyProjectionBody')} />;
+    return <EmptyStateCard style={styles.empty} illustration={<IconChart size={48} color={theme.color.textMuted} />} title={t('progress.emptyProjectionTitle')} body={t('progress.emptyProjectionBody')} />;
   }
 
   // At Summit tier there is no next camp, so the toggle has nothing to switch
@@ -587,6 +589,7 @@ function AllTimeGrid({ data, t }: TabProps) {
 
 // ── Leaders (20 §4) — Global / own-language toggle, ranked rows, ghost empty ──
 function LeadersTab({ t }: { t: TFunction }) {
+  const { theme } = useUnistyles();
   const [scope, setScope] = useState<LeaderScope>('global');
   const activeLang = useActiveLang();
   const { entries, isLoading } = useLeaderboard(scope, activeLang);
@@ -627,9 +630,18 @@ function LeadersTab({ t }: { t: TFunction }) {
       </View>
 
       {isLoading ? (
-        <SkeletonRows count={10} />
+        <GhostRows variant="leader" count={10} animated />
       ) : showEmpty ? (
-        <LeadersEmpty t={t} />
+        // Cold-start empty (4.3): the SAME leader silhouettes, standing still,
+        // with the message card over them — for an empty global OR language view.
+        // Static is the whole point: a pulse would promise rows that aren't coming.
+        // 2026-07-24 fix preserved: the caller's own row is deliberately NOT
+        // pinned into this overlay — "you: #1, 26 mastered" directly under "the
+        // mountain is quiet" read as contradictory. The self row still appears
+        // normally once the board has ≥1 OTHER entry (the branch below).
+        <EmptyOverlay ghost={<GhostRows variant="leader" count={12} />}>
+          <EmptyStateCard illustration={<IconMountain size={40} color={theme.color.evergreen} />} title={t('progress.leaders.emptyTitle')} />
+        </EmptyOverlay>
       ) : (
         <View style={styles.leaderRows}>
           {entries.map((e, i) => (
@@ -637,45 +649,6 @@ function LeadersTab({ t }: { t: TFunction }) {
           ))}
         </View>
       )}
-    </View>
-  );
-}
-
-// Cold-start empty state (4.3): a full screen of static (non-loading) "ghost"
-// row silhouettes with the empty-state card centrally overlaid on top — same
-// treatment for an empty global OR language view. These are deliberately NOT
-// the animated Skeleton kit: a pulsing loader implies data is still arriving,
-// which is false here — the board is confirmed empty.
-// 2026-07-24 fix: dropped the caller's own pinned row from this overlay —
-// showing "you: #1, 26 mastered" directly under "the mountain is quiet" read
-// as contradictory/buggy in practice (Casey). The self row still appears
-// normally once the board has ≥1 OTHER entry (LeadersTab's non-empty branch).
-function LeadersEmpty({ t }: { t: TFunction }) {
-  return (
-    <View style={styles.leaderEmptyWrap}>
-      <View pointerEvents="none">
-        {Array.from({ length: 8 }, (_, i) => (
-          <GhostRow key={i} />
-        ))}
-      </View>
-      <View style={styles.leaderEmptyOverlay}>
-        <View style={styles.leaderEmptyCard}>
-          <RawText style={styles.leaderEmptyText}>{t('progress.leaders.emptyTitle')}</RawText>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-// Static rank/flag/name/count silhouette — the empty-state row shape (4.3),
-// undithered gray blocks rather than the pulsing Skeleton kit (see above).
-function GhostRow() {
-  return (
-    <View style={styles.ghostRow}>
-      <View style={styles.ghostRank} />
-      <View style={styles.ghostFlag} />
-      <View style={styles.ghostName} />
-      <View style={styles.ghostCount} />
     </View>
   );
 }
@@ -851,17 +824,5 @@ const styles = StyleSheet.create((theme) => {
     leaderCountLabel: { fontFamily: fonts.sans.regular, fontSize: 11, color: color.textMuted },
     leaderGap: { alignItems: 'center', paddingVertical: 2 },
     leaderGapText: { fontFamily: fonts.sans.bold, fontSize: 14, color: color.borderStrong, letterSpacing: 2 },
-
-    // Leaderboard empty state — static ghost rows behind a centered overlay card
-    leaderEmptyWrap: { position: 'relative' },
-    leaderEmptyOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
-    leaderEmptyCard: { backgroundColor: color.surfaceCard, borderWidth: theme.borderWidth.base, borderColor: color.border, borderRadius: radius.lg, paddingVertical: 20, paddingHorizontal: 22, alignItems: 'center', boxShadow: '0 8px 24px rgba(24,32,38,0.12)', maxWidth: 280 },
-    leaderEmptyText: { fontFamily: fonts.serif.semibold, fontSize: 14, lineHeight: 20, color: color.textStrong, textAlign: 'center' },
-    leaderEmptySelfRow: { width: '100%', marginTop: 12 },
-    ghostRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: color.surfaceCard, borderWidth: theme.borderWidth.thin, borderColor: color.border, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 8 },
-    ghostRank: { width: 28, height: 28, borderRadius: 14, backgroundColor: color.surfaceSunken },
-    ghostFlag: { width: 20, height: 15, borderRadius: 3, backgroundColor: color.surfaceSunken },
-    ghostName: { flex: 1, height: 12, borderRadius: 4, backgroundColor: color.surfaceSunken },
-    ghostCount: { width: 40, height: 12, borderRadius: 4, backgroundColor: color.surfaceSunken },
   };
 });

@@ -10,7 +10,14 @@ export { Card, type CardProps } from './Card';
 export { Callout, type CalloutProps, type CalloutTone } from './Callout';
 export { TierBadge, type TierBadgeProps, type TierBadgeVariant } from './TierBadge';
 export { Toggle, type ToggleProps } from './Toggle';
+// ── Empty / loading states ──
+// The vocabulary: GhostRows (silhouette — pulsing = loading, static = empty),
+// EmptyStateCard (the message), EmptyOverlay (card over ghost). See Ghost.tsx.
 export { EmptyState, type EmptyStateProps } from './EmptyState';
+export { EmptyStateCard, type EmptyStateCardProps } from './EmptyStateCard';
+export { EmptyOverlay, type EmptyOverlayProps } from './EmptyOverlay';
+export { GhostRows, GhostBlock, type GhostVariant, type GhostRowsProps } from './Ghost';
+export { InlineNote, type InlineNoteProps } from './InlineNote';
 export { Input, type InputProps } from './Input';
 export { ProgressDots, type ProgressDotsProps } from './ProgressDots';
 export { Sheet, type SheetProps } from './Sheet';
@@ -22,7 +29,6 @@ export { SegmentedPills, type SegmentedPill, type SegmentedPillsProps } from './
 export { ForecastChart, type ForecastChartProps, type ForecastChartPoint, type ForecastChartThreshold } from './ForecastChart';
 export { ButtonRow, type ButtonRowButton, type ButtonRowProps } from './ButtonRow';
 export { List, ListItem, Checkbox, type ListProps, type ListItemProps } from './List';
-export { Skeleton, SkeletonRows } from './Skeleton';
 export { HowItWorksList } from './HowItWorksList';
 export {
   ScrollIntoView,
@@ -87,7 +93,18 @@ export {
   type IconProps,
 } from './icons';
 export { PRESS_OPACITY, pressableOpacity } from './pressable';
-export { ForgettingCurve, IntervalTrack, CardSorter, DailyPractice, SummitScene } from './illustrations';
+export {
+  ForgettingCurve,
+  IntervalTrack,
+  CardSorter,
+  DailyPractice,
+  SummitScene,
+  // Empty-state set (ES-02…ES-05) — theme-aware, unlike the infographics above.
+  IllustWordCards,
+  IllustEmptyDeck,
+  IllustSearchEmpty,
+  IllustNetworkError,
+} from './illustrations';
 
 // ── P3 composed domain components ──
 export { RatingButtons, AUTO_ADVANCE_MS, type RatingButtonsProps, type Rating } from './RatingButtons';

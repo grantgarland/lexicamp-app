@@ -2,8 +2,13 @@
 // science illustrations (onboarding/Onboarding.html). Reused by the Home "How Lexicamp
 // works" education card now, and by the onboarding story screens when those are built.
 // Each scales to its container width via a fixed-aspect frame.
+//
+// Below those, the empty-state set (ES-02…ES-05, empty-states/EmptyStates.html). Those
+// are THEME-AWARE while the infographics above are hardcoded light-mode hex — see the
+// note above IllustWordCards for why the two halves of this file differ.
 import type { ReactNode } from 'react';
 import { View } from 'react-native';
+import { useUnistyles } from 'react-native-unistyles';
 import Svg, { Circle, G, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 
 function Frame({ w, h, children }: { w: number; h: number; children: ReactNode }) {
@@ -193,5 +198,88 @@ export function SummitScene() {
       <Path d="M150 17 L168 22 L150 28 Z" fill="#e87722" />
       <Circle cx={150} cy={40} r={11} fill="#e87722" fillOpacity={0.12} />
     </Frame>
+  );
+}
+
+// ── Empty-state illustrations (ES-02…ES-05) ───────────────────────────────────
+// Ports of empty-states/EmptyStates.html. One per context so an empty Word List
+// never looks like an empty deck, per the module's spec.
+//
+// UNLIKE the infographics above, these read their colours from the theme. The
+// infographics only ever render inside a light-tinted education card, so their
+// hardcoded hex is safe; empty states sit directly on the app canvas in BOTH
+// schemes, and light-mode greys on the dark canvas are the exact failure the
+// 2026-08-01 RawText bug produced. Semantic `color.*` tokens only — `palette.*`
+// is shared across themes and would stay light (theme.ts:75).
+
+/** ES-02 — stacked word cards. The empty word library. */
+export function IllustWordCards() {
+  const { theme } = useUnistyles();
+  const { color } = theme;
+  return (
+    <Svg width={80} height={74} viewBox="0 0 80 74" fill="none">
+      {/* Bottom card */}
+      <Rect x={6} y={26} width={52} height={38} rx={9} fill={color.brandTint} stroke={color.border} strokeWidth={1.5} />
+      {/* Middle card */}
+      <Rect x={14} y={18} width={52} height={38} rx={9} fill={color.surfaceSunken} stroke={color.border} strokeWidth={1.5} />
+      {/* Top card — carries the text-line placeholders */}
+      <Rect x={22} y={10} width={52} height={38} rx={9} fill={color.surfaceCard} stroke={color.borderStrong} strokeWidth={1.5} />
+      <Rect x={33} y={22} width={28} height={3.5} rx={1.75} fill={color.border} />
+      <Rect x={33} y={30} width={18} height={3} rx={1.5} fill={color.border} />
+      <Rect x={33} y={37} width={22} height={3} rx={1.5} fill={color.border} />
+    </Svg>
+  );
+}
+
+/** ES-03 — open folder. No custom decks yet. */
+export function IllustEmptyDeck() {
+  const { theme } = useUnistyles();
+  const { color } = theme;
+  return (
+    <Svg width={80} height={72} viewBox="0 0 80 72" fill="none">
+      {/* Folder tab */}
+      <Path
+        d="M8 30 L8 26 Q8 20 14 20 L30 20 L34 16 Q36 14 38 14 L62 14 Q68 14 68 20 L68 26"
+        stroke={color.border}
+        strokeWidth={1.5}
+        fill={color.brandTint}
+      />
+      {/* Folder body */}
+      <Rect x={8} y={26} width={60} height={38} rx={8} fill={color.brandTint} stroke={color.borderStrong} strokeWidth={1.5} />
+      {/* Lines suggesting absent content */}
+      <Rect x={20} y={38} width={36} height={3} rx={1.5} fill={color.border} opacity={0.9} />
+      <Rect x={20} y={47} width={24} height={3} rx={1.5} fill={color.border} opacity={0.6} />
+    </Svg>
+  );
+}
+
+/** ES-04 — magnifier with an X. Looked, found nothing. */
+export function IllustSearchEmpty() {
+  const { theme } = useUnistyles();
+  const stroke = theme.color.borderStrong;
+  return (
+    <Svg width={72} height={72} viewBox="0 0 72 72" fill="none">
+      <Circle cx={32} cy={32} r={22} stroke={stroke} strokeWidth={3.5} />
+      <Path d="M49 49L63 63" stroke={stroke} strokeWidth={3.5} strokeLinecap="round" />
+      <Path d="M25 25L39 39M39 25L25 39" stroke={stroke} strokeWidth={3} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/** ES-05 — wifi arcs struck through. Service unreachable, not empty. */
+export function IllustNetworkError() {
+  const { theme } = useUnistyles();
+  const { color } = theme;
+  return (
+    <Svg width={80} height={72} viewBox="0 0 80 72" fill="none">
+      {/* Arcs — muted, as if unreachable */}
+      <Path d="M10 27 Q40 7 70 27" stroke={color.border} strokeWidth={3.5} strokeLinecap="round" fill="none" />
+      <Path d="M19 40 Q40 23 61 40" stroke={color.border} strokeWidth={3.5} strokeLinecap="round" fill="none" />
+      <Path d="M28 53 Q40 43 52 53" stroke={color.borderStrong} strokeWidth={3.5} strokeLinecap="round" fill="none" />
+      <Circle cx={40} cy={64} r={4.5} fill={color.borderStrong} />
+      {/* The module's one sanctioned red accent (spec §Colour): signals failure
+          without alarming. This is the ONLY empty state that gets it. */}
+      <Line x1={12} y1={64} x2={62} y2={10} stroke={color.danger} strokeWidth={2.5} strokeLinecap="round" opacity={0.55} />
+    </Svg>
   );
 }

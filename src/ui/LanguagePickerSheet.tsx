@@ -8,7 +8,9 @@ import { ScrollView } from 'react-native';
 import { useUnistyles } from 'react-native-unistyles';
 
 import { type Language, TRANSLATABLE_LANGUAGES } from '@/constants';
+import { useTranslation } from '@/i18n';
 
+import { EmptyState } from './EmptyState';
 import { IconCheck } from './icons';
 import { Input } from './Input';
 import { ListItem } from './List';
@@ -36,6 +38,7 @@ export function LanguagePickerSheet({
   languages = TRANSLATABLE_LANGUAGES,
 }: LanguagePickerSheetProps) {
   const { theme } = useUnistyles();
+  const { t } = useTranslation();
   const [q, setQ] = useState('');
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -52,6 +55,9 @@ export function LanguagePickerSheet({
     <Sheet visible={visible} onClose={onClose} title={title}>
       <Input placeholder={searchPlaceholder} value={q} onChangeText={setQ} autoCapitalize="none" />
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        {/* A filter matching nothing used to render an empty ScrollView — 360px of
+            blank under the input, with no way to tell a no-match from a hung sheet. */}
+        {rows.length === 0 && <EmptyState title={t('langPicker.noMatchTitle')} body={t('langPicker.noMatchBody')} />}
         {rows.map((l, i) => (
           <ListItem
             key={l.code}

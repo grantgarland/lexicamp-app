@@ -21,6 +21,8 @@ export interface EmptyStateProps {
   networkNote?: string;
   /** Larger title (sheet contexts). */
   large?: boolean;
+  /** Drop the outer padding — the wrapper already supplies it (see EmptyStateCard). */
+  inset?: boolean;
   style?: ViewStyle;
 }
 
@@ -34,12 +36,13 @@ export function EmptyState({
   onSecondary,
   networkNote,
   large = false,
+  inset = false,
   style,
 }: EmptyStateProps) {
   const { theme } = useUnistyles();
   const hasBelowBody = !!cta || !!networkNote;
   return (
-    <View style={[styles.wrap, style]}>
+    <View style={[styles.wrap, inset && styles.wrapInset, style]}>
       {illustration != null && <View style={styles.illustration}>{illustration}</View>}
 
       <Text style={[styles.title, large && styles.titleLarge]}>{title}</Text>
@@ -90,6 +93,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingTop: 48,
     paddingBottom: 40,
   },
+  wrapInset: { paddingHorizontal: 0, paddingTop: 0, paddingBottom: 0 },
   illustration: { marginBottom: 20 },
   title: {
     fontFamily: theme.fonts.serif.semibold,

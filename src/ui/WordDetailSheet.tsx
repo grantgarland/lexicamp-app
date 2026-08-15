@@ -12,6 +12,7 @@ import { useExamples } from '@/query/hooks';
 import { useIsDark } from '@/theme/appearance';
 import { getTierByStability, tierView } from '@/theme/tiers';
 import { DetailStats } from './DetailStats';
+import { InlineNote } from './InlineNote';
 import { IconArchive, IconMoreVertical, IconTrash } from './icons';
 import { Button } from './Button';
 import { Sheet } from './Sheet';
@@ -120,11 +121,11 @@ export function WordDetailSheet({ word, onClose, onDelete, onToggleArchive, onEd
             <View style={styles.exampleReqWrap}>
               <Text style={styles.sectionLabel}>{t('wordList.example')}</Text>
               {exampleLoading ? (
-                <Text style={styles.exampleReqLoading}>{t('wordList.loadingExample')}</Text>
+                <InlineNote>{t('wordList.loadingExample')}</InlineNote>
               ) : exampleRequested && exampleSettled && (examples?.length ?? 0) === 0 ? (
                 /* Terminal — the dictionary has no sentence for this sense. The
                    server cached the empty result, so there is nothing to retry. */
-                <Text style={styles.exampleReqLoading}>{t('wordList.noExample')}</Text>
+                <InlineNote>{t('wordList.noExample')}</InlineNote>
               ) : (
                 <Pressable
                   onPress={() => (exampleRequested && exampleFailed ? void refetchExample() : setExampleReqId(word.id))}
@@ -196,7 +197,6 @@ const styles = StyleSheet.create((theme) => {
       borderColor: color.border,
     },
     exampleReqText: { fontFamily: fonts.sans.semibold, fontSize: 14, color: color.brand },
-    exampleReqLoading: { fontFamily: fonts.sans.regular, fontSize: 13, fontStyle: 'italic', color: color.textMuted, paddingVertical: 4 },
     example: { fontFamily: fonts.sans.regular, fontSize: 14, fontStyle: 'italic', lineHeight: 21, color: color.textBody, marginBottom: 16 },
     exampleTight: { marginBottom: 4 },
     exampleTranslation: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 19, color: color.textMuted, marginBottom: 16 },

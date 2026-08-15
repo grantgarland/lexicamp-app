@@ -8,6 +8,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useTranslation } from '@/i18n';
 import { Card } from './Card';
+import { InlineNote } from './InlineNote';
 import { ScrollIntoView } from './ScrollIntoView';
 import { IconArrowRight, IconBook, IconCheck, IconChevronDown, IconInfo, IconLock, IconPencil, IconTrash } from './icons';
 import { RawText as RNText } from './Text';
@@ -242,9 +243,9 @@ function TranslationItem({
                 /* Terminal: the dictionary has no sentence for THIS sense. Say so
                    once and stop — the server cached the empty result, so there is
                    nothing to retry and the button must not come back. */
-                <RNText style={styles.exampleNote} testID="result-example-empty">
+                <InlineNote align="center" testID="result-example-empty">
                   {t('translationCard.noExample')}
-                </RNText>
+                </InlineNote>
               ) : (
                 <Pressable
                   onPress={onRequestExample}
@@ -428,17 +429,6 @@ const styles = StyleSheet.create((theme) => {
       borderColor: color.brandSoft,
     },
     exampleReqBtnPressed: { opacity: 0.6 },
-    // Terminal "no example" line — deliberately quiet and non-interactive, sized
-    // to sit where the button was without shifting the card's rhythm.
-    exampleNote: {
-      fontFamily: fonts.sans.regular,
-      fontSize: 13,
-      fontStyle: 'italic',
-      color: color.textMuted,
-      lineHeight: 20,
-      paddingVertical: 10,
-      textAlign: 'center',
-    },
     exampleReqText: { fontFamily: fonts.sans.semibold, fontSize: 13, color: color.brand },
 
     detailsWrap: { marginHorizontal: 18, marginBottom: 12 },

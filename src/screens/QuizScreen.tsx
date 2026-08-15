@@ -28,7 +28,7 @@ import { BRAND_MARK_KNOCKOUT_XML } from '@/ui/brandMark';
 import {
   Button,
   Confetti,
-  EmptyState,
+  EmptyStateCard,
   IconArrowDown,
   IconArrowUp,
   IconInfo,
@@ -320,7 +320,7 @@ export function QuizScreen({ deckId, deckName }: QuizScreenProps = {}) {
         ) : (
           <>
             <QuizTopBar current={0} total={0} onClose={() => router.back()} />
-            <EmptyState
+            <EmptyStateCard
               style={styles.emptyFill}
               illustration={<IconMountain size={44} color={theme.color.evergreen} />}
               // A deck session that yields nothing means the DECK is empty (or

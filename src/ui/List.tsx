@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { Pressable, ScrollView, View, type ViewStyle } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { EmptyState } from './EmptyState';
 import { IconCheck } from './icons';
 import { RawText as Text } from './Text';
 
@@ -143,12 +144,12 @@ export interface ListProps {
 export function List({ children, isEmpty = false, emptyState, emptyTitle, emptyBody, scroll = false, style, contentStyle }: ListProps) {
   if (isEmpty) {
     if (emptyState != null) return <>{emptyState}</>;
-    return (
-      <View style={[styles.empty, style]}>
-        {emptyTitle != null && <Text style={styles.emptyTitle}>{emptyTitle}</Text>}
-        {emptyBody != null && <Text style={styles.emptyBody}>{emptyBody}</Text>}
-      </View>
-    );
+    // Bare EmptyState, not EmptyStateCard: every List that can empty out lives
+    // inside a Sheet, and a card in a sheet is a box in a box. This used to be a
+    // third, independent empty-state implementation with its own hardcoded type
+    // scale (serif 17 / sans 14) — the deck-detail and word-picker sheets were
+    // the only two surfaces in the app rendering that size.
+    return <EmptyState title={emptyTitle ?? ''} body={emptyBody} style={style} />;
   }
   if (scroll) {
     return (
@@ -175,8 +176,5 @@ const styles = StyleSheet.create((theme) => {
     subtitle: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted, marginTop: 1 },
     titleInline: { fontFamily: fonts.sans.semibold, fontSize: 14, color: color.textStrong },
     subtitleInline: { fontFamily: fonts.sans.regular, fontSize: 13, color: color.textMuted },
-    empty: { paddingVertical: 48, paddingHorizontal: 24, alignItems: 'center' },
-    emptyTitle: { fontFamily: fonts.serif.semibold, fontSize: 17, color: color.textStrong, textAlign: 'center', marginBottom: 6 },
-    emptyBody: { fontFamily: fonts.sans.regular, fontSize: 14, lineHeight: 20, color: color.textMuted, textAlign: 'center' },
   };
 });

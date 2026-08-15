@@ -301,6 +301,7 @@
     "count_other": "{{count}} words",
     "searchPlaceholder": "Search words…",
     "noMatch": "No words match your search.",
+    "noMatchBody": "Try a different spelling, or clear your filters.",
     "emptyTitle": "No saved words yet",
     "emptyBody": "Search for a word and save it to start building your deck.",
     "addedToday": "Today",
@@ -358,7 +359,7 @@
     "filterPlaceholder": "Filter…",
     "pickerEmptyTitle": "No words yet",
     "pickerEmptyBody": "Save words to your library first, then add them to decks.",
-    "decksEmptyTitle": "No decks yet.",
+    "decksEmptyTitle": "No decks yet",
     "decksEmptyBody": "Create your first deck above.",
     "deleteDeck": "Delete Deck",
     "studyDeck": "Study Deck",
@@ -406,7 +407,8 @@
     "sortA11yInactive": "Sort by {{dim}}",
     "showArchived": "Archived words",
     "showArchivedHint": "Kept forever, excluded from reviews",
-    "archivedEmpty": "Nothing archived. Swipe a word left to archive it.",
+    "archivedEmptyTitle": "Nothing archived",
+    "archivedEmptyBody": "Swipe a word left to archive it. Archived words are kept, but skipped in reviews.",
     "archiveWord": "Archive word",
     "unarchiveWord": "Restore to reviews",
     "archivedToast": "“{{word}}” archived, out of your review queue",
@@ -647,6 +649,10 @@
     "words_one": "{{count}} word",
     "words_other": "{{count}} words",
     "addedSuffix": " · Added {{date}}"
+  },
+  "langPicker": {
+    "noMatchTitle": "No languages match",
+    "noMatchBody": "Try the English name, the language's own name, or its code."
   },
   "paywall": {
     "heading": "Reach mastery faster",

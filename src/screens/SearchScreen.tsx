@@ -30,6 +30,8 @@ import {
   IconTrash,
   IconSearch,
   IconX,
+  IllustNetworkError,
+  IllustSearchEmpty,
   RawText,
   Screen,
   SaveWithEditSheet,
@@ -492,6 +494,7 @@ export function SearchView({ onClose, bottomInset = 0 }: { onClose: () => void; 
         {phase === 'noresults' && (
           <View key="noresults">
             <EmptyState
+              illustration={<IllustSearchEmpty />}
               title={t('search.noResultsTitle')}
               body={t('search.noResultsBody')}
               networkNote={t('search.noResultsNetwork')}
@@ -509,6 +512,9 @@ export function SearchView({ onClose, bottomInset = 0 }: { onClose: () => void; 
         {phase === 'error' && (
           <View key="error">
             <EmptyState
+              // The one illustration that carries a red accent — this is the only
+              // branch here that means "unreachable" rather than "nothing found".
+              illustration={<IllustNetworkError />}
               title={t(lookupError === 'busy' ? 'search.busyTitle' : 'search.unavailableTitle')}
               body={t(lookupError === 'busy' ? 'search.busyBody' : 'search.unavailableBody')}
             />

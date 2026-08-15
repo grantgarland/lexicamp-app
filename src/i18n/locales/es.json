@@ -301,6 +301,7 @@
     "count_other": "{{count}} palabras",
     "searchPlaceholder": "Buscar palabras…",
     "noMatch": "Ninguna palabra coincide con tu búsqueda.",
+    "noMatchBody": "Prueba con otra ortografía o quita los filtros.",
     "emptyTitle": "Aún no hay palabras guardadas",
     "emptyBody": "Busca una palabra y guárdala para empezar tu mazo.",
     "addedToday": "Hoy",
@@ -358,7 +359,7 @@
     "filterPlaceholder": "Filtrar…",
     "pickerEmptyTitle": "Aún no hay palabras",
     "pickerEmptyBody": "Guarda palabras en tu biblioteca primero y luego añádelas a mazos.",
-    "decksEmptyTitle": "Aún no hay mazos.",
+    "decksEmptyTitle": "Aún no hay mazos",
     "decksEmptyBody": "Crea tu primer mazo arriba.",
     "deleteDeck": "Eliminar mazo",
     "studyDeck": "Estudiar mazo",
@@ -406,7 +407,8 @@
     "sortA11yInactive": "Ordenar por {{dim}}",
     "showArchived": "Palabras archivadas",
     "showArchivedHint": "Se conservan para siempre, fuera de los repasos",
-    "archivedEmpty": "Nada archivado. Desliza una palabra a la izquierda para archivarla.",
+    "archivedEmptyTitle": "Nada archivado",
+    "archivedEmptyBody": "Desliza una palabra a la izquierda para archivarla. Las palabras archivadas se conservan, pero no entran en los repasos.",
     "archiveWord": "Archivar palabra",
     "unarchiveWord": "Devolver a los repasos",
     "archivedToast": "«{{word}}» archivada, fuera de tu cola de repaso",
@@ -647,6 +649,10 @@
     "words_one": "{{count}} palabra",
     "words_other": "{{count}} palabras",
     "addedSuffix": " · Añadido {{date}}"
+  },
+  "langPicker": {
+    "noMatchTitle": "Ningún idioma coincide",
+    "noMatchBody": "Prueba con el nombre en inglés, el nombre propio del idioma o su código."
   },
   "paywall": {
     "heading": "Alcanza el dominio más rápido",
