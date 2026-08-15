@@ -1,8 +1,21 @@
 // PaywallScreen (PW-01 / PW-03) — the subscription upsell, assembled against
 // paywall/Paywall.html. Presented as a modal route (`/paywall`) from every Upgrade/
 // Unlock CTA. Annual/monthly plan selector, feature list, trial CTA, restore, and a
-// post-purchase success state. Entitlement writes land with RevenueCat later; the CTA
-// currently just shows the success confirmation.
+// post-purchase success state.
+//
+// 3.1: the CTA and Restore are now real StoreKit calls through
+// `src/purchases/`. Three things here are not obvious:
+//
+//   1. PRICES COME FROM THE OFFERING, never from the locale files. `priceString`
+//      is storefront-localized by StoreKit; the `paywall.annualPrice` strings are
+//      demo values used ONLY when the SDK is not configured (mock/smoke builds).
+//      In a live build with no offering we show no price and disable the CTA —
+//      selling at a price we cannot confirm is worse than not selling.
+//   2. TRIAL COPY IS CONDITIONAL. Only the annual product carries the 7-day trial
+//      and returning subscribers are ineligible, so the CTA reads "Start free
+//      trial" only when RevenueCat says this user actually qualifies.
+//   3. A CANCELLED PURCHASE IS NOT AN ERROR. It leaves the screen exactly as it
+//      was, with no message.
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
@@ -13,6 +26,8 @@ import { FREE_DAILY_SAVES } from '@/domain/derive';
 import { useTranslation } from '@/i18n';
 import { useLogEvent } from '@/query/hooks';
 import { BRAND_MARK_KNOCKOUT_XML } from '@/ui/brandMark';
+import { purchasesReady, type PaywallPlan } from '@/purchases/purchases';
+import { usePaywallOffering, usePurchaseController } from '@/purchases/usePurchases';
 import { Button, IconChart, IconCheck, IconFolderPlus, IconGlobe, IconInfinity, IconX, RawText, Screen } from '@/ui';
 
 type Plan = 'annual' | 'monthly';
@@ -36,7 +51,53 @@ export function PaywallScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const { offering, isLoading: pricesLoading, isError: pricesFailed } = usePaywallOffering();
+  const { buy, restore, isBusy, mirrorLagged } = usePurchaseController(logEvent);
+  const [error, setError] = useState<string | null>(null);
+
   const close = () => (router.canGoBack() ? router.back() : router.replace('/'));
+
+  // `live` = the SDK is configured, so StoreKit is the price authority. When it
+  // is not (mock/smoke builds) the demo strings keep the paywall renderable for
+  // the Maestro suite without inventing a price for a real shopper.
+  const live = purchasesReady();
+  const selected: PaywallPlan | null = live ? (offering?.[plan] ?? null) : null;
+  const canBuy = !isBusy && (!live || selected != null);
+  const trialOffered = live ? (offering?.annual?.trialEligible ?? false) : true;
+
+  const priceFor = (id: Plan, demo: string): string => {
+    if (!live) return demo;
+    return offering?.[id]?.priceString ?? '—';
+  };
+
+  const handleBuy = async () => {
+    setError(null);
+    if (!live) {
+      // Mock/smoke build: keep the old demo behaviour so the flow stays walkable.
+      setPurchased(true);
+      return;
+    }
+    if (selected == null) return;
+    try {
+      const outcome = await buy(selected);
+      if (outcome === 'purchased') setPurchased(true);
+      // 'cancelled' falls through deliberately: no state change, no message.
+    } catch {
+      setError(t('paywall.purchaseFailed'));
+    }
+  };
+
+  const handleRestore = async () => {
+    setError(null);
+    if (!live) return;
+    try {
+      const restored = await restore();
+      if (restored) setPurchased(true);
+      else setError(t('paywall.restoreNone'));
+    } catch {
+      setError(t('paywall.restoreFailed'));
+    }
+  };
 
   const features = [
     { Icon: IconInfinity, label: t('paywall.featureUnlimited') },
@@ -53,7 +114,9 @@ export function PaywallScreen() {
             <SvgXml xml={BRAND_MARK_KNOCKOUT_XML} width={44} height={44} />
           </View>
           <RawText style={styles.successTitle}>{t('paywall.successTitle')}</RawText>
-          <RawText style={styles.successBody}>{t('paywall.successBody')}</RawText>
+          <RawText style={styles.successBody}>
+            {mirrorLagged ? t('paywall.successPending') : t('paywall.successBody')}
+          </RawText>
           <View style={styles.successCta}>
             <Button title={t('paywall.continue')} variant="primary" onPress={close} />
           </View>
@@ -99,23 +162,42 @@ export function PaywallScreen() {
           selected={plan === 'annual'}
           onPress={() => setPlan('annual')}
           title={t('paywall.annual')}
-          price={t('paywall.annualPrice')}
-          sub={t('paywall.annualSub')}
+          price={priceFor('annual', t('paywall.annualPrice'))}
+          sub={live ? t('paywall.billedAnnually') : t('paywall.annualSub')}
           badge={t('paywall.bestValue')}
-          note={t('paywall.trialNote')}
+          note={trialOffered ? t('paywall.trialNote') : undefined}
         />
         <PlanCard
           selected={plan === 'monthly'}
           onPress={() => setPlan('monthly')}
           title={t('paywall.monthly')}
-          price={t('paywall.monthlyPrice')}
-          sub={t('paywall.monthlySub')}
+          price={priceFor('monthly', t('paywall.monthlyPrice'))}
+          sub={live ? t('paywall.billedMonthly') : t('paywall.monthlySub')}
         />
       </ScrollView>
 
       <View style={styles.footer}>
-        <Button title={plan === 'annual' ? t('paywall.ctaTrial') : t('paywall.ctaSubscribe')} variant="primary" onPress={() => setPurchased(true)} />
-        <Pressable onPress={() => {}} hitSlop={8} style={({ pressed }) => [styles.restore, pressed && { opacity: 0.6 }]} accessibilityRole="button">
+        {live && pricesFailed && <RawText style={styles.error}>{t('paywall.priceUnavailable')}</RawText>}
+        {error != null && <RawText style={styles.error}>{error}</RawText>}
+        <Button
+          title={
+            isBusy || pricesLoading
+              ? t('paywall.working')
+              : plan === 'annual' && trialOffered
+                ? t('paywall.ctaTrial')
+                : t('paywall.ctaSubscribe')
+          }
+          variant="primary"
+          disabled={!canBuy}
+          onPress={() => void handleBuy()}
+        />
+        <Pressable
+          onPress={() => void handleRestore()}
+          disabled={isBusy}
+          hitSlop={8}
+          style={({ pressed }) => [styles.restore, pressed && { opacity: 0.6 }]}
+          accessibilityRole="button"
+        >
           <RawText style={styles.restoreText}>{t('paywall.restore')}</RawText>
         </Pressable>
         <RawText style={styles.legal}>{t('paywall.legal')}</RawText>
@@ -179,6 +261,7 @@ const styles = StyleSheet.create((theme) => {
     planPrice: { fontFamily: fonts.sans.bold, fontSize: 16, color: color.textStrong },
 
     footer: { paddingHorizontal: 24, paddingTop: 8, gap: 10 },
+    error: { fontFamily: fonts.sans.medium, fontSize: 13, lineHeight: 18, color: color.danger, textAlign: 'center' },
     restore: { alignSelf: 'center', paddingVertical: 4 },
     restoreText: { fontFamily: fonts.sans.semibold, fontSize: 13, color: color.brand },
     legal: { fontFamily: fonts.sans.regular, fontSize: 11, lineHeight: 16, color: color.textFaint, textAlign: 'center' },

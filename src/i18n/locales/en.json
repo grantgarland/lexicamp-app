@@ -671,7 +671,15 @@
     "successBody": "Your 7-day free trial has started. No charges until then. Time to climb.",
     "continue": "Continue",
     "paceHeading": "You've reached your daily limit",
-    "paceSub": "You've exhausted today's {{daily}} free save limit. {{daily}} more saves unlock tomorrow, or upgrade to secure uninterrupted learning."
+    "paceSub": "You've exhausted today's {{daily}} free save limit. {{daily}} more saves unlock tomorrow, or upgrade to secure uninterrupted learning.",
+    "billedAnnually": "Billed annually",
+    "billedMonthly": "Billed monthly",
+    "working": "Working…",
+    "purchaseFailed": "That purchase didn't go through. Please try again.",
+    "restoreNone": "No previous purchase found on this Apple ID.",
+    "restoreFailed": "Couldn't restore purchases. Please try again.",
+    "priceUnavailable": "Couldn't load prices. Try again in a moment.",
+    "successPending": "Your purchase went through. We're switching your account over now, which can take a few seconds."
   },
   "onboarding": {
     "getStarted": "Get started",

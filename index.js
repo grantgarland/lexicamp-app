@@ -19,6 +19,10 @@ import './src/i18n';
 import { initOutbox } from './src/data/outboxInit';
 // Push (2.5): foreground presentation + tap → deep-link routing.
 import { initNotifications } from './src/notifications/push';
+// Purchases (3.1): configure RevenueCat before any screen reads an offering.
+// No-ops on mock/smoke builds — see src/purchases/purchases.ts for why the
+// guard is keyed on USE_SUPABASE rather than __DEV__.
+import { configurePurchases } from './src/purchases/purchases';
 // Session reconciliation (2026-08-12): keep the reminder scheduler's device
 // inputs — push-token ownership and the profile timezone — true on every
 // session start and foreground.
@@ -26,6 +30,7 @@ import { initSessionSync } from './src/auth/sessionSync';
 
 import 'expo-router/entry';
 
+configurePurchases();
 initOutbox();
 initNotifications();
 initSessionSync();
