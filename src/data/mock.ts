@@ -310,7 +310,10 @@ const WORD_BANK: { native: string; target: string }[] = [
   { native: 'tesoro', target: 'treasure' }, { native: 'anochecer', target: 'nightfall' },
 ];
 
-const POS_POOL = ['noun', 'adj.', 'verb', 'adv.'];
+// Full words, matching what the live path produces: mappers.ts resolves
+// pos_tag through the `pos.*` namespace ('ADV' → "adverb"), so abbreviations
+// here were a mock-only artefact that made the detail sheet look inconsistent.
+const POS_POOL = ['noun', 'adjective', 'verb', 'adverb'];
 // Parallel source/target example frames (source = ES sentence, target = its EN
 // translation) so W-03 can show the pair like the search card does.
 const EXAMPLE_FRAMES: { source: (w: string) => string; target: (w: string) => string }[] = [

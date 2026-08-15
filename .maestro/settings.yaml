@@ -169,10 +169,10 @@ tags:
 # ── About ──────────────────────────────────────────────────────────────────
 - tapOn:
     id: 'settings-about'
-- assertVisible: 'Climb your vocabulary mountain, one word at a time.'
+- assertVisible: 'Study less. Remember more.'
 - tapOn:
     point: '50%,12%'
-- assertNotVisible: 'Climb your vocabulary mountain, one word at a time.'
+- assertNotVisible: 'Study less. Remember more.'
 
 # ── Sign out: reach the confirm, then CANCEL (see the header note) ─────────
 # ⚠️ `centerElement: true` IS LOAD-BEARING (2026-08-06 device run). At the

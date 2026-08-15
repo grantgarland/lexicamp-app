@@ -7,6 +7,8 @@
 import { Pressable, type PressableProps, type ViewStyle } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { DANGER_SOLID, ON_DANGER_SOLID } from '@/theme/theme';
+
 import { RawText as Text } from './Text';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'destructive' | 'ghost' | 'pill';
@@ -39,7 +41,7 @@ export function Button({
       : isGhost
         ? theme.color.textMuted
         : variant === 'destructive'
-          ? theme.color.textOnDanger
+          ? ON_DANGER_SOLID
           : theme.color.textOnAccentCta; // primary / pill
 
   return (
@@ -110,7 +112,9 @@ const styles = StyleSheet.create((theme) => {
     },
 
     // ── destructive ──
-    destructive: { backgroundColor: color.danger },
+    // Solid red + white ink in BOTH themes — see DANGER_SOLID in theme.ts for
+    // why this does not use `color.danger` (dark mode would invert to dark-on-pink).
+    destructive: { backgroundColor: DANGER_SOLID },
     destructivePressed: { transform: [{ scale: 0.98 }] },
     destructiveDisabled: { backgroundColor: color.border },
 

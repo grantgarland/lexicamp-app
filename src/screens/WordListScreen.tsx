@@ -111,6 +111,7 @@ export interface SortSel {
 }
 const DEFAULT_SORT: SortSel = { dim: 'added', dir: 0 }; // newest first
 const sameSort = (a: SortSel, b: SortSel) => a.dim === b.dim && a.dir === b.dir;
+const sameTiers = (a: Set<TierId>, b: Set<TierId>) => a.size === b.size && [...a].every((id) => b.has(id));
 
 function sortWords(list: WordListItem[], sel: SortSel): WordListItem[] {
   const arr = [...list];
@@ -464,12 +465,6 @@ export function WordListScreen() {
           setShowArchived(archived);
           setFilterOpen(false);
         }}
-        onReset={() => {
-          setSortBy(DEFAULT_SORT);
-          setFilterTiers(new Set());
-          setShowArchived(false);
-          setFilterOpen(false);
-        }}
       />
 
       {/* W-03 — Word detail */}
@@ -700,7 +695,6 @@ function FilterSortSheet({
   showArchived,
   onClose,
   onApply,
-  onReset,
   applyDisabled = false,
 }: {
   visible: boolean;
@@ -713,7 +707,6 @@ function FilterSortSheet({
    *  skeleton, and a second apply on top of it would queue more work behind the
    *  one already running. */
   applyDisabled?: boolean;
-  onReset: () => void;
 }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
@@ -731,6 +724,11 @@ function FilterSortSheet({
       setLocalArchived(showArchived);
     }
   }
+
+  // Draft vs. applied (Apply) and draft vs. defaults (Reset) — see the ButtonRow
+  // at the foot of the sheet.
+  const dirty = !sameSort(localSort, sortBy) || !sameTiers(localTiers, filterTiers) || localArchived !== showArchived;
+  const atDefault = sameSort(localSort, DEFAULT_SORT) && localTiers.size === 0 && !localArchived;
 
   const toggleTier = (id: TierId) =>
     setLocalTiers((prev) => {
@@ -754,8 +752,11 @@ function FilterSortSheet({
   return (
     <Sheet visible={visible} onClose={onClose} title={t('wordList.filterSortTitle')}>
       <View style={styles.sheetSection}>
-        <RawText style={styles.sheetLabel}>{t('wordList.sortBy')}</RawText>
-        <RawText style={styles.sortHint}>{t('wordList.sortHint')}</RawText>
+        {/* Hint inlined with the label, matching "Filter by tier (none = all)"
+            below — the two sections now read the same way. */}
+        <RawText style={styles.sheetLabel}>
+          {t('wordList.sortBy')} <RawText style={styles.sheetHint}>{t('wordList.sortHint')}</RawText>
+        </RawText>
         {/* Drive-pattern sort (18-session refactor): tap a row to select its
             dimension; tap the SELECTED row again to reverse — the direction
             pill (↓/↑ + label) appears only on the active row, so one row =
@@ -852,13 +853,27 @@ function FilterSortSheet({
         </View>
       </View>
 
+      {/* Both CTAs judge the DRAFT, not what's applied (UX audit) — so they can
+          never disagree about what "changed" means. Apply lights up when the
+          draft differs from the live filter; Reset when it differs from the
+          defaults. Reset clears the draft in place and leaves the sheet open,
+          so "reset, then adjust, then apply" is one trip. */}
       <ButtonRow
         style={styles.sheetActions}
-        left={{ title: t('wordList.reset'), onPress: onReset, testID: 'filter-reset' }}
+        left={{
+          title: t('wordList.reset'),
+          disabled: atDefault,
+          onPress: () => {
+            setLocalSort(DEFAULT_SORT);
+            setLocalTiers(new Set());
+            setLocalArchived(false);
+          },
+          testID: 'filter-reset',
+        }}
         right={{
           title: t('wordList.apply'),
           variant: 'primary',
-          disabled: applyDisabled,
+          disabled: applyDisabled || !dirty,
           onPress: () => onApply(localSort, localTiers, localArchived),
           testID: 'filter-apply',
         }}

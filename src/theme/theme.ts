@@ -76,6 +76,22 @@ export const lightTheme = { ...base, isDark: false as boolean };
 // Dark diverges ONLY in the semantic color set; all other tokens are shared.
 export const darkTheme = { ...base, color: colorDark, isDark: true as boolean };
 
+/** Solid-red action fill + its ink — for destructive controls that are a FULL
+ *  TILE of red (Button `destructive`, swipe-tray delete actions), in both themes.
+ *
+ *  The semantic `danger`/`textOnDanger` pair is correct for danger text on a
+ *  CANVAS, where dark mode lightens the red and darkens the ink to stay legible.
+ *  On a full-bleed fill that inverts into near-black-on-pink, which reads as a
+ *  disabled chip rather than a destructive button, and sat next to white-inked
+ *  sibling actions (Casey, 2026-08-04 — WordRow pinned its own copy of this then;
+ *  the UX audit extended the same call to every red control).
+ *
+ *  Pinning red-600 in both themes keeps white at 6.03:1 — comfortably AA — where
+ *  white on the dark theme's `danger` (#ef7683) would be 2.77:1 and fail. The
+ *  pair is in scripts/check-contrast.mjs; do not swap this for `color.danger`. */
+export const DANGER_SOLID = palette.red[600];
+export const ON_DANGER_SOLID = '#ffffff';
+
 export const breakpoints = { xs: 0, sm: 360, md: 768, lg: 1024 } as const;
 
 /** RN absolute line-height (px) from a font size + a leading token. */

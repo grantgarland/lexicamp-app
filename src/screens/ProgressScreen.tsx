@@ -693,7 +693,11 @@ function InfoSheet({ infoKey, t, onClose }: { infoKey: InfoKey | null; t: TFunct
     <Sheet visible={infoKey != null} onClose={onClose} title={t('progress.cefrTitle')}>
       <RawText style={styles.infoIntro}>{t('progress.cefrIntro')}</RawText>
       <View style={styles.infoList}>
-        {TIERS.map((tier, i) => {
+        {/* Descending, like the Route ladder above it (which reverses MOUNTAIN_TIERS
+            for the same reason): you read a mountain bottom-up, so Summit belongs
+            at the top. `i` stays the ORIGINAL index — masteredMinAt/MOUNTAIN_TIERS
+            are keyed by ascending order and must not be re-indexed here. */}
+        {TIERS.map((tier, i) => ({ tier, i })).reverse().map(({ tier, i }) => {
           const tv = tierView(tier, isDark);
           return (
             <View key={tier.id} style={[styles.infoRow, { backgroundColor: tv.bg, borderColor: tv.border }]}>

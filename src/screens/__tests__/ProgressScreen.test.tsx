@@ -134,6 +134,7 @@ jest.mock('@/query/hooks', () => ({
 
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { ProgressScreen } from '@/screens/ProgressScreen';
+import { PortalHost } from '@/ui/Portal';
 import i18n from '@/i18n';
 
 const t = (k, o) => i18n.t(k, o);
@@ -356,5 +357,35 @@ describe('All-Time grid', () => {
     expect(screen.queryByText('0m')).toBeNull();
     expect(screen.queryByText('~0m')).toBeNull();
     expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+  });
+});
+
+// The CEFR ladder sheet lists tiers DESCENDING (UX audit) — Summit at the top,
+// Base Camp at the bottom — so it reads the same direction as the Route ladder
+// it explains. Reversing a rendered list is the kind of change that silently
+// re-indexes the data alongside it, so this asserts the order via each row's
+// OWN threshold: that catches both a wrong order and rows decoupled from their
+// tier. Asserting tier names would be vacuous — the Route ladder behind the
+// sheet already renders all five, descending, for its own reasons.
+describe('CEFR ladder sheet', () => {
+  it('lists tiers Summit → Base Camp, each still carrying its own threshold', () => {
+    // Sheet renders through the in-app Portal, so the host must be mounted.
+    render(
+      <>
+        <ProgressScreen />
+        <PortalHost />
+      </>,
+    );
+    fireEvent.press(screen.getByLabelText(t('progress.aboutCefr')));
+
+    const thresholds = [3000, 1500, 500, 100, 0].map((n) =>
+      t('progress.masteredThreshold', { count: n.toLocaleString() }),
+    );
+    const rendered = screen
+      .getAllByText(/mastered/)
+      .map((n) => n.props.children)
+      .filter((c) => typeof c === 'string' && thresholds.includes(c));
+
+    expect(rendered).toEqual(thresholds);
   });
 });
