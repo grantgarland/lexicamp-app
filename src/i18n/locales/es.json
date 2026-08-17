@@ -607,6 +607,7 @@
     "remindersOnAt": "Activados · {{time}}",
     "remindersOff": "Desactivados",
     "restorePurchases": "Restaurar compras",
+    "restoreDone": "Compras restauradas. Premium está activo de nuevo.",
     "reminderDays": "Días de recordatorio",
     "daysShort": [
       "D",
@@ -677,7 +678,15 @@
     "successBody": "Tu prueba gratis de 7 días ha comenzado. Sin cargos hasta entonces. A escalar.",
     "continue": "Continuar",
     "paceHeading": "Has alcanzado tu límite diario",
-    "paceSub": "Has agotado los {{daily}} guardados gratis de hoy. Mañana se desbloquean {{daily}} más, o mejora tu plan para aprender sin interrupciones."
+    "paceSub": "Has agotado los {{daily}} guardados gratis de hoy. Mañana se desbloquean {{daily}} más, o mejora tu plan para aprender sin interrupciones.",
+    "billedAnnually": "Facturado anualmente",
+    "billedMonthly": "Facturado mensualmente",
+    "working": "Un momento…",
+    "purchaseFailed": "No se pudo completar la compra. Inténtalo de nuevo.",
+    "restoreNone": "No encontramos una compra anterior en este ID de Apple.",
+    "restoreFailed": "No se pudieron restaurar las compras. Inténtalo de nuevo.",
+    "priceUnavailable": "No pudimos cargar los precios. Inténtalo en un momento.",
+    "successPending": "Tu compra se completó. Estamos activando tu cuenta y puede tardar unos segundos."
   },
   "onboarding": {
     "getStarted": "Empezar",

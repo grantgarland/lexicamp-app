@@ -28,6 +28,7 @@ import { AppState } from 'react-native';
 import { USE_SUPABASE, dataSource } from '@/data';
 import { supabase } from '@/data/supabase/client';
 import { syncPushRegistration } from '@/notifications/push';
+import { forgetPurchases, identifyPurchases } from '@/purchases/purchases';
 import { queryClient } from '@/query/queryClient';
 
 /** The device's current IANA zone, or null when the runtime cannot say. */
@@ -53,6 +54,14 @@ async function reconcile(userId: string): Promise<void> {
   if (lastSync != null && lastSync.userId === userId && lastSync.tz === tz) return;
   inFlight = true;
   try {
+    // FIRST, and before anything that can fail: bind RevenueCat's app_user_id to
+    // this Supabase user. That id is what the webhook writes
+    // `subscriptions.user_id` from, so a purchase made before this runs lands
+    // against an anonymous customer that maps to no account. `identifyPurchases`
+    // swallows its own errors and no-ops when the SDK is not configured, so it
+    // cannot break the reconciliation below.
+    await identifyPurchases(userId);
+
     // Silent by contract: syncPushRegistration returns early unless the OS
     // permission is ALREADY granted, so this can never raise a system prompt
     // the user did not ask for.
@@ -90,6 +99,10 @@ export function initSessionSync(): void {
       // signOut() has already dropped this device's row; forget the memo so the
       // NEXT account in gets a full pass instead of being skipped as unchanged.
       lastSync = null;
+      // Back to an anonymous RevenueCat id, so the next account signed in on this
+      // device does not inherit this one's entitlement. Same hazard the push-token
+      // note above describes, one layer over.
+      void forgetPurchases();
       return;
     }
     run(session?.user.id);

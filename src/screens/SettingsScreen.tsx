@@ -13,7 +13,9 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { FREE_DAILY_SAVES, FREE_WORD_BASE, freeTierUsage } from '@/domain/derive';
 import { useTranslation } from '@/i18n';
-import { useEntitlement, useHomeData, useLearningLanguages, useNotificationPrefs, useProfile } from '@/query/hooks';
+import { useEntitlement, useHomeData, useLearningLanguages, useLogEvent, useNotificationPrefs, useProfile } from '@/query/hooks';
+import { purchasesReady } from '@/purchases/purchases';
+import { usePurchaseController } from '@/purchases/usePurchases';
 import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
 import { useUiStore } from '@/store/uiStore';
 import { findLanguage } from '@/constants';
@@ -62,6 +64,36 @@ export function SettingsScreen() {
 
   const [sheet, setSheet] = useState<SheetId>(null);
   const openPaywall = () => router.push('/paywall');
+
+  // UX-17a: the Settings Restore row is a REAL restore, same controller as the
+  // paywall's. Feedback goes through the app-wide Toast because this row sits in
+  // a scrolling list with no space of its own for an error line.
+  const showToast = useUiStore((s) => s.showToast);
+  const logEvent = useLogEvent();
+  const { restore, isBusy } = usePurchaseController(logEvent);
+  const handleRestore = async () => {
+    // Mock/smoke builds have no StoreKit at all. Saying so plainly beats a
+    // press that does nothing, which is the exact thing 3.1.1 fails us for.
+    if (!purchasesReady()) {
+      showToast({ variant: 'info', message: t('paywall.restoreNone') });
+      return;
+    }
+    try {
+      const { restored, mirrored } = await restore();
+      if (!restored) {
+        showToast({ variant: 'info', message: t('paywall.restoreNone') });
+      } else if (mirrored) {
+        showToast({ variant: 'success', message: t('settings.restoreDone') });
+      } else {
+        // StoreKit restored it; our mirror has not caught up. Telling the user
+        // it failed would be false, and `entitlement_mirror_lag` has already
+        // been emitted by the controller.
+        showToast({ variant: 'warning', message: t('paywall.successPending') });
+      }
+    } catch {
+      showToast({ variant: 'destructive', message: t('paywall.restoreFailed') });
+    }
+  };
 
   // 20 §8 R1 revised (Casey 2026-07-22k): the username moved into the User
   // Info sheet itself — this row is a static entry point (icon + "User Info"),
@@ -209,10 +241,21 @@ export function SettingsScreen() {
               </View>
             </>
           )}
-          {/* Restore purchases (17 §S5) — store-compliance affordance reachable
-              outside the paywall. RevenueCat wiring pending (same stub as PW-01). */}
-          <Pressable onPress={() => {}} accessibilityRole="button" style={({ pressed }) => [styles.restoreRow, pressed && { opacity: 0.6 }]}>
-            <RawText style={styles.restoreText}>{t('settings.restorePurchases')}</RawText>
+          {/* Restore purchases (17 §S5, wired UX-17a) — store-compliance
+              affordance reachable outside the paywall. ⚠️ An inert Restore is a
+              guideline 3.1.1 rejection on its own, so this must stay a real
+              StoreKit call, not a navigation to the paywall. */}
+          <Pressable
+            onPress={() => void handleRestore()}
+            disabled={isBusy}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: isBusy }}
+            testID="settings-restore-purchases"
+            style={({ pressed }) => [styles.restoreRow, (pressed || isBusy) && { opacity: 0.6 }]}
+          >
+            <RawText style={styles.restoreText}>
+              {isBusy ? t('paywall.working') : t('settings.restorePurchases')}
+            </RawText>
           </Pressable>
         </Section>
 
