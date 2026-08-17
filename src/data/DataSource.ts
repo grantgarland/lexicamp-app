@@ -272,10 +272,12 @@ export interface DataSource {
    *  by rank ascending, PLUS the caller's own row(s) even outside that window
    *  (own-row pinning). Zero-mastered entries are never included (4.3). */
   getLeaderboard(scope: 'global' | 'language', lang?: string, limit?: number): Promise<LeaderboardEntry[]>;
-  /** 3.4 app-side analytics emits (paywall_viewed, onboarding/walkthrough
-   *  funnel). Fire-and-forget; implementations must never throw into UI paths.
-   *  Event names are allowlisted in the implementation — server-written events
-   *  (word_saved, quiz_completed…) stay server-only. */
+  /** 3.4 app-side analytics emits (paywall + purchase funnel, onboarding/
+   *  walkthrough funnel). Fire-and-forget; implementations must never throw into
+   *  UI paths. Event names are allowlisted in the implementation
+   *  (`CLIENT_EVENTS`) — server-written events (word_saved, quiz_completed…)
+   *  stay server-only, and an UNLISTED name is silently dropped, so a new emit
+   *  means a new entry there. */
   logEvent(event: string, props?: Record<string, unknown>): Promise<void>;
   /** Archive / unarchive a card (18 §E3). Suspended cards keep everything but
    *  leave the review queue; unarchive restores them untouched. */

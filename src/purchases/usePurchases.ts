@@ -67,10 +67,21 @@ async function waitForServerEntitlement(): Promise<boolean> {
   return false;
 }
 
+export interface RestoreResult {
+  /** StoreKit found an active entitlement on this Apple ID. */
+  restored: boolean;
+  /** ...and `subscriptions` agreed before we stopped waiting. `false` with
+   *  `restored: true` means the purchase IS valid and our mirror is behind, which
+   *  is a different message to the user than "nothing to restore". Returned
+   *  rather than read off `mirrorLagged` because a caller that reacts imperatively
+   *  (a toast, not a re-render) would see the pre-update closure value. */
+  mirrored: boolean;
+}
+
 export interface PurchaseController {
   /** Runs StoreKit, then waits for the mirror. */
   buy: (plan: PaywallPlan) => Promise<PurchaseOutcome>;
-  restore: () => Promise<boolean>;
+  restore: () => Promise<RestoreResult>;
   /** A purchase/restore is in flight — disable the CTAs. */
   isBusy: boolean;
   /** Set when StoreKit succeeded but `subscriptions` never flipped. The purchase
@@ -116,6 +127,15 @@ export function usePurchaseController(
           return outcome;
         }
         logEvent('paywall_purchase_succeeded', { plan: plan.id, productId: plan.productId });
+        // 3.4's last open emit, parked on 3.1 because it needs the purchase
+        // flow. Emitted from the CLIENT, like the rest of that funnel, so
+        // paywall_viewed → trial_started are comparable rows written the same
+        // way. `trialEligible` is this user's own eligibility as StoreKit
+        // reported it at render, not "the product has a trial" — a returning
+        // subscriber buying annual is a conversion, not a trial start.
+        if (plan.trialEligible) {
+          logEvent('trial_started', { plan: plan.id, productId: plan.productId });
+        }
         await settle('purchase');
         return outcome;
       } finally {
@@ -125,14 +145,16 @@ export function usePurchaseController(
     [settle, logEvent],
   );
 
-  const restore = useCallback(async (): Promise<boolean> => {
+  const restore = useCallback(async (): Promise<RestoreResult> => {
     setBusy(true);
     setMirrorLagged(false);
     try {
       const restored = await restorePurchases();
       logEvent('paywall_restore', { restored });
-      if (restored) await settle('restore');
-      return restored;
+      // Nothing to mirror when StoreKit found nothing, and waiting 15s to
+      // confirm an entitlement we know does not exist would just stall the CTA.
+      const mirrored = restored ? await settle('restore') : false;
+      return { restored, mirrored };
     } finally {
       setBusy(false);
     }

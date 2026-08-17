@@ -63,6 +63,28 @@ describe('purchases wiring', () => {
     expect(screen).not.toMatch(/price=\{t\('paywall\.(annual|monthly)Price'\)\}/);
   });
 
+  it('wires BOTH restore affordances to StoreKit, not to the paywall', () => {
+    // ⚠️ An inert Restore is a guideline 3.1.1 rejection on its own, and there
+    // are two of them: the paywall's link and the Settings row (17 §S5, UX-17a).
+    // The Settings one shipped as `onPress={() => {}}` while the paywall's was
+    // real, so this checks the row that is easy to forget.
+    for (const rel of ['src/screens/PaywallScreen.tsx', 'src/screens/SettingsScreen.tsx']) {
+      const body = src(rel);
+      expect(body).toContain('usePurchaseController');
+      expect(body).toContain('handleRestore');
+      expect(body).not.toMatch(/onPress=\{\(\) => \{\}\}/);
+    }
+    // Restoring must not be re-routed to the paywall: a user who already paid
+    // needs their purchase back, not another chance to buy it. Anchored on the
+    // whole <Pressable>, since the handler is declared before the testID.
+    const settings = src('src/screens/SettingsScreen.tsx');
+    const id = settings.indexOf('testID="settings-restore-purchases"');
+    expect(id).toBeGreaterThan(-1);
+    const row = settings.slice(settings.lastIndexOf('<Pressable', id), settings.indexOf('</Pressable>', id));
+    expect(row).toContain('handleRestore');
+    expect(row).not.toContain('openPaywall');
+  });
+
   it('treats a missing entitlement as unentitled', () => {
     expect(hasPremium(null)).toBe(false);
     expect(hasPremium(undefined)).toBe(false);

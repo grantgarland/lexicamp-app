@@ -91,7 +91,9 @@ export function PaywallScreen() {
     setError(null);
     if (!live) return;
     try {
-      const restored = await restore();
+      const { restored } = await restore();
+      // The success screen distinguishes mirrored from pending itself, via
+      // `mirrorLagged` — by then it has re-rendered, so that state is current.
       if (restored) setPurchased(true);
       else setError(t('paywall.restoreNone'));
     } catch {

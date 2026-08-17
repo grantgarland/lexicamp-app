@@ -605,6 +605,7 @@
     "remindersOnAt": "Activados · {{time}}",
     "remindersOff": "Desactivados",
     "restorePurchases": "Restaurar compras",
+    "restoreDone": "Compras restauradas. Premium está activo de nuevo.",
     "reminderDays": "Días de recordatorio",
     "daysShort": [
       "D",

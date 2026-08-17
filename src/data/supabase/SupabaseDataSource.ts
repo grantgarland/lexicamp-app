@@ -31,6 +31,36 @@ import {
 } from './mappers';
 
 
+/**
+ * Client-emittable event names (3.4, extended by 3.1).
+ *
+ * ⚠️ ADD THE NAME HERE WHEN YOU ADD A `logEvent(...)` CALL. An unlisted name is
+ * dropped by `logEvent` below and the emit is a silent no-op in production —
+ * which is exactly how the 3.1 purchase events shipped emitting into nothing.
+ * `clientEventParity.test.ts` fails CI on that drift, so this list and the call
+ * sites cannot separate again.
+ *
+ * Server-written names (word_saved, quiz_completed, lookup_uncached…) stay off
+ * this list on purpose: the allowlist is what stops client code shadowing an
+ * event the RPCs own.
+ */
+const CLIENT_EVENTS = [
+  // Conversion funnel: paywall_viewed → purchase_succeeded → trial_started.
+  'paywall_viewed',
+  'paywall_purchase_succeeded',
+  'paywall_purchase_cancelled',
+  'paywall_restore',
+  'trial_started',
+  // The webhook's only health signal — StoreKit says paid, our mirror never
+  // agreed. Invisible from both dashboards, so it has to arrive from here.
+  'entitlement_mirror_lag',
+  // Onboarding / walkthrough funnel.
+  'onboarding_started',
+  'walkthrough_started',
+  'walkthrough_completed',
+  'walkthrough_skipped',
+];
+
 async function uid(): Promise<string> {
   const { data } = await supabase.auth.getSession();
   const id = data.session?.user.id;
@@ -296,10 +326,10 @@ export const supabaseDataSource: DataSource = {
   },
 
   async logEvent(event: string, props: Record<string, unknown> = {}): Promise<void> {
-    // 3.4: direct insert under the own-events-insert RLS policy. Allowlisted so
-    // client code can't shadow server-written event names; unknown names are
-    // dropped loudly in dev, silently in prod (analytics must never crash UX).
-    const CLIENT_EVENTS = ['paywall_viewed', 'onboarding_started', 'walkthrough_started', 'walkthrough_completed', 'walkthrough_skipped'];
+    // 3.4: direct insert under the own-events-insert RLS policy. Allowlisted
+    // (CLIENT_EVENTS, module scope) so client code can't shadow server-written
+    // event names; unknown names are dropped loudly in dev, silently in prod
+    // (analytics must never crash UX).
     if (!CLIENT_EVENTS.includes(event)) {
       if (__DEV__) console.warn(`logEvent: "${event}" is not an allowlisted client event`);
       return;

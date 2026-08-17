@@ -605,6 +605,7 @@
     "remindersOnAt": "On · {{time}}",
     "remindersOff": "Off",
     "restorePurchases": "Restore Purchases",
+    "restoreDone": "Purchases restored. Premium is active again.",
     "reminderDays": "Reminder Days",
     "daysShort": [
       "S",
