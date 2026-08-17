@@ -167,6 +167,21 @@ tags:
 - assertNotVisible: 'Email support — opens your mail app'
 
 # ── About ──────────────────────────────────────────────────────────────────
+# ⚠️ Same FAB overlap as Sign Out below, and it bit here on 2026-08-17 (run
+# 32046087544). By the time the flow reaches About the list has scrolled far
+# enough that the row lands at y 2192–2271 while `fab-search` occupies
+# y 2198–2350, x 464–616. Maestro taps an element's CENTRE — (540, 2231) — which
+# is inside the FAB, so the tap opened the search overlay and the assertion
+# below then failed against the capture screen, describing a missing tagline
+# when the real fault was a stolen tap. Measured with `uiautomator dump` at the
+# exact pre-tap state; screenshot showed the translate modal, keyboard up.
+# Centring the row first moves it clear, exactly as for Sign Out.
+- scrollUntilVisible:
+    element:
+      id: 'settings-about'
+    direction: DOWN
+    centerElement: true
+    timeout: 15000
 - tapOn:
     id: 'settings-about'
 - assertVisible: 'Climb your vocabulary mountain, one word at a time.'

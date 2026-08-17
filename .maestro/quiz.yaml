@@ -87,11 +87,35 @@ tags:
 #
 # The button is the loop's own terminator: it renders ONLY on a face-down card,
 # so when the last rating flips the phase to 'end' the condition goes false.
+# ⚠️ THE TERMINATOR ABOVE IS A LIE ON RECALL CARDS (2026-08-17, run
+# 32046087544). A recall card auto-focuses its first letter input, so the IME
+# window opens over y≈1370–2400 and quizRevealButton — y 2218–2349 on a 2400px
+# screen — sits entirely behind it. A node fully covered by another WINDOW is not
+# `isVisibleToUser()`, so `while: visible: quizRevealButton` went FALSE with the
+# session still at card 4 of 9: no commit, no end screen, and the failure
+# surfaced 3 commands later as a missing "Great session!". `uiautomator dump`
+# listed the button with healthy bounds throughout — the same window-occlusion
+# signature that hid the mode beacon under the status bar (_layout.tsx
+# ModeBeacon). Both modes are in the fixture (see SELECTOR POLICY above), so this
+# was always reachable; it is not a new card type.
+#
+# Dismissing the keyboard to reach Reveal is INTENDED UI, not a layout defect
+# (Casey, 2026-08-17) — so the blur tap below is the flow modelling what a real
+# user does on a recall card, not a workaround. Do not "fix" the app to keep the
+# button above the IME on the strength of this comment.
+#
+# Hence: terminate on the END SPLASH, which no window can hide, and blur the
+# input each pass so the button is tappable. The blur MUST be a tap, not
+# `hideKeyboard` — Maestro implements that as a BACK press on Android, which
+# dismisses the fullScreenModal and drops the flow onto Home (measured).
+# 50%,30% is empty canvas above the card in BOTH modes, so it neither flips a
+# face-down card nor lands in the rating gutter.
 - repeat:
     while:
-      visible:
-        id: 'quizRevealButton'
+      notVisible: 'Great session!'
     commands:
+      - tapOn:
+          point: '50%,30%'
       - tapOn:
           id: 'quizRevealButton'
       - tapOn:
