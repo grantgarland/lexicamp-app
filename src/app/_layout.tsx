@@ -35,6 +35,54 @@ import { useUiStore } from '@/store/uiStore';
 import { PortalHost, Toast, useOverlayOpen } from '@/ui';
 import { WalkthroughProvider } from '@/tour/walkthrough';
 
+/* Mode beacon. Draws nothing (no backgroundColor) and pointerEvents="none" so it
+   can never intercept a tap; present in EVERY build (not __DEV__-gated) — its
+   whole job is to let a flow assert what it is running against BEFORE it asserts
+   anything about the UI.
+
+   It is a COMPONENT so RootLayout can render it in every branch, including the
+   pre-fonts one. See the fonts comment in RootLayout: while the beacon lived
+   only in the post-fonts tree, a stalled font load meant no beacon at all, and
+   all 8 nightly flows reported a mode mismatch for a fault that was nothing of
+   the kind. */
+function ModeBeacon() {
+  return (
+    <View
+      testID={`dataSource-${USE_SUPABASE ? 'live' : 'mock'}`}
+      // `accessible` + a label are REQUIRED, not decoration. A bare zero-size
+      // View is not an iOS accessibility element, so it never enters the
+      // hierarchy Maestro reads and the assertion fails even when the mode is
+      // correct.
+      accessible
+      accessibilityLabel={`dataSource ${USE_SUPABASE ? 'live' : 'mock'}`}
+      pointerEvents="none"
+      // POSITION IS LOAD-BEARING — it must not sit under the status bar.
+      // (2026-08-11 run 31373413201, root-caused locally 2026-08-14.)
+      //
+      // Android's accessibility tree drops a node that is entirely covered by
+      // another WINDOW, and the systemui StatusBar is its own window. On a Pixel
+      // 6 emulator (density 420):
+      //   InsetsSource type=statusBars frame=[0,0][1080,128]
+      // Anchored at top:0, this View was fully inside that 128px band, so every
+      // accessibility consumer — Maestro AND `uiautomator dump` — pruned it.
+      //
+      // This is NOT View-level visibility: `dumpsys activity top` reports the
+      // View as `V` with correct bounds the whole time, which is why the a11y
+      // node showed a healthy boundsInScreen next to `visible: false`, and why
+      // growing it 1dp -> 48dp fixed nothing — 48dp is 126px at this density,
+      // still 2px inside a 128px status bar. Measured with probe Views at
+      // several offsets: every probe at top:0 was pruned regardless of size,
+      // background or pointerEvents; every probe below the status bar survived.
+      //
+      // Hence top:'50%' — the one anchor guaranteed clear of BOTH system bars on
+      // any device, rather than a dp offset that a taller status bar or cutout
+      // could swallow again. iOS has no such filter, which is why a simulator
+      // run cannot catch a regression here.
+      style={{ position: 'absolute', top: '50%', left: 0, width: 48, height: 48 }}
+    />
+  );
+}
+
 // Minimal root. Real navigation (NavShell / tabs) lands in P3–P4.
 // Registered names MUST match `theme.fonts.*` in `@/theme/theme` — one family per
 // weight (RN custom fonts don't select weight reliably via `fontWeight`).
@@ -68,7 +116,7 @@ export default function RootLayout() {
 
   const [rebuildKey, setRebuildKey] = useState(scheme);
   if (!holdRebuild && rebuildKey !== scheme) setRebuildKey(scheme);
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Spectral: Spectral_400Regular,
     'Spectral-Medium': Spectral_500Medium,
     'Spectral-SemiBold': Spectral_600SemiBold,
@@ -82,7 +130,30 @@ export default function RootLayout() {
     'SpaceMono-Bold': SpaceMono_700Bold,
   });
 
-  if (!fontsLoaded) return null;
+  // FONTS MUST NOT GATE THE BEACON (2026-08-17, run 86781675442 — all 8 nightly
+  // flows failed at their FIRST command, `dataSource-mock is visible`). The
+  // beacon lived inside the tree below, so while this early-return was taken
+  // NOTHING existed to assert against: every flow reported a mode mismatch when
+  // the real fault was that the app had not rendered at all. Reproduced exactly
+  // by forcing this branch and running the real gate against the CI APK.
+  //
+  // Two failures compounded. First, the beacon's whole job is to say what the
+  // app is running against BEFORE any UI exists, so it cannot sit behind a UI
+  // precondition — it now renders in BOTH branches, via ModeBeacon.
+  //
+  // Second, `useFonts` returns [loaded, error] and the error was DISCARDED. A
+  // font failure therefore left fontsLoaded false forever: null tree, blank
+  // screen, no crash, nothing in logcat — indistinguishable from a hang, and
+  // invisible to a flow that can only report its first failed assertion. An
+  // error now falls through to render with system fallbacks: a wrong typeface
+  // is recoverable, a permanently blank app is not.
+  if (!fontsLoaded && !fontError) {
+    return (
+      <View style={{ flex: 1 }}>
+        <ModeBeacon />
+      </View>
+    );
+  }
   return (
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -137,47 +208,7 @@ export default function RootLayout() {
                 of the persistent nav — see ui/Portal + ui/Sheet + ui/Toast. */}
             <PortalHost />
             <Toast />
-            {/* Mode beacon. Draws nothing (no backgroundColor) and
-                pointerEvents="none" so it can never intercept a tap; present in
-                EVERY build (not __DEV__-gated) — its whole job is to let a flow
-                assert what it is running against BEFORE it asserts anything
-                about the UI. */}
-            <View
-              testID={`dataSource-${USE_SUPABASE ? 'live' : 'mock'}`}
-              // `accessible` + a label are REQUIRED, not decoration. A bare
-              // zero-size View is not an iOS accessibility element, so it never
-              // enters the hierarchy Maestro reads and the assertion fails even
-              // when the mode is correct.
-              accessible
-              accessibilityLabel={`dataSource ${USE_SUPABASE ? 'live' : 'mock'}`}
-              pointerEvents="none"
-              // POSITION IS LOAD-BEARING — it must not sit under the status bar.
-              // (2026-08-11 run 31373413201, root-caused locally 2026-08-14.)
-              //
-              // Android's accessibility tree drops a node that is entirely
-              // covered by another WINDOW, and the systemui StatusBar is its own
-              // window. On a Pixel 6 emulator (density 420):
-              //   InsetsSource type=statusBars frame=[0,0][1080,128]
-              // Anchored at top:0, this View was fully inside that 128px band, so
-              // every accessibility consumer — Maestro AND `uiautomator dump` —
-              // pruned it, taking 7 of the 8 nightly flows down at their FIRST
-              // command while iOS stayed green.
-              //
-              // This is NOT View-level visibility: `dumpsys activity top` reports
-              // the View as `V` with correct bounds the whole time, which is why
-              // the a11y node showed a healthy boundsInScreen next to
-              // `visible: false`, and why growing it 1dp -> 48dp fixed nothing —
-              // 48dp is 126px at this density, still 2px inside a 128px status
-              // bar. Measured with probe Views at several offsets: every probe at
-              // top:0 was pruned regardless of size, background or pointerEvents;
-              // every probe below the status bar survived.
-              //
-              // Hence top:'50%' — the one anchor guaranteed clear of BOTH system
-              // bars on any device, rather than a dp offset that a taller status
-              // bar or cutout could swallow again. iOS has no such filter, which
-              // is why a simulator run cannot catch a regression here.
-              style={{ position: 'absolute', top: '50%', left: 0, width: 48, height: 48 }}
-            />
+            <ModeBeacon />
             {/* DEFENCE IN DEPTH, not the actual exclusion (2026-08-06). In any
                 non-dev bundle this import has already been swapped for a no-op
                 stub at RESOLUTION time — `metro/excludedModules.js` — so the real
