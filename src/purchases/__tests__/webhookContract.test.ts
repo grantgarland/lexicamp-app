@@ -25,6 +25,50 @@ function migrationSource(suffix: string): string {
 
 const migration = migrationSource('revenuecat_webhook_mirror');
 
+const reconcileFn = readFileSync(join(ROOT, 'supabase/functions/revenuecat-reconcile/index.ts'), 'utf8');
+const reconcileSql = migrationSource('revenuecat_reconcile');
+
+describe('revenuecat-reconcile contract (3.14)', () => {
+  it('fails closed when the API key is unset', () => {
+    // ⚠️ A reconciler that quietly no-ops is worse than an absent one: the drift
+    // it exists to catch is itself silent, so a broken repair job is
+    // indistinguishable from a healthy system.
+    expect(reconcileFn).toContain("Deno.env.get('REVENUECAT_SECRET_API_KEY')");
+    expect(reconcileFn).toMatch(/if \(!apiKey\)[\s\S]{0,400}return json\(\{ error: 'not configured' \}, 500\)/);
+  });
+
+  it('keeps verify_jwt ON, unlike the webhook', () => {
+    // Invoked by our own scheduler with the service-role key, never by
+    // RevenueCat — so Supabase's JWT check is the right gate and there is no
+    // shared secret to misconfigure.
+    expect(reconcileFn).toMatch(/verify_jwt ON/);
+  });
+
+  it('never acts on a failed fetch, but treats 404 as a real answer', () => {
+    // Acting on a 5xx would revoke a live subscriber; 404 genuinely means
+    // RevenueCat has no such customer.
+    expect(reconcileFn).toContain('res.status !== 404');
+    expect(reconcileFn).toContain('subscriber: { entitlements: {} }');
+  });
+
+  it('checks only suspicious rows, never the whole table', () => {
+    // Cost proportional to the damage, not to the user base.
+    expect(reconcileFn).toContain('reconcile_candidates');
+    expect(reconcileSql).toContain('lapsed_but_active');
+    expect(reconcileSql).toContain('client_reported_lag');
+  });
+
+  it('revokes both service-role-only functions from signed-in users', () => {
+    // apply_revenuecat_snapshot can MINT subscriptions — the 21 P0-1 shape.
+    expect(reconcileSql).toMatch(/revoke all on function public\.reconcile_candidates\(int\) from public, anon, authenticated/);
+    expect(reconcileSql).toMatch(/revoke all on function public\.apply_revenuecat_snapshot\(uuid, jsonb\) from public, anon, authenticated/);
+  });
+
+  it('keeps the ordering guard so a snapshot cannot regress a newer event', () => {
+    expect(reconcileSql).toContain('excluded.last_event_ts >= s.last_event_ts');
+  });
+});
+
 describe('revenuecat-webhook contract', () => {
   it('carries the verify_jwt warning', () => {
     // With Supabase's default verify_jwt ON, RevenueCat (which sends no Supabase
