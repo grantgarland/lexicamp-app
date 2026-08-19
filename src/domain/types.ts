@@ -40,9 +40,30 @@ export interface Entitlement {
   platform: 'ios' | 'android' | null;
   currentPeriodEnd: Date | null;
 }
-/** Premium features unlocked? (trial/active/grace count as paid.) */
-export const isPaid = (e: Entitlement): boolean =>
-  e.status === 'trial' || e.status === 'active' || e.status === 'grace';
+/**
+ * Premium features unlocked? (trial/active/grace count as paid.)
+ *
+ * ⚠️ A LAPSED PERIOD IS NOT ENTITLEMENT, whatever the mirror still says.
+ * `status` is only ever corrected by an inbound RevenueCat EXPIRATION, so a
+ * single lost webhook — a delivery failure, a wrong shared secret, retries
+ * exhausted — used to grant premium FOREVER with no way back. That is not
+ * hypothetical: on 2026-08-17 a broken auth header ate one EXPIRATION and an
+ * account read `active` with a period end 16 hours in the past. The period end
+ * is the time-based backstop that makes the mirror self-correcting.
+ *
+ * `grace` is deliberately exempt: BILLING_ISSUE means "payment failed, keep
+ * access while it retries", and its period end is already past by definition,
+ * so including it here would revoke access the instant grace began.
+ *
+ * A NULL period end counts as paid — `set_dev_plan` writes status with no date,
+ * and a real subscriber missing the field should not lose access over absent
+ * data. The server RPCs apply the same rule; see `is_paid()` in the database.
+ */
+export const isPaid = (e: Entitlement): boolean => {
+  if (e.status === 'grace') return true;
+  if (e.status !== 'trial' && e.status !== 'active') return false;
+  return e.currentPeriodEnd == null || e.currentPeriodEnd.getTime() > Date.now();
+};
 
 /** decks */
 export interface Deck {
