@@ -85,6 +85,33 @@ describe('purchases wiring', () => {
     expect(row).not.toContain('openPaywall');
   });
 
+  it('sends Manage Subscription to the store, never to the paywall', () => {
+    // ⚠️ This row shipped as `onPress={openPaywall}` while its own subtitle read
+    // "View in App Store". A subscriber taps it mostly to CANCEL, so answering
+    // with an upsell contradicts the label and reads as a dark pattern — and only
+    // the store can change a subscription anyway.
+    const settings = src('src/screens/SettingsScreen.tsx');
+    const id = settings.indexOf('testID="settings-manage-subscription"');
+    expect(id).toBeGreaterThan(-1);
+    const row = settings.slice(settings.lastIndexOf('<ListItem', id), settings.indexOf('/>', id));
+    expect(row).toContain('handleManage');
+    expect(row).not.toContain('openPaywall');
+    expect(settings).toContain('openManageSubscriptions');
+  });
+
+  it('renders the real period end, never a placeholder', () => {
+    // `renewDatePlaceholder` was the literal string "next month", shown to every
+    // paying subscriber regardless of their actual date, while
+    // Entitlement.currentPeriodEnd carried the truth all along.
+    const settings = src('src/screens/SettingsScreen.tsx');
+    expect(settings).toContain('entitlement?.currentPeriodEnd');
+    expect(settings).not.toContain('renewDatePlaceholder');
+    // ⚠️ "Renews" cannot be honest until something records that auto-renew is off:
+    // CANCELLATION leaves status='active', so a cancelled plan would still claim
+    // it renews. "Active until" is true either way.
+    expect(settings).not.toMatch(/t\('settings\.renews'/);
+  });
+
   it('treats a missing entitlement as unentitled', () => {
     expect(hasPremium(null)).toBe(false);
     expect(hasPremium(undefined)).toBe(false);

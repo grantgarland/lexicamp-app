@@ -113,5 +113,15 @@ export function initSessionSync(): void {
   AppState.addEventListener('change', (state) => {
     if (state !== 'active') return;
     void supabase.auth.getSession().then(({ data }) => run(data.session?.user.id));
+    // ⚠️ ALSO re-read entitlement, because nothing else ever will.
+    // `waitForServerEntitlement` polls for ~15s after a purchase and then gives
+    // up for good; `refetchOnWindowFocus` is off globally; and the only other
+    // invalidation of this key lives in the purchase flow itself. So a webhook
+    // that lands even slightly late left a PAYING customer looking at the free
+    // UI until they force-quit the app or found the Restore button — observed
+    // 2026-08-19. RevenueCat's own customer-info listener does not help here:
+    // it fires when REVENUECAT's view changes, which already happened; the
+    // thing that changed late is OUR mirror.
+    void queryClient.invalidateQueries({ queryKey: ['entitlement'] });
   });
 }

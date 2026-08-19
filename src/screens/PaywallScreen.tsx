@@ -38,6 +38,13 @@ export function PaywallScreen() {
   const router = useRouter();
   const [plan, setPlan] = useState<Plan>('annual');
   const [purchased, setPurchased] = useState(false);
+  // ⚠️ Captured AT PURCHASE TIME, and false for a restore. The success copy
+  // claimed a 7-day trial unconditionally, so a returning subscriber who was
+  // charged immediately was told they were not. That is a false statement about
+  // money on a purchase confirmation, which is both a support ticket and a
+  // review risk. Only the annual product carries the trial, and only for a user
+  // StoreKit says is still intro-eligible.
+  const [boughtTrial, setBoughtTrial] = useState(false);
   // DF-9 v2 (19 rev §5): `trigger=word_pace` = arrived by spending today's
   // daily saves (or the starter allotment) → pace-framed heading instead of
   // the generic upsell.
@@ -61,6 +68,15 @@ export function PaywallScreen() {
   // is not (mock/smoke builds) the demo strings keep the paywall renderable for
   // the Maestro suite without inventing a price for a real shopper.
   const live = purchasesReady();
+  // ⚠️ Diagnostic only, no UI effect. A FAILED eligibility check and a genuine
+  // "offer already used" both render as no-trial-copy, so without this emit we
+  // could quietly stop advertising the trial to every eligible user and never
+  // find out. Fires once per paywall view, and only in a live build.
+  const eligibilityUnknown = live && offering != null && !offering.trialEligibilityKnown;
+  useEffect(() => {
+    if (eligibilityUnknown) logEvent('trial_eligibility_unknown');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eligibilityUnknown]);
   const selected: PaywallPlan | null = live ? (offering?.[plan] ?? null) : null;
   const canBuy = !isBusy && (!live || selected != null);
   const trialOffered = live ? (offering?.annual?.trialEligible ?? false) : true;
@@ -79,8 +95,12 @@ export function PaywallScreen() {
     }
     if (selected == null) return;
     try {
+      const trial = selected.trialEligible;
       const outcome = await buy(selected);
-      if (outcome === 'purchased') setPurchased(true);
+      if (outcome === 'purchased') {
+        setBoughtTrial(trial);
+        setPurchased(true);
+      }
       // 'cancelled' falls through deliberately: no state change, no message.
     } catch {
       setError(t('paywall.purchaseFailed'));
@@ -117,7 +137,11 @@ export function PaywallScreen() {
           </View>
           <RawText style={styles.successTitle}>{t('paywall.successTitle')}</RawText>
           <RawText style={styles.successBody}>
-            {mirrorLagged ? t('paywall.successPending') : t('paywall.successBody')}
+            {mirrorLagged
+              ? t('paywall.successPending')
+              : boughtTrial
+                ? t('paywall.successBody')
+                : t('paywall.successBodyPaid')}
           </RawText>
           <View style={styles.successCta}>
             <Button title={t('paywall.continue')} variant="primary" onPress={close} />

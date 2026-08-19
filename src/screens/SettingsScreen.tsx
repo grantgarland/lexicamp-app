@@ -14,8 +14,9 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { FREE_DAILY_SAVES, FREE_WORD_BASE, freeTierUsage } from '@/domain/derive';
 import { useTranslation } from '@/i18n';
 import { useEntitlement, useHomeData, useLearningLanguages, useLogEvent, useNotificationPrefs, useProfile } from '@/query/hooks';
-import { purchasesReady } from '@/purchases/purchases';
+import { openManageSubscriptions, purchasesReady } from '@/purchases/purchases';
 import { usePurchaseController } from '@/purchases/usePurchases';
+import { shortDate } from '@/lib/relativeTime';
 import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
 import { useUiStore } from '@/store/uiStore';
 import { findLanguage } from '@/constants';
@@ -56,7 +57,7 @@ export function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const setWalkthroughRequested = useUiStore((s) => s.setWalkthroughRequested);
   const profile = useProfile();
-  const { isPaid } = useEntitlement();
+  const { entitlement, isPaid } = useEntitlement();
   const { snapshot } = useHomeData();
   const { prefs: notifPrefs } = useNotificationPrefs();
   const quizLength = usePrefsStore((s) => s.quizLength);
@@ -78,12 +79,19 @@ export function SettingsScreen() {
       showToast({ variant: 'info', message: t('paywall.restoreNone') });
       return;
     }
+    // Captured BEFORE the call: "restored" and "you were already premium" are
+    // different events, and telling someone their subscription came back when it
+    // never left is a small lie that erodes the message's meaning when it matters.
+    const wasPaid = isPaid;
     try {
       const { restored, mirrored } = await restore();
       if (!restored) {
         showToast({ variant: 'info', message: t('paywall.restoreNone') });
       } else if (mirrored) {
-        showToast({ variant: 'success', message: t('settings.restoreDone') });
+        showToast({
+          variant: 'success',
+          message: wasPaid ? t('settings.restoreAlreadyActive') : t('settings.restoreDone'),
+        });
       } else {
         // StoreKit restored it; our mirror has not caught up. Telling the user
         // it failed would be false, and `entitlement_mirror_lag` has already
@@ -92,6 +100,16 @@ export function SettingsScreen() {
       }
     } catch {
       showToast({ variant: 'destructive', message: t('paywall.restoreFailed') });
+    }
+  };
+
+  // Hands off to the store's own management sheet — see openManageSubscriptions.
+  // ⚠️ Never route this to the paywall: the tap usually means "I want to cancel".
+  const handleManage = async () => {
+    try {
+      await openManageSubscriptions();
+    } catch {
+      showToast({ variant: 'destructive', message: t('settings.manageUnavailable') });
     }
   };
 
@@ -197,14 +215,25 @@ export function SettingsScreen() {
                   <RawText style={styles.planName}>{t('settings.premiumPlan')}</RawText>
                   <PremiumBadge small />
                 </View>
-                <RawText style={styles.planSub}>{t('settings.renews', { date: t('settings.renewDatePlaceholder') })}</RawText>
+                {/* ⚠️ "Active until", not "Renews". After a CANCELLATION the mirror
+                    keeps status='active' with nothing recording that auto-renew is
+                    off, so we cannot tell "renews on the 24th" from "ends on the
+                    24th". "Active until" is true either way; promising a renewal
+                    that will not happen is a support ticket. Say "renews" only once
+                    an auto_renew/cancelled_at column exists to back it. */}
+                {entitlement?.currentPeriodEnd != null && (
+                  <RawText style={styles.planSub}>
+                    {t('settings.activeUntil', { date: shortDate(entitlement.currentPeriodEnd, t) })}
+                  </RawText>
+                )}
               </View>
               <ListItem
                 leading={<IconTile><IconStar size={15} color={theme.color.brand} /></IconTile>}
                 title={t('settings.manageSubscription')}
                 subtitle={t('settings.viewInStore')}
                 trailing={<Chevron />}
-                onPress={openPaywall}
+                testID="settings-manage-subscription"
+                onPress={() => void handleManage()}
                 last
               />
             </>

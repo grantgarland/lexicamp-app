@@ -16,7 +16,7 @@
 // The SDK is `require`d lazily rather than imported at the top so a build that
 // fails the guard never loads the native module at all. Types come in through
 // `import type`, which is erased at compile time and pulls nothing in at runtime.
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import type { CustomerInfo, PurchasesOffering, PurchasesPackage } from 'react-native-purchases';
 
 import { USE_SUPABASE } from '@/data';
@@ -120,6 +120,15 @@ export interface PaywallPlan {
 export interface PaywallOffering {
   annual: PaywallPlan | null;
   monthly: PaywallPlan | null;
+  /** False when the intro-eligibility CHECK FAILED, as opposed to returning a
+   *  genuine "not eligible".
+   *
+   *  ⚠️ Both render identically — no trial copy — so without this flag a broken
+   *  check is indistinguishable from a used-up offer, and we would silently stop
+   *  advertising the trial to every eligible user with nothing to show for it.
+   *  The UI behaviour is the same either way (never over-promise); this exists
+   *  purely so the failure is REPORTABLE. */
+  trialEligibilityKnown: boolean;
 }
 
 /** Read the CURRENT offering (not the `default` identifier) so the paywall can be
@@ -145,7 +154,7 @@ export async function getPaywallOffering(): Promise<PaywallOffering | null> {
     .filter((p): p is PurchasesPackage => p != null)
     .map((p) => p.product.identifier);
 
-  const eligibility = await checkTrialEligibility(productIds);
+  const { eligible: eligibility, known: trialEligibilityKnown } = await checkTrialEligibility(productIds);
   const toPlan = (id: PlanId, pkg: PurchasesPackage | null): PaywallPlan | null =>
     pkg == null
       ? null
@@ -157,7 +166,11 @@ export async function getPaywallOffering(): Promise<PaywallOffering | null> {
           pkg,
         };
 
-  return { annual: toPlan('annual', annualPkg), monthly: toPlan('monthly', monthlyPkg) };
+  return {
+    annual: toPlan('annual', annualPkg),
+    monthly: toPlan('monthly', monthlyPkg),
+    trialEligibilityKnown,
+  };
 }
 
 /**
@@ -170,9 +183,11 @@ export async function getPaywallOffering(): Promise<PaywallOffering | null> {
  * SDK's own guidance is to show the non-intro price when it cannot tell, because
  * over-promising is the worse error.
  */
-async function checkTrialEligibility(productIds: string[]): Promise<Set<string>> {
+async function checkTrialEligibility(
+  productIds: string[],
+): Promise<{ eligible: Set<string>; known: boolean }> {
   const eligible = new Set<string>();
-  if (productIds.length === 0) return eligible;
+  if (productIds.length === 0) return { eligible, known: true };
   try {
     const Purchases = sdk();
     const result = await Purchases.checkTrialOrIntroductoryPriceEligibility(productIds);
@@ -180,10 +195,12 @@ async function checkTrialEligibility(productIds: string[]): Promise<Set<string>>
     for (const [productId, info] of Object.entries(result ?? {})) {
       if ((info as { status?: unknown })?.status === ELIGIBLE) eligible.add(productId);
     }
+    return { eligible, known: true };
   } catch {
-    /* leave the set empty — no trial promised */
+    // Still no trial promised — over-promising stays the worse error — but the
+    // caller now knows this was a FAILURE, not a verdict, and can report it.
+    return { eligible, known: false };
   }
-  return eligible;
 }
 
 export type PurchaseOutcome = 'purchased' | 'cancelled';
@@ -221,6 +238,32 @@ export async function restorePurchases(): Promise<boolean> {
  *  shape of the P0-1 bug in 21. */
 export function hasPremium(info: CustomerInfo | null | undefined): boolean {
   return info?.entitlements?.active?.[PREMIUM_ENTITLEMENT] != null;
+}
+
+/** The store's own subscription-management surface.
+ *
+ * ⚠️ This must never be an in-app screen. A subscriber taps "Manage
+ * Subscription" mostly to CANCEL, and answering that with a paywall — which is
+ * what Settings did until 2026-08-17 — reads as a dark pattern, contradicts the
+ * row's own "View in App Store" label, and is the kind of thing review taps.
+ * Only the store can actually change a subscription anyway.
+ *
+ * `showManageSubscriptions()` opens the native sheet (iOS 15+). The URL fallback
+ * covers the SDK being unconfigured (mock/smoke builds) and any throw, because a
+ * management affordance that silently does nothing is the original bug again. */
+const MANAGE_URL_IOS = 'https://apps.apple.com/account/subscriptions';
+const MANAGE_URL_ANDROID = 'https://play.google.com/store/account/subscriptions';
+
+export async function openManageSubscriptions(): Promise<void> {
+  if (purchasesReady()) {
+    try {
+      await sdk().showManageSubscriptions();
+      return;
+    } catch {
+      /* fall through to the store URL */
+    }
+  }
+  await Linking.openURL(Platform.OS === 'android' ? MANAGE_URL_ANDROID : MANAGE_URL_IOS);
 }
 
 /** RevenueCat's own view, for the post-purchase discrepancy check. */

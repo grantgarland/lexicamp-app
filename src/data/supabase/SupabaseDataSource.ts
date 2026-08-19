@@ -54,6 +54,10 @@ const CLIENT_EVENTS = [
   // The webhook's only health signal — StoreKit says paid, our mirror never
   // agreed. Invisible from both dashboards, so it has to arrive from here.
   'entitlement_mirror_lag',
+  // The intro-eligibility check FAILED (as opposed to reporting ineligible).
+  // Both look identical on the paywall — no trial copy — so this is the only
+  // way to notice we have stopped advertising a trial we could have honoured.
+  'trial_eligibility_unknown',
   // Onboarding / walkthrough funnel.
   'onboarding_started',
   'walkthrough_started',
