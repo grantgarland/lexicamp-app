@@ -58,6 +58,22 @@ describe('revenuecat-reconcile contract (3.14)', () => {
     expect(reconcileSql).toContain('client_reported_lag');
   });
 
+  it('catches TRANSFER recipients, who no other path would notice', () => {
+    // ⚠️ A TRANSFER payload has no app_user_id — only transferred_from/_to — so
+    // apply_revenuecat_event revokes the old owner and grants nobody. It also
+    // carries no product or expiry, so only RevenueCat can say what the
+    // recipient now owns. Without this the only rescue is the user happening to
+    // tap Restore; someone who just signs in stays wrongly free until the next
+    // renewal, which for an annual plan is a year.
+    const sql = migrationSource('reconcile_candidates_transfer_recipients');
+    expect(sql).toContain('transfer_recipient');
+    expect(sql).toContain("e.payload->'transferred_to'");
+    // LEFT JOIN + coalesce: the recipient may have no subscriptions row at all,
+    // and is_paid_state returns NULL rather than false for a missing row.
+    expect(sql).toContain('left join public.subscriptions');
+    expect(sql).toContain('coalesce(public.is_paid_state(s.status, s.current_period_end), false)');
+  });
+
   it('revokes both service-role-only functions from signed-in users', () => {
     // apply_revenuecat_snapshot can MINT subscriptions — the 21 P0-1 shape.
     expect(reconcileSql).toMatch(/revoke all on function public\.reconcile_candidates\(int\) from public, anon, authenticated/);
