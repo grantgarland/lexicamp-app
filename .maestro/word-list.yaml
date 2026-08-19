@@ -127,10 +127,17 @@ tags:
 # Reset returns the full set — and undoes the Z–A sort too, so 'adventure' is
 # back on the first screenful. `filter-reset` is the sheet's own Reset, distinct
 # from re-toggling every chip by hand.
+#
+# Reset clears the sheet's DRAFT and leaves the sheet open (UX audit) — it no
+# longer commits on its own, so Apply is the step that reaches the list. Apply
+# is enabled here precisely because Reset just made the draft differ from the
+# filter that is applied.
 - tapOn:
     id: 'words-filter'
 - tapOn:
     id: 'filter-reset'
+- tapOn:
+    id: 'filter-apply'
 - assertVisible: '60 words'
 - assertVisible: '.*melancólico.*'
 

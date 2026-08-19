@@ -90,9 +90,16 @@ const PAIRS = [
   // Primary-CTA fill option (accent-cta = amber-700 + white label) — the
   // amber-700-on-white treatment Casey is validating.
   { fg: 'textOnAccentCta', bg: 'accentCta', kind: 'text' },
-  // Button `destructive` variant — split from textOnAccent in 3.11b (the two
-  // only shared a value by coincidence before).
+  // Danger text/icons ON a canvas or card — the semantic pair, which dark mode
+  // deliberately inverts (lighter red, darker ink).
   { fg: 'textOnDanger', bg: 'danger', kind: 'text' },
+  // Solid-red destructive FILLS — Button `destructive`, WordRow + LanguageSwitcher
+  // swipe-tray delete actions. These pin red-600 + white in BOTH themes rather
+  // than following `danger`, because the semantic pair inverts to near-black-on-
+  // pink on a full-bleed tile. Literal hex because DANGER_SOLID/ON_DANGER_SOLID
+  // are constants in src/theme/theme.ts, not generated color tokens — keep the
+  // three in sync. 6.03:1; white on the dark theme's `danger` would be 2.77:1.
+  { fg: '#ffffff', bg: '#af3848', kind: 'text' },
   // WordRow/SearchScreen solid-brand action buttons + active segments.
   { fg: '#ffffff', bg: 'brand', kind: 'text' },
   // Amber used as TEXT/icon directly on a light card (not a solid fill) — the

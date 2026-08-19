@@ -63,9 +63,12 @@ export function MasteryCard({
             accessibilityLabel={t('masteryCard.tierInfoA11y')}
           />
         </View>
-        <RNText style={[styles.subtitle, isEmpty && styles.subtitleEmpty]}>
-          {isEmpty ? t('masteryCard.subtitleEmpty') : t('masteryCard.subtitle', { count: total })}
-        </RNText>
+        {/* Subtitle survives ONLY as the empty-state prompt (UX audit). The
+            "N words across 5 tiers" count restated the bar directly beneath it
+            and the "N memories forming / N mastered" row beneath that — three
+            readings of one number. With nothing saved there is no bar to read,
+            so the line is the card's only instruction and stays. */}
+        {isEmpty && <RNText style={[styles.subtitle, styles.subtitleEmpty]}>{t('masteryCard.subtitleEmpty')}</RNText>}
       </View>
 
       {/* Proportional tier bar — each segment opens its tier tooltip */}
@@ -202,7 +205,10 @@ const styles = StyleSheet.create((theme) => {
     cardEmpty: { borderColor: color.border, boxShadow: theme.shadow.xs },
     header: { marginBottom: 14 },
     eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-    eyebrow: { fontFamily: fonts.sans.bold, fontSize: 10, letterSpacing: 0.9, textTransform: 'uppercase', color: color.textMuted },
+    // 11px, not 10: with the count subtitle gone the eyebrow carries the card's
+    // header on its own, and at 10 it read as a caption floating above the bar
+    // rather than a title. Still the kit's eyebrow treatment, just one step up.
+    eyebrow: { fontFamily: fonts.sans.bold, fontSize: 11, letterSpacing: 0.9, textTransform: 'uppercase', color: color.textMuted },
     subtitle: { fontFamily: fonts.sans.regular, fontSize: 13, lineHeight: 17, color: color.textMuted },
     subtitleEmpty: { color: color.textFaint },
 

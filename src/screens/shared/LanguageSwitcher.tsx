@@ -18,6 +18,8 @@ import { Pressable, View } from 'react-native';
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { DANGER_SOLID, ON_DANGER_SOLID } from '@/theme/theme';
+
 import { findLanguage, languageShortLabel, TRANSLATABLE_LANGUAGES } from '@/constants';
 import { languageName } from '@/domain/derive';
 import type { LanguageCode } from '@/domain/types';
@@ -259,14 +261,16 @@ function EnrolledLanguageRow({
             // Maestro tap target — trays only mount while swiped open, so at
             // most one row's action exists at a time and the id stays unique.
             testID="lang-row-delete"
-            style={[styles.trayAction, { backgroundColor: theme.color.danger }]}
+            // Full-bleed red tile → the pinned solid pair, not the canvas one
+            // (DANGER_SOLID in theme.ts). Matches WordRow's delete tray.
+            style={[styles.trayAction, { backgroundColor: DANGER_SOLID }]}
             onPress={() => {
               ref.current?.close();
               onDelete();
             }}
           >
-            <IconTrash size={18} color={theme.color.textOnDanger} />
-            <RawText style={[styles.trayLabel, { color: theme.color.textOnDanger }]}>{t('langSwitcher.removeAction')}</RawText>
+            <IconTrash size={18} color={ON_DANGER_SOLID} />
+            <RawText style={styles.trayLabel}>{t('langSwitcher.removeAction')}</RawText>
           </Pressable>
         </View>
       )}

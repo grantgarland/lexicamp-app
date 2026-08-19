@@ -13,11 +13,10 @@ import { useIsDark } from '@/theme/appearance';
 import { getTierByStability, tierView } from '@/theme/tiers';
 import { DetailStats } from './DetailStats';
 import { InlineNote } from './InlineNote';
-import { IconArchive, IconMoreVertical, IconTrash } from './icons';
+import { IconArchive, IconPencil, IconTrash } from './icons';
 import { Button } from './Button';
 import { Sheet } from './Sheet';
 import { RawText as Text } from './Text';
-import { TierBadge } from './TierBadge';
 
 export interface WordDetailSheetProps {
   word: WordListItem | null;
@@ -26,7 +25,7 @@ export interface WordDetailSheetProps {
   onDelete?: (w: WordListItem) => void;
   /** 18 §E3: archive / unarchive (label follows word.suspended). Omit to hide. */
   onToggleArchive?: (w: WordListItem) => void;
-  /** Edit Translations (Premium, 2026-07-28): shows the ⋮ overflow button in the
+  /** Edit Translations (Premium, 2026-07-28): shows the pencil button in the
    *  sheet's top-right corner. The caller decides what a free-tier tap does
    *  (route to the paywall) — this component only surfaces the affordance. */
   onEditTranslation?: (w: WordListItem) => void;
@@ -88,28 +87,37 @@ export function WordDetailSheet({ word, onClose, onDelete, onToggleArchive, onEd
               accessibilityLabel={t('editTranslation.openA11y')}
               testID="word-detail-overflow"
               // Top-right of the sheet body, clear of the drag handle above it.
-              // Hit slop rather than a bigger box so the ⋮ stays visually light
+              // Hit slop rather than a bigger box so the icon stays visually light
               // while still meeting the 44pt touch minimum.
               hitSlop={12}
               style={({ pressed }) => [styles.overflow, pressed && { opacity: 0.6 }]}
             >
-              <IconMoreVertical size={18} color={theme.color.textMuted} />
+              {/* Pencil, not ⋮ (UX audit): this control does exactly one thing —
+                  edit the translation — and an overflow glyph promises a menu. */}
+              <IconPencil size={18} color={theme.color.textMuted} />
             </Pressable>
           )}
+          {/* Tier badge removed (UX audit): the memory card directly below states
+              this word's tier by name, so the chip was the same fact twice in
+              adjacent rows. Part of speech spells out in full — see mappers.ts,
+              which resolves pos_tag through the `pos.*` namespace. */}
           <View style={styles.metaRow}>
             <View style={styles.posPill}>
               <Text style={styles.posPillText}>{word.pos}</Text>
             </View>
-            <TierBadge tier={tier.id} variant="pill" size="md" />
           </View>
           <View style={[styles.memoryCard, { backgroundColor: tier.bg, borderColor: tier.border }]}>
             <View style={styles.memoryTop}>
               <Text style={[styles.memoryTier, { color: tier.text }]}>{t(`tier.${tier.id}.name`)}</Text>
               <Text style={[styles.memoryDays, { color: tier.text }]}>{t('wordList.memoryStrengthDays', { count: Math.round(word.stability) })}</Text>
             </View>
-            {/* 18-session: tier-desc subheader cut — the tier name + days already
-                say it; the hint below is the one line that earns the space. */}
-            <Text style={[styles.memoryHint, { color: tier.text, borderTopColor: tier.border }]}>{t('wordList.memoryHint')}</Text>
+            {/* The tier's own description, verbatim from the Home tier tooltip
+                (MasteryCard renders the same `tier.<id>.desc`) — one explanation
+                of a tier, in one place, however you arrive at it. This reinstates
+                a line the 18-session pass had cut in favour of a generic
+                "memory strength = …" definition; the audit's call is that the
+                per-tier guidance earns the space and the definition did not. */}
+            <Text style={[styles.memoryHint, { color: tier.text, borderTopColor: tier.border }]}>{t(`tier.${tier.id}.desc`)}</Text>
           </View>
           {exampleLead !== '' ? (
             <>

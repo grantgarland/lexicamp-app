@@ -322,3 +322,67 @@ describe('Word List — deferred filtering (perf 2026-08-05)', () => {
     expect(screen.getByText(t('wordList.apply'))).toBeDisabled();
   });
 });
+
+// The Filter & Sort CTAs gate on the sheet's DRAFT (UX audit): Apply lights up
+// when the draft differs from what's applied, Reset when it differs from the
+// defaults. Both were previously always-live, so "Apply" on an untouched sheet
+// re-ran the whole filter for nothing and "Reset" on a default filter looked
+// like it should do something. The failure mode if this regresses is silent —
+// the buttons still work, they just stop telling you whether they'd do anything.
+describe('Word List — filter sheet CTA gating', () => {
+  const openSheet = () => fireEvent.press(screen.getByTestId('words-filter'));
+  const isDisabled = (testID) =>
+    screen.getByTestId(testID).props.accessibilityState?.disabled === true;
+
+  it('opens with both CTAs inert on an untouched default filter', () => {
+    renderScreen();
+    openSheet();
+
+    // Nothing drafted yet → Apply has nothing to commit…
+    expect(isDisabled('filter-apply')).toBe(true);
+    // …and the filter is already the default → Reset has nothing to clear.
+    expect(isDisabled('filter-reset')).toBe(true);
+  });
+
+  it('enables both once the draft moves off the default', () => {
+    renderScreen();
+    openSheet();
+    fireEvent.press(screen.getByTestId('sort-alpha'));
+
+    expect(isDisabled('filter-apply')).toBe(false);
+    expect(isDisabled('filter-reset')).toBe(false);
+  });
+
+  it('re-inerts Apply when the draft is returned to what is already applied', () => {
+    renderScreen();
+    openSheet();
+    // Off the default and back again: Apply must notice it has nothing to do,
+    // rather than latching "dirty" on the first interaction.
+    fireEvent.press(screen.getByTestId('sort-alpha'));
+    fireEvent.press(screen.getByTestId('sort-added'));
+
+    expect(isDisabled('filter-apply')).toBe(true);
+    expect(isDisabled('filter-reset')).toBe(true);
+  });
+
+  it('Reset clears the draft in place, leaving Apply live to commit it', () => {
+    renderScreen();
+    openSheet();
+    fireEvent.press(screen.getByTestId('tier-filter-bc'));
+    fireEvent.press(screen.getByTestId('filter-apply'));
+
+    // Re-open: the tier filter is now the APPLIED state, so the draft matches
+    // it (Apply inert) but differs from the defaults (Reset live).
+    openSheet();
+    expect(isDisabled('filter-apply')).toBe(true);
+    expect(isDisabled('filter-reset')).toBe(false);
+
+    fireEvent.press(screen.getByTestId('filter-reset'));
+
+    // Reset does NOT commit — the sheet stays open with a defaulted draft, and
+    // Apply is what reaches the list. Flipped from the pre-audit behaviour,
+    // where Reset applied and closed on its own (.maestro/word-list.yaml).
+    expect(isDisabled('filter-reset')).toBe(true);
+    expect(isDisabled('filter-apply')).toBe(false);
+  });
+});
