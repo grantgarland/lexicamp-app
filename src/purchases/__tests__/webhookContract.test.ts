@@ -4,15 +4,26 @@
 // would notice if these regressed — and each one fails by quietly doing nothing
 // rather than by erroring. Same precedent as captureGateParity.test.ts, which
 // also reads supabase/functions/ from a jest test.
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const ROOT = join(__dirname, '..', '..', '..');
 const fn = readFileSync(join(ROOT, 'supabase/functions/revenuecat-webhook/index.ts'), 'utf8');
-const migration = readFileSync(
-  join(ROOT, 'supabase/migrations/20260815020000_revenuecat_webhook_mirror.sql'),
-  'utf8',
-);
+
+/** Resolve a migration by NAME, never by timestamp.
+ *
+ *  ⚠️ `npx supabase migration fetch` rewrites local files to the timestamps the
+ *  remote history recorded, so a migration authored as 20260815020000 came back
+ *  as 20260816020522 and a hardcoded path here broke the whole suite — the guard
+ *  went dark exactly when the schema moved, which is when it is most needed. */
+function migrationSource(suffix: string): string {
+  const dir = join(ROOT, 'supabase/migrations');
+  const file = readdirSync(dir).find((f) => f.endsWith(`_${suffix}.sql`));
+  if (file == null) throw new Error(`no migration matching *_${suffix}.sql in ${dir}`);
+  return readFileSync(join(dir, file), 'utf8');
+}
+
+const migration = migrationSource('revenuecat_webhook_mirror');
 
 describe('revenuecat-webhook contract', () => {
   it('carries the verify_jwt warning', () => {
