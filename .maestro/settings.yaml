@@ -141,6 +141,24 @@ tags:
 - assertNotVisible: 'Study preferences updated'
 
 # ── How Lexicamp works (the educator; also the walkthrough's entry point) ───
+# ⚠️ FAB overlap again — CENTRE THIS ROW (2026-08-19, run 87375797085). The
+# RevenueCat work added `settings-manage-subscription` and
+# `settings-restore-purchases` above, pushing every row below down ~290px.
+# Measured at the pre-tap state on a 1080x2400 Pixel 6:
+#   settings-how-it-works  centre y 1976   (222px clear of the FAB)
+#   settings-support       centre y 2120   (78px clear)
+#   settings-about         centre y 2231   (INSIDE fab-search, y 2198-2350)
+# 78px is not clearance, it is luck: the row's screen position depends on where
+# the list happens to settle, so this passes on a fast emulator and failed on
+# CI's slower one, where the assertion below then ran against the capture
+# screen. Centring pins the row mid-screen regardless of scroll. Every row in
+# this bottom region needs it, and each new Settings row moves the next one in.
+- scrollUntilVisible:
+    element:
+      id: 'settings-how-it-works'
+    direction: DOWN
+    centerElement: true
+    timeout: 15000
 - tapOn:
     id: 'settings-how-it-works'
 # 'The science behind your climb.' and not the sheet TITLE: the Settings row
@@ -153,6 +171,24 @@ tags:
 - assertNotVisible: 'The science behind your climb.'
 
 # ── Contact Support ────────────────────────────────────────────────────────
+# ⚠️ FAB overlap again — CENTRE THIS ROW (2026-08-19, run 87375797085). The
+# RevenueCat work added `settings-manage-subscription` and
+# `settings-restore-purchases` above, pushing every row below down ~290px.
+# Measured at the pre-tap state on a 1080x2400 Pixel 6:
+#   settings-how-it-works  centre y 1976   (222px clear of the FAB)
+#   settings-support       centre y 2120   (78px clear)
+#   settings-about         centre y 2231   (INSIDE fab-search, y 2198-2350)
+# 78px is not clearance, it is luck: the row's screen position depends on where
+# the list happens to settle, so this passes on a fast emulator and failed on
+# CI's slower one, where the assertion below then ran against the capture
+# screen. Centring pins the row mid-screen regardless of scroll. Every row in
+# this bottom region needs it, and each new Settings row moves the next one in.
+- scrollUntilVisible:
+    element:
+      id: 'settings-support'
+    direction: DOWN
+    centerElement: true
+    timeout: 15000
 - tapOn:
     id: 'settings-support'
 # Same trap as above — the Settings row also reads "Contact Support" — so the
