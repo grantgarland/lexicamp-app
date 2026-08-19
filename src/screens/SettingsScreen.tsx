@@ -215,15 +215,22 @@ export function SettingsScreen() {
                   <RawText style={styles.planName}>{t('settings.premiumPlan')}</RawText>
                   <PremiumBadge small />
                 </View>
-                {/* ⚠️ "Active until", not "Renews". After a CANCELLATION the mirror
-                    keeps status='active' with nothing recording that auto-renew is
-                    off, so we cannot tell "renews on the 24th" from "ends on the
-                    24th". "Active until" is true either way; promising a renewal
-                    that will not happen is a support ticket. Say "renews" only once
-                    an auto_renew/cancelled_at column exists to back it. */}
+                {/* Three states, because `status` alone cannot tell them apart:
+                    a CANCELLATION leaves status='active' and only `autoRenew`
+                    records that it will not renew (3.15). NULL stays on the
+                    neutral wording — rows written before that column existed have
+                    no evidence either way, and guessing "Renews" there is the
+                    support ticket this replaced. */}
                 {entitlement?.currentPeriodEnd != null && (
                   <RawText style={styles.planSub}>
-                    {t('settings.activeUntil', { date: shortDate(entitlement.currentPeriodEnd, t) })}
+                    {t(
+                      entitlement.autoRenew === true
+                        ? 'settings.renewsOn'
+                        : entitlement.autoRenew === false
+                          ? 'settings.endsOn'
+                          : 'settings.activeUntil',
+                      { date: shortDate(entitlement.currentPeriodEnd, t) },
+                    )}
                   </RawText>
                 )}
               </View>

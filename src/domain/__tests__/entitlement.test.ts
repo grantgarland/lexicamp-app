@@ -13,6 +13,7 @@ const ent = (over: Partial<Entitlement> = {}): Entitlement => ({
   plan: 'annual',
   platform: 'ios',
   currentPeriodEnd: new Date(Date.now() + HOUR),
+  autoRenew: true,
   ...over,
 });
 
@@ -39,6 +40,15 @@ describe('isPaid', () => {
     // set_dev_plan writes status with no date, and a real subscriber missing the
     // field should not lose access over absent data.
     expect(isPaid(ent({ status: 'active', currentPeriodEnd: null }))).toBe(true);
+  });
+
+  it('ignores autoRenew — a cancelled plan is still PAID until it lapses', () => {
+    // 3.15's column drives COPY ("Renews" vs "Cancelled"), never access. A user
+    // who cancels has paid through the period end and keeps premium until then;
+    // gating on autoRenew here would revoke access at the moment of cancelling,
+    // which is the same bug the CANCELLATION mapping exists to avoid.
+    expect(isPaid(ent({ status: 'active', autoRenew: false }))).toBe(true);
+    expect(isPaid(ent({ status: 'active', autoRenew: null }))).toBe(true);
   });
 
   it('never unlocks free or expired, whatever the date says', () => {

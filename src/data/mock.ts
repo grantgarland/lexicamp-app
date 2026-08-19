@@ -265,8 +265,8 @@ function freeSaveExhausted(): boolean {
 
 function entitlementFor(plan: DevPlan): Entitlement {
   return plan === 'paid'
-    ? { status: 'active', plan: 'monthly', platform: 'ios', currentPeriodEnd: new Date(Date.now() + 30 * DAY) }
-    : { status: 'free', plan: null, platform: null, currentPeriodEnd: null };
+    ? { status: 'active', plan: 'monthly', platform: 'ios', currentPeriodEnd: new Date(Date.now() + 30 * DAY), autoRenew: true }
+    : { status: 'free', plan: null, platform: null, currentPeriodEnd: null, autoRenew: null };
 }
 
 // Mock study queue — a session of due cards with display content + tier + mode.

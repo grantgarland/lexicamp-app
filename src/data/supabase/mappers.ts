@@ -29,6 +29,7 @@ export interface SubscriptionRow {
   plan: 'monthly' | 'annual' | null;
   platform: 'ios' | 'android' | null;
   current_period_end: string | null;
+  auto_renew: boolean | null;
 }
 
 export interface DeckRowDb {
@@ -150,12 +151,13 @@ export const mapProfile = (r: ProfileRow): Profile => ({
 /** Absent subscriptions row = free tier (the row is created by the RevenueCat webhook). */
 export const mapEntitlement = (r: SubscriptionRow | null): Entitlement =>
   r == null
-    ? { status: 'free', plan: null, platform: null, currentPeriodEnd: null }
+    ? { status: 'free', plan: null, platform: null, currentPeriodEnd: null, autoRenew: null }
     : {
         status: r.status,
         plan: r.plan,
         platform: r.platform,
         currentPeriodEnd: r.current_period_end ? new Date(r.current_period_end) : null,
+        autoRenew: r.auto_renew,
       };
 
 export const mapDeck = (r: DeckRowDb): Deck => ({

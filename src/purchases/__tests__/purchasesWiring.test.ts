@@ -106,10 +106,14 @@ describe('purchases wiring', () => {
     const settings = src('src/screens/SettingsScreen.tsx');
     expect(settings).toContain('entitlement?.currentPeriodEnd');
     expect(settings).not.toContain('renewDatePlaceholder');
-    // ⚠️ "Renews" cannot be honest until something records that auto-renew is off:
-    // CANCELLATION leaves status='active', so a cancelled plan would still claim
-    // it renews. "Active until" is true either way.
-    expect(settings).not.toMatch(/t\('settings\.renews'/);
+    // ⚠️ "Renews" is only honest when `autoRenew` backs it (3.15): a CANCELLATION
+    // leaves status='active', so a cancelled plan must NOT claim it renews. All
+    // three states have to be distinguished, and NULL must stay neutral.
+    expect(settings).toContain('entitlement.autoRenew === true');
+    expect(settings).toContain('entitlement.autoRenew === false');
+    expect(settings).toContain('settings.renewsOn');
+    expect(settings).toContain('settings.endsOn');
+    expect(settings).toContain('settings.activeUntil');
   });
 
   it('treats a missing entitlement as unentitled', () => {

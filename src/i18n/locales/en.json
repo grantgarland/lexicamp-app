@@ -521,6 +521,8 @@
     "subscription": "Subscription",
     "premiumPlan": "Premium",
     "activeUntil": "Your plan is active until {{date}}",
+    "renewsOn": "Renews {{date}}",
+    "endsOn": "Cancelled. Active until {{date}}",
     "manageSubscription": "Manage Subscription",
     "viewInStore": "View in App Store",
     "manageUnavailable": "Couldn't open subscription settings.",

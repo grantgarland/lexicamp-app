@@ -99,13 +99,23 @@ describe('mapProfile / mapEntitlement', () => {
   });
 
   it('absent subscription row → free entitlement', () => {
-    expect(mapEntitlement(null)).toEqual({ status: 'free', plan: null, platform: null, currentPeriodEnd: null });
+    expect(mapEntitlement(null)).toEqual({ status: 'free', plan: null, platform: null, currentPeriodEnd: null, autoRenew: null });
   });
 
   it('active subscription row maps with a Date period end', () => {
-    const e = mapEntitlement({ status: 'active', plan: 'annual', platform: 'ios', current_period_end: '2026-08-01T00:00:00Z' });
+    const e = mapEntitlement({ status: 'active', plan: 'annual', platform: 'ios', current_period_end: '2026-08-01T00:00:00Z', auto_renew: true });
     expect(e.status).toBe('active');
     expect(e.currentPeriodEnd).toBeInstanceOf(Date);
+    expect(e.autoRenew).toBe(true);
+  });
+
+  it('carries auto_renew through, including the unknown state', () => {
+    // 3.15: false = cancelled but still active until the period ends; null =
+    // no evidence either way (rows written before the column existed), which the
+    // UI must render neutrally rather than guessing "Renews".
+    const row = { status: 'active', plan: 'annual', platform: 'ios', current_period_end: null } as const;
+    expect(mapEntitlement({ ...row, auto_renew: false }).autoRenew).toBe(false);
+    expect(mapEntitlement({ ...row, auto_renew: null }).autoRenew).toBeNull();
   });
 });
 

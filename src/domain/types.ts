@@ -39,6 +39,14 @@ export interface Entitlement {
   plan: SubscriptionPlan;
   platform: 'ios' | 'android' | null;
   currentPeriodEnd: Date | null;
+  /** Will the subscription RENEW at `currentPeriodEnd`, or merely end there?
+   *
+   *  ⚠️ `status` cannot answer this. A CANCELLATION deliberately leaves the
+   *  status `active` — cancelling means "will not renew", not "access ends now"
+   *  — so without this the UI could only offer the neutral "active until". NULL
+   *  means genuinely unknown (rows written before 3.15, and events like
+   *  BILLING_ISSUE that carry no verdict); do not render it as either promise. */
+  autoRenew: boolean | null;
 }
 /**
  * Premium features unlocked? (trial/active/grace count as paid.)
