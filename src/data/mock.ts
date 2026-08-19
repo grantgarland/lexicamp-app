@@ -162,11 +162,24 @@ function realisticFsrs(tierIdx: number, g: number, now: number): MockFsrsSample 
  *  about the same library. */
 const MOCK_CAPTURE_PER_DAY = 17;
 
-/** Synthetic capture date for the g-th seeded card. Every 6th word is an hour
- *  old so "added today" is never zero; the rest walk backwards at the pace
- *  above rather than one-per-day. */
+/** Synthetic capture date for the g-th seeded card. Every 6th word lands inside
+ *  TODAY so "added today" is never zero; the rest walk backwards at the pace
+ *  above rather than one-per-day.
+ *
+ *  ⚠️ This used to be a flat `now - 1 HOUR`, which broke its own promise for one
+ *  hour every night: `addedToday` counts by the DEVICE-LOCAL day (derive.ts), so
+ *  between 00:00 and 01:00 local an hour-old card is YESTERDAY. `addedToday`
+ *  went to 0, mockFreeCap.test.ts failed both assertions, and the Settings meter
+ *  in mock mode read 0-of-5 while saves were capped. Found 2026-08-19 at 00:18
+ *  local. Clamping to the time since local midnight keeps the card genuinely
+ *  today at every hour, including the first minute of one. */
 function seededCreatedAt(g: number, now: number): Date {
-  if (g % 6 === 0) return new Date(now - 1 * HOUR);
+  if (g % 6 === 0) {
+    const d = new Date(now);
+    const sinceLocalMidnight =
+      d.getHours() * HOUR + d.getMinutes() * 60_000 + d.getSeconds() * 1_000 + d.getMilliseconds();
+    return new Date(now - Math.min(1 * HOUR, sinceLocalMidnight));
+  }
   return new Date(now - ((g + 2) / MOCK_CAPTURE_PER_DAY) * DAY);
 }
 
