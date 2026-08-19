@@ -14,6 +14,7 @@
     },
     "preview": {
       "distribution": "internal",
+      "environment": "production",
       "env": {
         "SENTRY_DISABLE_AUTO_UPLOAD": "true",
         "EXPO_PUBLIC_USE_SUPABASE": "1"
