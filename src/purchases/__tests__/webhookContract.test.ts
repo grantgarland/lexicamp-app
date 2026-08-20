@@ -28,6 +28,38 @@ const migration = migrationSource('revenuecat_webhook_mirror');
 const reconcileFn = readFileSync(join(ROOT, 'supabase/functions/revenuecat-reconcile/index.ts'), 'utf8');
 const reconcileSql = migrationSource('revenuecat_reconcile');
 
+describe('profiles column grants (21 P0-1)', () => {
+  // ⚠️ The paywall bypass this closes was PRESCRIBED on 2026-08-06 and still open
+  // on 2026-08-19 — nobody had verified the revoke landed. It is invisible from
+  // the app: RLS looks correct, the policy is correct, and only the column-level
+  // GRANT is wrong. A future `grant all on public.profiles to authenticated`
+  // would silently reopen it, so the intent is pinned here.
+  const sql = migrationSource('profiles_column_grants_lockdown');
+
+  it('revokes blanket write access from both client roles', () => {
+    expect(sql).toMatch(/revoke insert, update on public\.profiles from anon, authenticated/);
+  });
+
+  it('re-grants ONLY the columns updateProfile actually writes', () => {
+    expect(sql).toMatch(/grant update \(display_name, quiz_length, timezone\) on public\.profiles to authenticated/);
+    // is_dev must never appear in an actual GRANT — it gates set_dev_plan, which
+    // mints subscriptions. ⚠️ Comments are stripped first: this file's own prose
+    // says "re-grant ... is_dev", and matching that would fail on the
+    // explanation rather than on the SQL.
+    const statements = sql.replace(/--[^\n]*/g, '');
+    expect(statements).not.toMatch(/grant[^;]*is_dev/i);
+  });
+
+  it('matches what the client actually writes, so the grant cannot drift', () => {
+    // If updateProfile ever writes a fourth column, this fails and forces the
+    // grant to be widened deliberately rather than by a blanket re-grant.
+    const ds = readFileSync(join(ROOT, 'src/data/supabase/SupabaseDataSource.ts'), 'utf8');
+    const fn = ds.slice(ds.indexOf('async updateProfile'), ds.indexOf('async updateProfile') + 1400);
+    const written = [...fn.matchAll(/row\.([a-z_]+)\s*=/g)].map((m) => m[1]).sort();
+    expect([...new Set(written)]).toEqual(['display_name', 'quiz_length', 'timezone']);
+  });
+});
+
 describe('revenuecat-reconcile contract (3.14)', () => {
   it('fails closed when the API key is unset', () => {
     // ⚠️ A reconciler that quietly no-ops is worse than an absent one: the drift
