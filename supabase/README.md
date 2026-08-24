@@ -10,6 +10,27 @@ that applies a migration through the Supabase connector ends by refreshing the
 mirror (`npx supabase migration fetch`) and committing it. Verify sync with
 `npx supabase migration list`.
 
+**⚠️ UNTRACKED MIGRATION (2026-08-20) — `20260820200000_reset_own_onboarding_drop_dev_gate`.**
+The SQL was applied **by hand in the Supabase SQL editor**, which does NOT write a
+row into `supabase_migrations.schema_migrations`. So the local file exists and the
+change is live, but `npx supabase migration list` will show it as local-only and
+`db push` will offer to re-apply it.
+
+**Re-applying is harmless** — the file is `create or replace` plus idempotent
+revoke/grant — so this drift is benign, unlike the 2026-08-13 case where a
+timestamp mismatch meant `db push` would genuinely re-run a migration. To
+reconcile it properly, record it:
+
+```sql
+insert into supabase_migrations.schema_migrations (version, name)
+values ('20260820200000', 'reset_own_onboarding_drop_dev_gate')
+on conflict do nothing;
+```
+
+Verified live after applying: the `is_dev` gate is gone, the 28000
+unauthenticated check remains, the delete is still scoped to `auth.uid()`, and
+`anon` still cannot execute.
+
 **Mirror status (2026-07-28, post-`card_target_overrides`):** all 36
 live migrations are mirrored. `card_target_overrides` (2026-07-28, Edit
 Translations / Premium) was hand-written from the exact applied SQL — the

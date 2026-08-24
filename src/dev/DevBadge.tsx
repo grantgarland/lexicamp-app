@@ -19,6 +19,7 @@ import { signInWithEmail } from '@/auth/session';
 import { USE_SUPABASE } from '@/data';
 import { supabase } from '@/data/supabase/client';
 import { queryClient } from '@/query/queryClient';
+import { usePrefsStore } from '@/store/prefsStore';
 import { type DevPlan, type DevUserState, useDevStore } from '@/store/devStore';
 
 // Scenario chips. These live HERE, not in devStore, because devStore is
@@ -123,6 +124,45 @@ export function DevBadge() {
     }
   };
 
+  // ⚠️ RESET ONBOARDING — deletes this account's profile row, which CASCADES to
+  // every card, deck, review log, event, push token and the subscription mirror.
+  // The login survives (`profiles.id → auth.users` cascades one way only), so you
+  // land on the pair screen signed in as the same user.
+  //
+  // ⚠️ The RPC is deliberately NOT `is_dev`-gated (migration 20260820200000). It
+  // was, for one day, and the gate blocked exactly the throwaway signups this
+  // exists to reset — `is_dev` cannot be self-served since the P0-1 lockdown, so
+  // only the seeded `dev-*` scenario accounts passed, and those are the ones that
+  // must NOT be wiped. It is self-scoped and strictly weaker than the already
+  // ungated `delete_own_account()`, so the control that matters is this file
+  // being stripped from shipped bundles — which `verify:bundle` enforces.
+  //
+  // BOTH HALVES MATTER, and the local half is the one that silently ruins a test:
+  // a server-only reset leaves `notifPromptSeen` and `walkthroughDone` persisted
+  // in AsyncStorage, so the post-first-save reminders prompt and the walkthrough
+  // simply never fire and the feature looks broken. Clearing them here is what
+  // makes this a real first-run rather than a half one.
+  const resetOnboarding = async () => {
+    setBusy('onboarding');
+    try {
+      const { error: rpcError } = await supabase.rpc('reset_own_onboarding');
+      if (rpcError != null) {
+        setError(rpcError.message);
+        return;
+      }
+      // The one-time UI latches, or the next run is not a first run.
+      usePrefsStore.getState().setNotifPromptSeen(false);
+      usePrefsStore.getState().setWalkthroughDone(false);
+      // Drop every cached query — a stale `profile` entry would let the first-run
+      // gate read a settled non-null answer and skip the flow entirely.
+      queryClient.clear();
+      setOpen(false);
+      router.replace('/');
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <>
       {open && (
@@ -173,6 +213,11 @@ export function DevBadge() {
               <View style={styles.rowWrap}>
                 <Chip label={busy === 'reset' ? '…' : '↺ Reset scenario'} active={false} onPress={() => void resetScenario()} />
                 <Chip label={busy === 'reseed' ? '…' : '⛰ Reseed 4k library'} active={false} onPress={() => void reseedLibrary()} />
+                <Chip
+                  label={busy === 'onboarding' ? '…' : '🧭 Reset onboarding'}
+                  active={false}
+                  onPress={() => void resetOnboarding()}
+                />
               </View>
             )}
 

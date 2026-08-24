@@ -32,6 +32,7 @@ const FORBIDDEN = [
   { text: 'reset_dev_scenario', from: 'DevBadge — is_dev-guarded RPC name' },
   { text: 'set_dev_plan', from: 'DevBadge — is_dev-guarded RPC name' },
   { text: 'seed_dev_veteran', from: 'DevBadge — is_dev-guarded RPC name' },
+  { text: 'reset_own_onboarding', from: 'DevBadge — 3.5 reset chip. ⚠️ NOT is_dev-gated (see migration 20260820200000): the gate blocked the throwaway accounts the tool exists for. It is self-scoped and strictly weaker than the ungated delete_own_account, so keeping it OUT of shipped bundles is the control that matters — which is what this marker enforces.' },
   { text: 'Hide badge', from: 'DevBadge — screenshot chip label' },
   { text: 'Dev state toggle', from: 'DevBadge — the pill a11y label' },
   { text: 'Dismiss dev panel', from: 'DevBadge — panel scrim a11y label' },
