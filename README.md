@@ -54,7 +54,7 @@ lexicamp-app/
 │   ├── observability/  # Sentry (inert until DSN set)
 │   └── constants/      # Language registry, legal links
 ├── supabase/           # Edge Functions (translate, examples) + migrations mirror
-├── .maestro/           # Smoke-test flows (nightly CI)
+├── .maestro/           # 8 Maestro E2E flows (Mon/Wed/Fri CI) — see below
 ├── scripts/            # Token/asset sync + CI emulator helper
 └── assets/             # Fonts, images, brand assets
 ```
@@ -64,6 +64,44 @@ lexicamp-app/
 ```bash
 npm run typecheck && npm run lint && npm test
 ```
+
+### End-to-end (Maestro)
+
+Eight flows in `.maestro/` cover the app end to end — `smoke` (boot) ·
+`word-capture` · `quiz` (the study loop) · `word-list` · `decks` · `progress` ·
+`settings` · `walkthrough` (all nine tour steps). `.maestro/config.yaml` is the
+manifest: CI runs `maestro test .maestro/` and executes only the flows listed
+there.
+
+**Status: 8/8 green on Android CI as of 2026-08-21** — run
+[`32463594990`](https://github.com/grantgarland/lexicamp-app/actions/runs/32463594990),
+13m 27s at `5ff5f82`. That was the **first** full-suite pass; the seven non-boot
+flows landed 2026-08-06 and had only ever been green on a local iOS simulator.
+
+Run a single flow locally against an emulator or simulator — free, no EAS build:
+
+```bash
+maestro test .maestro/quiz.yaml
+```
+
+Selector policy: **tap by testID, assert by text**, and Maestro matches WHOLE
+text. Three jest guards keep the flows honest without a device —
+`maestroStrings.test.ts` (every text selector must be backed by a real `en.json`
+key or mock fixture), `maestroScreens.test.tsx` (renders the real screen and
+applies Maestro's own matcher to the selector read out of the flow), and
+`a11yCollapse.ts` (a self-labelled `Pressable` collapses its subtree, so a text
+selector aimed inside it can never match).
+
+⚠️ When a flow goes red, **read that flow's header before suspecting the app**.
+Every failure this suite has had was geometry or timing — a row under the FAB, a
+field behind the keyboard, a tap stolen by an overlay — not app logic. The
+history is in `SMOKE_TEST_DIAGNOSIS.md`.
+
+The nightly (`.github/workflows/nightly-smoke.yml`) runs Mon/Wed/Fri, builds the
+APK with the `smoke` EAS profile (mock DataSource, `EXPO_PUBLIC_USE_SUPABASE=0`)
+and is change-gated, so an idle week costs zero builds. **Keep flow and profile in
+lockstep** — a `preview` build redirects to onboarding on first launch and every
+flow fails at its first assertion.
 
 ---
 

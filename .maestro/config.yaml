@@ -31,14 +31,28 @@
 #               write REJECTION is exercised end to end
 #   progress    all three sub-tabs + the projection card and mastery forecast
 #   settings    every sheet opens; sign-out confirm reached and CANCELLED
-#   walkthrough the tour starts and step 1 lands (traversal is BLOCKED — read
-#               that file's header before assuming it's incomplete by accident)
+#   walkthrough the whole nine-step tour (w1 → w8 → "Done, finish tour"), then
+#               that it lands back on a LIVE Home — the guard for "a completed
+#               tour stranded the user on the Progress tab". ⚠️ Works ONLY while
+#               `enableAccessibility` is FALSE in TourGuideConfig
+#               (src/tour/walkthrough.tsx); flip it and the flow dies at the
+#               first `tapOn: 'Next…'`.
 #
 # All of them were run green on a local iOS simulator (iPhone 16 Pro Max, iOS
-# 18.6) against a Release dev build in mock mode. NONE has run on Android yet,
-# which is what the nightly uses — expect the first nightly after this commit to
-# be the real test of the cross-platform assumptions, and read a failure against
-# each flow's header notes before suspecting the app.
+# 18.6) against a Release dev build in mock mode.
+#
+# 2026-08-21 — ✅ THE FULL EIGHT-FLOW SUITE IS GREEN ON ANDROID CI, first time:
+# run 32463594990 at 5ff5f82, 8/8 in 13m 27s (word-list 2m 2s · word-capture
+# 1m 58s · smoke 24s · decks 3m 6s · walkthrough 2m 33s · settings 1m 17s ·
+# progress 34s · quiz 1m 33s). The cross-platform assumptions this header used
+# to flag as unproven are now proven. Getting there took every scheduled run
+# from 2026-07-18 to 2026-08-19 going red; the last one was 7/8 (settings, on
+# "Email support — opens your mail app", fixed by 0499cbc).
+#
+# ⚠️ Read a failure against each flow's header notes before suspecting the app.
+# Every fix this suite has needed has been GEOMETRY — a row under the FAB, a
+# field behind the keyboard, a tap stolen by an overlay — not app logic. One
+# green run is not a trend; watch the streak.
 #
 # Runtime: the suite is now ~6× its old length. If the nightly's budget becomes
 # a problem, `executionOrder` is NOT the tool (see above) — drop flows from this

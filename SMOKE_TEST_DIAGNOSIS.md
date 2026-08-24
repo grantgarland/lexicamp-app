@@ -1,3 +1,59 @@
+## Addendum (2026-08-21) — ✅ GREEN. The full eight-flow suite passes on Android CI.
+
+Run [`32463594990`](https://github.com/grantgarland/lexicamp-app/actions/runs/32463594990)
+— scheduled, at `5ff5f82` — went **8/8 in 13m 27s**:
+
+| flow | time | flow | time |
+|---|---|---|---|
+| word-list | 2m 2s | walkthrough | 2m 33s |
+| word-capture | 1m 58s | settings | 1m 17s |
+| smoke | 24s | progress | 34s |
+| decks | 3m 6s | quiz | 1m 33s |
+
+Job total 41m0s; the emulator leg is 13m of that and the EAS build is the rest,
+which is the right shape — adding flows is nearly free, adding builds is not.
+
+**This is the first time the suite and the platform CI runs have been green
+together, and it is a different milestone from the one the project docs have
+been citing.** `00`, `README` and `02` all carried *"first fully-green scheduled
+run 2026-07-17"*. That run (`29571814268`) executed **one flow** — `smoke.yaml`,
+1m 1s, boot plus a handful of asserts. The other seven landed 2026-08-06,
+verified on a **local iOS simulator** and never once on the Android emulator the
+nightly actually drives. Every scheduled run from 2026-07-18 through 2026-08-19
+was red. All three docs are now corrected.
+
+**The last gap.** 2026-08-19 (`32232721720`) was 7/8: `settings` failed
+`Assertion is false: "Email support — opens your mail app" is visible`. Closed by
+`0499cbc` *(fix(e2e): centre every Settings row in the FAB's reach, not just
+About)*, following `5a9b917` *(fix(e2e): unstick settings and quiz from two
+stolen-tap failures)*.
+
+**The pattern in this whole file, now that it has an end.** Every entry above is
+the same class of bug and not one is app logic: a results card behind the
+keyboard (07-22), a row under the FAB, a tap stolen by an overlay, a beacon
+inside the status-bar window, uppercase a11y text against a case-sensitive
+matcher (07-15). **Maestro on an emulator tests geometry and timing as much as
+behaviour.** When a flow goes red, read it as "something moved" before reading it
+as "something broke" — and read the flow's own header before suspecting the app.
+
+⚠️ **One green run is not a trend.** Given that failure mode, the signal is a
+streak, not a single pass. The next two scheduled runs (Mon/Wed) are the ones
+worth watching. Do not start discounting a red nightly on the strength of this
+one — per `07-ai-operating-model.md`, a red nightly still outranks the backlog.
+
+⚠️ **Still not covered, and worth its own look:** the quiz's × exit.
+`tapOn: quizClose` reports SUCCESS and the exit-confirm sheet never appears
+(observed 2026-08-04), while the same logic passes in `QuizScreen.test.tsx`.
+`quiz.yaml` therefore leaves the quiz only by *completing* a session. The testIDs
+are correct and present — this is a native defect, not a missing test.
+
+⚠️ **Two doc-location notes.** `02-technical-architecture.md` had this file
+archived at `lexicamp-app/docs/history/SMOKE_TEST_DIAGNOSIS.md`; it is at the app
+root and `docs/history/` is empty. The path in `02` is corrected — the move
+itself never happened. Separately, `quiz.yaml`'s header labels itself `CI-4c`; it
+is `CI-4d` (`CI-4c` is `word-capture.yaml`).
+
+---
 
 ## Addendum (2026-07-22) — crash fixed for real; word-capture now fails on keyboard occlusion
 

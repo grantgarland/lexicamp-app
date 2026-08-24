@@ -76,6 +76,15 @@ GENERATED from the design system — never hand-edit tokens.generated.ts).
 - **CI/ops:** push/PR gate in `.github/workflows/ci.yml`; red main auto-files
   a `ci-failure` issue — those OUTRANK the backlog (07). Renovate dashboard
   gates native deps. Sentry is wired but inert in dev.
+- **E2E:** 8 Maestro flows in `.maestro/` (manifest `config.yaml`) run Mon/Wed/Fri
+  on an Android emulator against an EAS `smoke` build (mock DataSource).
+  **8/8 green since 2026-08-21 — the first full-suite pass.** Tap by testID,
+  assert by TEXT, whole-text match; `maestroStrings.test.ts` +
+  `maestroScreens.test.tsx` + `a11yCollapse.ts` guard the selectors in jest, so
+  **changing user-facing copy can go red on a device without failing locally —
+  grep `.maestro/*.yaml` before renaming a string.** Red flow ⇒ suspect geometry
+  (rows under the FAB, fields behind the keyboard, stolen taps) before app
+  logic, and read the flow's own header; history in `SMOKE_TEST_DIAGNOSIS.md`.
 - **Session protocol:** work the top unblocked item in 08; finish by updating
   08 (handoff note) + 00/README last-updated lines. Chunks must land clean.
 
