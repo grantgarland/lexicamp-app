@@ -19,6 +19,7 @@ import { type LookupResult, posTagI18nKey, qualityReasonI18nKey, senseDisplayWor
 import type { Profile, SearchDirection } from '@/domain/types';
 import { useTranslation } from '@/i18n';
 import { resolveSenseCardId } from '@/lib/senseCardId';
+import { maybePromptForReminders } from '@/notifications/firstSavePrompt';
 import { useDeleteCard, useEntitlement, useExamples, useLookup, useProfile, useSaveCard, useSetCardTargetOverride, useWords } from '@/query/hooks';
 import { LanguageIndicator } from '@/screens/shared/LanguageSwitcher';
 import { usePrefsStore } from '@/store/prefsStore';
@@ -342,6 +343,11 @@ export function SearchView({ onClose, bottomInset = 0 }: { onClose: () => void; 
       { translationId: tid, custom: i > 0 ? { back: result.translations[i].word } : undefined },
       {
         onSuccess: (cardId) => {
+          // 3.5 (spec `24`): the reminders opt-in moved out of onboarding to
+          // here — the first moment the user owns a word to be reminded about.
+          // Fire-and-forget and self-latching: it must never delay or fail a
+          // save that already succeeded server-side.
+          void maybePromptForReminders();
           if (cardId == null) return; // mock mode has no card id to override
           setSessionCardIds((m) => new Map(m).set(id, cardId));
           // Only when the user actually changed something — an untouched editor

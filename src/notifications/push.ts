@@ -30,10 +30,13 @@ export function initNotifications(): void {
 }
 
 /** Ask the OS for notification permission. Split out of registerForPush so the
- *  onboarding O-06 step can raise the system prompt AT the moment the user taps
- *  "Enable notifications" — token registration needs a session, but the
- *  permission prompt does not, and deferring both until after auth meant the
- *  prompt appeared unexplained on the Home screen (reported 2026-08-01).
+ *  system prompt can be raised AT the moment the user opts in, rather than
+ *  appearing unexplained later (reported 2026-08-01) — token registration needs
+ *  a session, the permission prompt does not.
+ *  ⚠️ Since 3.5 the caller is `firstSavePrompt`, after the user's FIRST saved
+ *  word — not an onboarding step. The old pre-auth O-06 opt-in spent iOS's one
+ *  permission prompt before the user owned anything to be reminded about, which
+ *  is the most expensive possible moment to be denied. See spec `24`.
  *  Safe to call repeatedly: iOS only ever shows the sheet once. */
 export async function requestPushPermission(): Promise<boolean> {
   if (!Device.isDevice) return false; // simulators have no APNs

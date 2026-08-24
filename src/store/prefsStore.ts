@@ -47,6 +47,11 @@ interface PrefsState {
   eduCardDismissed: boolean;
   /** First-run walkthrough completed or skipped (18 §F2) — the tour never auto-fires twice. */
   walkthroughDone: boolean;
+  /** The post-first-save reminders prompt has been shown (3.5, spec `24`).
+   *  ⚠️ Set when SHOWN, not when accepted: iOS grants exactly one permission
+   *  prompt per install, so re-asking a decliner cannot work and only annoys.
+   *  Reminders stay reachable from Settings, which is the real second chance. */
+  notifPromptSeen: boolean;
   setSearchDirection: (d: SearchDirection) => void;
   addRecent: (userId: string, word: string) => void;
   removeRecent: (userId: string, word: string) => void;
@@ -55,6 +60,7 @@ interface PrefsState {
   setQuizLength: (n: number) => void;
   setEduCardDismissed: (v: boolean) => void;
   setWalkthroughDone: (v: boolean) => void;
+  setNotifPromptSeen: (v: boolean) => void;
 }
 
 export const usePrefsStore = create<PrefsState>()(
@@ -67,6 +73,7 @@ export const usePrefsStore = create<PrefsState>()(
       quizLength: QUIZ_LENGTH_DEFAULT,
       eduCardDismissed: false,
       walkthroughDone: false,
+      notifPromptSeen: false,
       setSearchDirection: (searchDirection) => set({ searchDirection }),
       setLocale: (locale) => {
         i18n.changeLanguage(locale);
@@ -75,6 +82,7 @@ export const usePrefsStore = create<PrefsState>()(
       setQuizLength: (quizLength) => set({ quizLength }),
       setEduCardDismissed: (eduCardDismissed) => set({ eduCardDismissed }),
       setWalkthroughDone: (walkthroughDone) => set({ walkthroughDone }),
+      setNotifPromptSeen: (notifPromptSeen) => set({ notifPromptSeen }),
       addRecent: (userId, word) =>
         set((s) => {
           const cur = s.recentsByUser[userId] ?? [];
