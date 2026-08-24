@@ -22,7 +22,7 @@ import { useCommitQuizSession, useDueCards, useEntitlement, useHomeData } from '
 import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
 import { useUiStore } from '@/store/uiStore';
 import { tourFixtureCards } from '@/tour/tourFixture';
-import { isQuizResultsStep, isQuizRevealStep, useTourScene } from '@/tour/tourScene';
+import { isQuizResultsStep, isQuizRevealStep, useTourScene, usesTourFixture } from '@/tour/tourScene';
 import { tourTargets, useWalkthroughActive, WalkthroughOverlayHost } from '@/tour/walkthrough';
 import { BRAND_MARK_KNOCKOUT_XML } from '@/ui/brandMark';
 import {
@@ -116,7 +116,7 @@ export function QuizScreen({ deckId, deckName }: QuizScreenProps = {}) {
   // and results screen are real, tappable UI. Only when there is genuinely
   // nothing to show — a user with real due cards always studies their own words.
   const tourActive = useWalkthroughActive();
-  const useFixture = tourActive && !isLoading && realCards.length === 0;
+  const useFixture = usesTourFixture({ tourActive, isLoading, realCardCount: realCards.length });
   // Frozen for this screen instance so dueAt/lastReviewAt don't drift per render.
   const [fixtureCards] = useState<QuizCardItem[]>(() => tourFixtureCards(Date.now()));
   const cards = useFixture ? fixtureCards : realCards;

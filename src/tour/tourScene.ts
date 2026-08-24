@@ -52,3 +52,28 @@ export function isSearchDemoStep(stepId: string | null): boolean {
 export function isQuizRevealStep(stepId: string | null): boolean {
   return stepId === 'w6';
 }
+
+/** Whether the quiz is running on TOUR FIXTURE cards rather than the user's own.
+ *
+ *  This is the predicate the commit guard keys on, and it is the single most
+ *  consequential line in the tour: fixture cards do not exist server-side, so
+ *  committing a fixture session would 404 AND pollute a real account's FSRS
+ *  history with words the user never saved. `QuizScreen.rate()` writes only
+ *  `if (!usesTourFixture(...))`.
+ *
+ *  ⚠️ The `realCardCount === 0` term is what keeps the tour honest: a user who
+ *  HAS due cards always studies their own words, and only a genuinely empty
+ *  queue falls back to the demo session. DF-4's requirement — never show someone
+ *  fabricated data as if it were theirs — is satisfied by that term, not by
+ *  skipping the step.
+ *
+ *  ⚠️ `isLoading` must be false. Without it, the first frame of a real session
+ *  (queue not yet fetched, so `realCardCount === 0`) would look like an empty
+ *  queue and swap in fixtures under a user who has real words due. */
+export function usesTourFixture(opts: {
+  tourActive: boolean;
+  isLoading: boolean;
+  realCardCount: number;
+}): boolean {
+  return opts.tourActive && !opts.isLoading && opts.realCardCount === 0;
+}
