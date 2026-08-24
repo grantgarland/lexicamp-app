@@ -700,6 +700,7 @@
     "skip": "Skip",
     "welcomeTitle": "Study less. Remember more.",
     "welcomeSub": "Learn smarter with science-backed spaced repetition.",
+    "valuePromise": "Learn foreign vocabulary faster using modern memory science",
     "s1Title": "The problem: Most words slip away within a week",
     "s1Body": "This is known as the \"forgetting curve\"¹. Lexicamp leverages this curve by scheduling reviews before you forget.",
     "s1Note": "¹ Ebbinghaus, 1885 — replicated by Murre & Dros, 2015.",
@@ -737,7 +738,9 @@
     "notifPreviewBody": "8 words are ready for review",
     "notifPreviewNow": "now",
     "enableNotif": "Enable notifications",
-    "maybeLater": "Maybe later"
+    "maybeLater": "Maybe later",
+    "pairError": "Something went wrong setting up your account. Check your connection and try again.",
+    "pairSignOut": "Sign out"
   },
   "auth": {
     "createTitle": "Create your account",
@@ -876,5 +879,11 @@
     "confirm": "Save word",
     "tooLong": "Keep it under {{max}} characters.",
     "a11y": "Edit the translation before saving"
+  },
+  "notifications": {
+    "firstSaveTitle": "Want reminders?",
+    "firstSaveBody": "Lexicamp can remind you once a day when words are ready to review. That's what makes them stick.",
+    "firstSaveAccept": "Turn on reminders",
+    "firstSaveDecline": "Not now"
   }
 }

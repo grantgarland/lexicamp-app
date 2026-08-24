@@ -5,7 +5,7 @@
 // route-straight-in behavior so dev flows need no network. The Apple button stays
 // decorative until native OAuth config lands (see src/auth/session.ts). Google
 // sign-in will not be supported (product decision 2026-07-27).
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { Linking, Pressable, ScrollView, View } from 'react-native';
@@ -22,12 +22,8 @@ import {
   signInWithEmail,
   signUpWithEmail,
 } from '@/auth/session';
-import { dataSource, USE_SUPABASE } from '@/data';
-import { supabase } from '@/data/supabase/client';
-import { defaultDisplayName } from '@/domain/derive';
+import { USE_SUPABASE } from '@/data';
 import { useTranslation } from '@/i18n';
-import { registerForPush } from '@/notifications/push';
-import { useOnboardingStore } from '@/store/onboardingStore';
 import { Button, IconStar, Input, RawText, Screen, Wordmark } from '@/ui';
 
 // 'forgot' (DF-3): request a password-reset email. The emailed link deep-links
@@ -39,7 +35,11 @@ export function AuthScreen() {
   const isDark = useIsDark();
   const { t } = useTranslation();
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>('signup');
+  // `?mode=signin` — the value screen's second CTA opens this screen already
+  // switched to sign-in. Signup stays the default: it is the path a first-time
+  // visitor takes, and register-first makes that the common case.
+  const { mode: modeParam } = useLocalSearchParams<{ mode?: string }>();
+  const [mode, setMode] = useState<Mode>(modeParam === 'signin' ? 'signin' : 'signup');
   // Apple's sheet only exists on iOS 13+; hide the button anywhere it can't run
   // rather than showing a control that throws on press.
   const [appleAvailable, setAppleAvailable] = useState(false);
@@ -96,25 +96,21 @@ export function AuthScreen() {
     }
   };
 
-  // Shared tail for BOTH auth paths (email + Apple): materialize the onboarding
-  // buffer (03 flow), arm push, then enter. The RPC is idempotent and never
-  // overwrites, so calling after sign-IN is safe too — it only fills the gap for
-  // accounts that somehow lack a profile.
-  const finishAuth = async (displayName: string) => {
-    const ob = useOnboardingStore.getState();
-    await dataSource.completeOnboarding({
-      nativeLang: ob.nativeLang,
-      targetLang: ob.targetLang ?? 'es', // O-05 default if the buffer is cold (direct sign-in path)
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC',
-      notificationsEnabled: ob.notificationsEnabled,
-      // 18 §A7 (D1): never leave a profile blank — Apple supplies a real name on
-      // first sign-in, email falls back to a prettified local-part.
-      displayName,
-    });
-    // O-06 opt-in → OS permission prompt + device token registration (2.5).
-    // Fire-and-forget: a denied prompt must not block entry into the app.
-    if (ob.notificationsEnabled) void registerForPush().catch(() => {});
-    ob.reset();
+  // Shared tail for BOTH auth paths (email + Apple).
+  //
+  // ⚠️ REWRITTEN for 3.5 (spec `24`): this used to call `complete_onboarding`
+  // here, materialising a zustand buffer the pre-auth steps had filled. Under
+  // register-first there is nothing to materialise — the language pair has not
+  // been asked for yet — so onboarding is completed by `OnboardingPairScreen`
+  // instead, and this just enters.
+  //
+  // No branching between "new signup" and "returning sign-in" is needed, and
+  // that is deliberate: the first-run gate in (tabs)/_layout.tsx routes on the
+  // presence of a `profiles` row, so a returning user lands on Home and a new
+  // one lands on the pair screen, from the same call. It is also restart-safe,
+  // which an in-memory buffer was not — the old flow lost every answer if the
+  // app died between the language step and a successful auth.
+  const finishAuth = async () => {
     enter();
   };
 
@@ -129,7 +125,7 @@ export function AuthScreen() {
     try {
       if (isSignup) await signUpWithEmail(email.trim(), password);
       else await signInWithEmail(email.trim(), password);
-      await finishAuth(defaultDisplayName(email.trim()));
+      await finishAuth();
     } catch (e) {
       setError(t(authErrorKey(e instanceof Error ? e.message : null)));
     } finally {
@@ -145,9 +141,12 @@ export function AuthScreen() {
     setBusy(true);
     setError(null);
     try {
-      const { displayName } = await signInWithApple();
-      const { data } = await supabase.auth.getUser();
-      await finishAuth(displayName ?? defaultDisplayName(data.user?.email ?? ''));
+      // The returned name is not used here: `signInWithApple` has already
+      // persisted it to user metadata, and OnboardingPairScreen reads it back
+      // from there when it seeds the profile. Apple sends it exactly once, so
+      // metadata — not a variable on this screen — is what has to hold it.
+      await signInWithApple();
+      await finishAuth();
     } catch (e) {
       if (e instanceof AppleSignInCancelled) return; // user backed out — no error UI
       setError(t(authErrorKey(e instanceof Error ? e.message : null)));

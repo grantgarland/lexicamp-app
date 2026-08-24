@@ -700,6 +700,7 @@
     "skip": "Saltar",
     "welcomeTitle": "Estudia menos. Recuerda más.",
     "welcomeSub": "Aprende mejor con repetición espaciada basada en ciencia.",
+    "valuePromise": "Guarda una palabra cuando la encuentres y Lexicamp te la devolverá justo antes de que la olvides.",
     "s1Title": "El problema: la mayoría de las palabras se olvidan en una semana",
     "s1Body": "Es la llamada \"curva del olvido\"*. Lexicamp la aprovecha programando los repasos justo antes de que la olvides.",
     "s1Note": "* Ebbinghaus, 1885 — replicado por Murre y Dros, 2015.",
@@ -737,7 +738,9 @@
     "notifPreviewBody": "8 palabras están listas para repasar",
     "notifPreviewNow": "ahora",
     "enableNotif": "Activar notificaciones",
-    "maybeLater": "Quizás luego"
+    "maybeLater": "Quizás luego",
+    "pairError": "Algo salió mal al configurar tu cuenta. Comprueba tu conexión e inténtalo de nuevo.",
+    "pairSignOut": "Cerrar sesión"
   },
   "auth": {
     "createTitle": "Crea tu cuenta",
@@ -876,5 +879,11 @@
     "confirm": "Guardar palabra",
     "tooLong": "Máximo {{max}} caracteres.",
     "a11y": "Editar la traducción antes de guardar"
+  },
+  "notifications": {
+    "firstSaveTitle": "¿Quieres recordatorios?",
+    "firstSaveBody": "Lexicamp puede avisarte una vez al día cuando haya palabras listas para repasar. Eso es lo que hace que se queden.",
+    "firstSaveAccept": "Activar recordatorios",
+    "firstSaveDecline": "Ahora no"
   }
 }
