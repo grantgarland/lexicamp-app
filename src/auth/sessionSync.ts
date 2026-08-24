@@ -69,8 +69,12 @@ async function reconcile(userId: string): Promise<void> {
 
     if (tz != null) {
       const profile = await dataSource.getProfile();
+      // ⚠️ null = signed in but not yet onboarded (3.5 collects the pair AFTER
+      // auth, spec `24`). Skip rather than write: `complete_onboarding` is about
+      // to set the timezone from this same `Intl` value, and `updateProfile`
+      // would target a row that does not exist yet.
       // Only write on a real difference — the common case is "nothing moved".
-      if (profile.timezone !== tz) {
+      if (profile != null && profile.timezone !== tz) {
         await dataSource.updateProfile({ timezone: tz });
         void queryClient.invalidateQueries({ queryKey: ['profile'] });
       }

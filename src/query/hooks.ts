@@ -29,8 +29,17 @@ function useUserKey(): string {
 }
 
 export function useProfile() {
+  return useProfileQuery().data ?? undefined;
+}
+
+/** The profile query WITH its status. The first-run gate needs to tell "still
+ *  loading" from "loaded, and there is no profile" — `useProfile()` collapses
+ *  both to undefined, and routing on that would bounce an onboarded user through
+ *  the pair screen on every cold start. Since 3.5, `data === null` is a real
+ *  answer meaning "authenticated, not yet onboarded" (spec `24`). */
+export function useProfileQuery() {
   const uid = useUserKey();
-  return useQuery({ queryKey: ['profile', uid], queryFn: () => ds.getProfile() }).data;
+  return useQuery({ queryKey: ['profile', uid], queryFn: () => ds.getProfile() });
 }
 
 /** Phase D (18 §2a.4): the ACTIVE learning language, read from the profile query.

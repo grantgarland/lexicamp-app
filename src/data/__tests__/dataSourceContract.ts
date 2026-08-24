@@ -10,14 +10,27 @@ import { isPaid } from '@/domain/types';
 import { TIERS } from '@/theme/tiers';
 import { decomposeUsername, generateUsernameCandidate, validateUsername } from '@/domain/username';
 
+import type { Profile } from '@/domain/types';
+
 import type { DataSource } from '../DataSource';
 
 const TIER_IDS = new Set(TIERS.map((t) => t.id));
 
+/** `getProfile` returns `Profile | null` since 3.5 — null means "authenticated
+ *  but not yet onboarded" (spec `24`). Every case in this suite runs against an
+ *  ONBOARDED fixture, so null here is a contract violation, not a branch to
+ *  handle. Asserting it once keeps that intent visible instead of scattering
+ *  non-null assertions through the file. */
+async function onboardedProfile(source: DataSource): Promise<Profile> {
+  const p = await source.getProfile();
+  if (p == null) throw new Error('contract: getProfile returned null for an onboarded fixture');
+  return p;
+}
+
 export function describeDataSourceContract(name: string, source: DataSource): void {
   describe(`DataSource contract — ${name}`, () => {
     it('getProfile returns a usable profile (language pair + timezone)', async () => {
-      const p = await source.getProfile();
+      const p = await onboardedProfile(source);
       expect(p.id).toBeTruthy();
       expect(p.nativeLang).toBeTruthy();
       expect(p.targetLang).toBeTruthy();
@@ -67,15 +80,15 @@ export function describeDataSourceContract(name: string, source: DataSource): vo
     it('multi-language contract (Phase D): enrolled set, switch flips active, remove guards the active language', async () => {
       const langs = await source.getLearningLanguages();
       expect(langs.length).toBeGreaterThan(0);
-      const before = (await source.getProfile()).targetLang;
+      const before = (await onboardedProfile(source)).targetLang;
       const other = langs.find((l) => l !== before);
       if (other != null) {
         await source.switchLearningLanguage(other);
-        expect((await source.getProfile()).targetLang).toBe(other);
+        expect((await onboardedProfile(source)).targetLang).toBe(other);
         // The active language cannot be removed (server raises language_active).
         await expect(source.removeLearningLanguage(other)).rejects.toThrow();
         await source.switchLearningLanguage(before); // restore
-        expect((await source.getProfile()).targetLang).toBe(before);
+        expect((await onboardedProfile(source)).targetLang).toBe(before);
       }
       // Switching to a non-enrolled language is rejected.
       await expect(source.switchLearningLanguage('xx-not-enrolled')).rejects.toThrow();
@@ -83,7 +96,7 @@ export function describeDataSourceContract(name: string, source: DataSource): vo
 
     it('remove ARCHIVES (2026-07-21): the language leaves the enrolled list; re-adding restores it', async () => {
       const langs = await source.getLearningLanguages();
-      const active = (await source.getProfile()).targetLang;
+      const active = (await onboardedProfile(source)).targetLang;
       const other = langs.find((l) => l !== active);
       if (other == null) return; // single-language source — nothing removable
       await source.removeLearningLanguage(other);
@@ -94,7 +107,7 @@ export function describeDataSourceContract(name: string, source: DataSource): vo
       // Re-add = restore (free path server-side) + switch to it.
       await source.addLearningLanguage(other);
       expect(await source.getLearningLanguages()).toContain(other);
-      expect((await source.getProfile()).targetLang).toBe(other);
+      expect((await onboardedProfile(source)).targetLang).toBe(other);
       await source.switchLearningLanguage(active); // leave state as found
     });
 
@@ -193,34 +206,34 @@ export function describeDataSourceContract(name: string, source: DataSource): vo
 
 
     it('username identity (20 \u00a73 v2): profile carries a valid, decomposable username', async () => {
-      const p = await source.getProfile();
+      const p = await onboardedProfile(source);
       expect(validateUsername(p.username).ok).toBe(true);
       expect(p.usernameChanges).toBeGreaterThanOrEqual(0);
     });
 
     it('cycling is draft-only: candidates never write until setUsername', async () => {
-      const before = (await source.getProfile()).username;
+      const before = (await onboardedProfile(source)).username;
       // 10 local cycles — all decomposable, none persisted.
       let draft = before;
       for (let i = 0; i < 10; i += 1) {
         draft = generateUsernameCandidate(Math.random, draft);
         expect(decomposeUsername(draft)).not.toBeNull();
       }
-      expect((await source.getProfile()).username).toBe(before);
+      expect((await onboardedProfile(source)).username).toBe(before);
     });
 
     it('setUsername claims a cycled draft and round-trips into the profile', async () => {
-      const before = await source.getProfile();
+      const before = await onboardedProfile(source);
       let draft = generateUsernameCandidate();
       // steer clear of the mock's taken fixtures — that path has its own test
       while (['alpine-elk', 'steady-ibex', 'quick-pika'].includes(draft)) draft = generateUsernameCandidate();
       expect(await source.setUsername(draft)).toBe(draft);
-      const after = await source.getProfile();
+      const after = await onboardedProfile(source);
       expect(after.username).toBe(draft);
       expect(after.usernameChanges).toBe(before.usernameChanges + 1);
       // idempotent re-save of the current name never burns a change
       expect(await source.setUsername(draft.toUpperCase())).toBe(draft);
-      expect((await source.getProfile()).usernameChanges).toBe(after.usernameChanges);
+      expect((await onboardedProfile(source)).usernameChanges).toBe(after.usernameChanges);
     });
 
     it('setUsername rejects with the machine-token contract', async () => {
@@ -228,9 +241,9 @@ export function describeDataSourceContract(name: string, source: DataSource): vo
       await expect(source.setUsername('assmuncher-fox')).rejects.toThrow('username_invalid');
       await expect(source.setUsername('totally-custom-name')).rejects.toThrow('username_invalid');
       // Taken race (mock fixture) → username_taken, and the profile is untouched.
-      const before = (await source.getProfile()).username;
+      const before = (await onboardedProfile(source)).username;
       await expect(source.setUsername('alpine-elk')).rejects.toThrow('username_taken');
-      expect((await source.getProfile()).username).toBe(before);
+      expect((await onboardedProfile(source)).username).toBe(before);
     });
 
     it('getLeaderboard (20 §4): ranks ascend, no zero-mastered rows, own rows are internally consistent', async () => {
@@ -242,7 +255,7 @@ export function describeDataSourceContract(name: string, source: DataSource): vo
       const selfUsernames = new Set(selfRows.map((e) => e.username));
       expect(selfUsernames.size).toBeLessThanOrEqual(1);
 
-      const lang = (await source.getProfile()).targetLang;
+      const lang = (await onboardedProfile(source)).targetLang;
       const scoped = await source.getLeaderboard('language', lang);
       for (const e of scoped) expect(e.langCode).toBe(lang);
     });

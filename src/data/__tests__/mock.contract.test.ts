@@ -10,6 +10,14 @@ import { useDevStore, type DevUserState } from '@/store/devStore';
 import { mockDataSource } from '../mock';
 import { describeDataSourceContract } from './dataSourceContract';
 
+/** The mock is always onboarded, so `getProfile` never returns null here — but
+ *  the contract allows null since 3.5 (spec `24`). Narrow once, loudly. */
+async function mockProfile() {
+  const p = await mockDataSource.getProfile();
+  if (p == null) throw new Error('mock getProfile returned null');
+  return p;
+}
+
 const SCENARIOS: DevUserState[] = ['empty', 'bc', 'abc', 'hc', 'sr', 'summit'];
 
 // Contract invariants under the default scenario (summit/paid).
@@ -41,7 +49,7 @@ describe('mock scenarios', () => {
     useDevStore.setState({ plan: 'free' });
     const TAKEN = ['alpine-elk', 'steady-ibex', 'quick-pika'];
     const fresh = async () => {
-      const current = (await mockDataSource.getProfile()).username;
+      const current = (await mockProfile()).username;
       let d = generateUsernameCandidate();
       while (TAKEN.includes(d) || d === current) d = generateUsernameCandidate();
       return d;
@@ -49,13 +57,13 @@ describe('mock scenarios', () => {
     // Deterministic regardless of what earlier (paid) tests spent: if the
     // allowance is intact, the first change succeeds; every change after the
     // counter is non-zero rejects with the machine token.
-    if ((await mockDataSource.getProfile()).usernameChanges === 0) {
+    if ((await mockProfile()).usernameChanges === 0) {
       const first = await fresh();
       await expect(mockDataSource.setUsername(first)).resolves.toBe(first);
     }
     await expect(mockDataSource.setUsername(await fresh())).rejects.toThrow('username_change_limit');
     // …and the idempotent re-save of the CURRENT name still succeeds.
-    const current = (await mockDataSource.getProfile()).username;
+    const current = (await mockProfile()).username;
     await expect(mockDataSource.setUsername(current)).resolves.toBe(current);
   });
 

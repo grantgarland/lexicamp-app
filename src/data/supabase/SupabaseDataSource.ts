@@ -188,6 +188,17 @@ interface JoinedCardRow extends CardRow {
   card_target_overrides?: OverrideRow | OverrideRow[] | null;
 }
 
+/** The profile, for the internal paths that cannot function without one (they
+ *  read the active language off it). Separated from `getProfile` so the null case
+ *  fails loudly HERE instead of turning into an `undefined` language code that
+ *  silently queries the wrong deck. Module-level rather than a method because the
+ *  object literal below is typed as `DataSource` and cannot carry extra members. */
+async function requireProfile(): Promise<Profile> {
+  const profile = await supabaseDataSource.getProfile();
+  if (profile == null) throw new Error('No profile: onboarding has not completed for this account.');
+  return profile;
+}
+
 export const supabaseDataSource: DataSource = {
   async completeOnboarding(input): Promise<void> {
     const { error } = await supabase.rpc('complete_onboarding', {
@@ -201,7 +212,7 @@ export const supabaseDataSource: DataSource = {
   },
 
   async lookup(query: string, direction: SearchDirection): Promise<LookupOutcome> {
-    const profile = await this.getProfile();
+    const profile = await requireProfile();
     const { sourceCode, targetCode } = directionLangs(profile, direction);
     const { data, error } = await supabase.functions.invoke('translate', {
       body: { text: query, from: sourceCode, to: targetCode },
@@ -356,11 +367,16 @@ export const supabaseDataSource: DataSource = {
     return (data as { examples: UsageExample[] }).examples ?? [];
   },
 
-  async getProfile(): Promise<Profile> {
-    const { data, error } = await supabase.from('profiles').select('*').eq('id', await uid()).single();
+  async getProfile(): Promise<Profile | null> {
+    // maybeSingle, NOT single: a signed-in user with no `profiles` row is the
+    // normal pre-onboarding state since 3.5 (spec `24`), not an error. `single()`
+    // threw PGRST116 here, which the old flow hid by completing onboarding before
+    // any tab mounted; register-first surfaces it on every new account.
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', await uid()).maybeSingle();
     bail(error);
-    return mapProfile(data as ProfileRow);
+    return data == null ? null : mapProfile(data as ProfileRow);
   },
+
 
   async getEntitlement(): Promise<Entitlement> {
     const { data, error } = await supabase.from('subscriptions').select('*').maybeSingle();
@@ -371,7 +387,7 @@ export const supabaseDataSource: DataSource = {
   async getActiveDeck(lang?: string): Promise<Deck> {
     // Phase D: the active deck is the oldest deck for the ACTIVE learning
     // language (the hidden per-language main deck; RPCs guarantee it exists).
-    const target = lang ?? (await this.getProfile()).targetLang;
+    const target = lang ?? (await requireProfile()).targetLang;
     const { data, error } = await supabase
       .from('decks')
       .select('*')
@@ -385,7 +401,7 @@ export const supabaseDataSource: DataSource = {
   },
 
   async getDeckCards(lang?: string): Promise<DeckCards> {
-    const target = lang ?? (await this.getProfile()).targetLang;
+    const target = lang ?? (await requireProfile()).targetLang;
     // Archived (suspended) cards ARE included (07-17c ruling: archiving never
     // removes a word from earned counts — it was excluded here, which made
     // Home/Progress/Settings totals disagree with the Words header and the
@@ -419,7 +435,7 @@ export const supabaseDataSource: DataSource = {
   async getProgressStats(lang?: string): Promise<ProgressStats> {
     // Language-scoped (2026-08-05): the grid used to aggregate every language,
     // so an untouched language still showed the account's whole history.
-    const target = lang ?? (await this.getProfile()).targetLang;
+    const target = lang ?? (await requireProfile()).targetLang;
     const { data, error } = await supabase.rpc('get_study_stats', { p_lang: target });
     bail(error);
     const s = data as {
@@ -440,7 +456,7 @@ export const supabaseDataSource: DataSource = {
   },
 
   async getDecks(lang?: string): Promise<DeckSummary[]> {
-    const target = lang ?? (await this.getProfile()).targetLang;
+    const target = lang ?? (await requireProfile()).targetLang;
     const { data, error } = await supabase
       .from('decks')
       // 2026-07-30: count MEMBERSHIP rows, not cards.deck_id. Every card in a
@@ -484,7 +500,7 @@ export const supabaseDataSource: DataSource = {
     // Membership read (2026-07-30). Language-scoped as well as deck-scoped: the
     // deck already belongs to one language, but a stale deck id from a previous
     // language must resolve to empty rather than to another language's words.
-    const target = lang ?? (await this.getProfile()).targetLang;
+    const target = lang ?? (await requireProfile()).targetLang;
     // Paged for the same reason as the library reads: a deck can hold as many
     // words as the library does, and PostgREST truncates at max-rows silently.
     const rows = await fetchAllPages<JoinedCardRow>((from, to) =>
@@ -507,7 +523,7 @@ export const supabaseDataSource: DataSource = {
   },
 
   async createDeck(name: string, cardIds: string[], lang?: string): Promise<string> {
-    const target = lang ?? (await this.getProfile()).targetLang;
+    const target = lang ?? (await requireProfile()).targetLang;
     // The RPC owns normalisation, the premium gate, per-language name uniqueness,
     // the deck cap, and filtering the seed ids down to this user's cards in this
     // language — so a stale client can't stitch another language's word in.
@@ -536,7 +552,7 @@ export const supabaseDataSource: DataSource = {
   },
 
   async getWords(lang?: string): Promise<WordListItem[]> {
-    const target = lang ?? (await this.getProfile()).targetLang;
+    const target = lang ?? (await requireProfile()).targetLang;
     const rows = await fetchAllPages<JoinedCardRow>((from, to) =>
       supabase
         .from('cards')
@@ -576,7 +592,7 @@ export const supabaseDataSource: DataSource = {
     // The three tiers are disjoint by construction, so the result never needs
     // de-duplicating: (1) is dueAt ≤ now, (2) and (3) are both dueAt > now and
     // split on the cooldown predicate and its exact complement.
-    const target = lang ?? (await this.getProfile()).targetLang;
+    const target = lang ?? (await requireProfile()).targetLang;
     const nowIso = new Date().toISOString();
     // 2026-07-30: `deckId` narrows the same two pulls to one custom deck's
     // membership. The fill semantics are unchanged — they just fill from the

@@ -157,7 +157,15 @@ export interface DataSource {
    *  `targetTerm` = the sense's normalized target (per-sense examples,
    *  2026-07-17); omitted → the primary sense. */
   getExamples(translationId: string, targetTerm?: string): Promise<UsageExample[]>;
-  getProfile(): Promise<Profile>;
+  /** `null` = authenticated but NOT yet onboarded — a real, expected state since
+   *  3.5 moved the language pair AFTER auth (spec `24`). No `profiles` row exists
+   *  until `complete_onboarding` inserts one (there is no trigger on
+   *  `auth.users`), so "no row" is the signal the routing gate keys on, NOT an
+   *  error. ⚠️ It used to be one: `.single()` threw PGRST116 here, which was
+   *  invisible only because the old flow completed onboarding before any tab
+   *  mounted. Callers that legitimately require a profile should say so —
+   *  see `requireProfile` in SupabaseDataSource. */
+  getProfile(): Promise<Profile | null>;
   getEntitlement(): Promise<Entitlement>;
   /** `lang` = the caller's ACTIVE language (query-key value). Passing it explicitly
    *  removes the read-your-write race after a language switch — the server
