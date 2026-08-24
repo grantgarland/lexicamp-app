@@ -11,10 +11,11 @@ import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
 
+import { firstRunRoute } from '@/auth/firstRunGate';
 import { useSession } from '@/auth/session';
 import { USE_SUPABASE } from '@/data';
 import { SearchView } from '@/screens/SearchScreen';
-import { useProfile, useQuizLengthSync } from '@/query/hooks';
+import { useProfileQuery, useQuizLengthSync } from '@/query/hooks';
 import { useUiStore } from '@/store/uiStore';
 import { TAB_BAR_CORE_HEIGHT, TAB_BAR_FAB_OVERHANG, TabBar, type TabId } from '@/ui';
 import { tourTargets, WalkthroughController, WalkthroughOverlayHost } from '@/tour/walkthrough';
@@ -24,23 +25,28 @@ export default function TabsLayout() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { session, isLoading: sessionLoading } = useSession();
-  const profile = useProfile();
+  const { data: profile, isPending: profilePending, isFetching: profileFetching } = useProfileQuery();
   const searchOpen = useUiStore((s) => s.searchOpen);
   // UX-17b: adopt the server quiz-length mirror (cross-device sync).
   useQuizLengthSync();
   const setSearchOpen = useUiStore((s) => s.setSearchOpen);
 
-  // First-run gate. Live backend: no session → the onboarding arc (→ auth) —
-  // rendering tabs signed-out would just be a wall of failing queries. Wait out
-  // the async session restore before deciding (avoids a flash of onboarding for
-  // returning users). Mock mode keeps the old profile-flag behavior.
-  if (USE_SUPABASE) {
-    if (sessionLoading) return null; // one frame while AsyncStorage restores
-    if (session == null) return <Redirect href="/onboarding" />;
-  }
-  if (profile != null && !profile.onboardingComplete) {
-    return <Redirect href="/onboarding" />;
-  }
+  // First-run gate (3.5, spec `24`). The decision itself lives in
+  // `auth/firstRunGate.ts` as a pure function so it can be tested exhaustively —
+  // it is three-state logic whose failure modes (redirect loops, onboarding
+  // flashed at existing users) are invisible to typecheck and awkward to reach
+  // from a render test. See that file for why `isFetching` is consulted.
+  const route = firstRunRoute({
+    useSupabase: USE_SUPABASE,
+    sessionLoading,
+    hasSession: session != null,
+    profilePending,
+    profileFetching,
+    profile,
+  });
+  if (route === 'wait') return null;
+  if (route === 'value') return <Redirect href="/onboarding" />;
+  if (route === 'pair') return <Redirect href="/onboarding/pair" />;
 
   const active: TabId = pathname.startsWith('/words')
     ? 'words'
