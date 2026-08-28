@@ -162,6 +162,30 @@ tags:
     timeout: 15000
 - tapOn:
     id: 'result-save'
+# ⚠️ THIS IS THE FIRST SAVE IN THE FLOW, AND `clearState: true` GUARANTEES IT
+# (2026-08-26, run 89250259972). A native Android AlertDialog — "Want
+# reminders?" / NOT NOW / TURN ON REMINDERS — now fires from saveCard's
+# onSuccess the first time ANY card is saved (src/notifications/firstSavePrompt.ts,
+# latched on prefsStore.notifPromptSeen). A cleared install always starts that
+# latch false, so this flow always hits it, on exactly the tap above.
+#
+# It is a REAL system window, not a mis-scroll: `uiautomator dump` shows a
+# genuine android.widget.Button, foreground, no occlusion trick to blame this
+# time. It simply has to be handled before the flow can see anything behind it
+# — the very next assert, 'Delete word', is what died (34s in, CI's fastest
+# failure yet: the flow never got past its first save).
+#
+# NOT NOW, not the accept path: accepting calls `requestPushPermission()`,
+# which raises Android's OWN native permission dialog (POST_NOTIFICATIONS,
+# API 33+) — a second, less predictable system window this flow has no reason
+# to take on. Buttons render UPPERCASE (standard AlertDialog styling), hence
+# `(?i)`. `runFlow: when:` rather than a bare tap: the prompt is a one-time
+# latch, so this guard must not break the day the fixture seeds it pre-seen.
+- runFlow:
+    when:
+      visible: '(?i)not now'
+    commands:
+      - tapOn: '(?i)not now'
 # ⚠️ DO NOT assert 'Saved!' HERE — it is a 1.5-SECOND TRANSIENT and no timeout
 # can make it reliable (2026-08-11, run 31373413201). SearchScreen does
 # `setJustSaved(id); setTimeout(() => setJustSaved(null), 1500)`, and
