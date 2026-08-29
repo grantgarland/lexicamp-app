@@ -1,11 +1,12 @@
+[![Smoke Test (Maestro + EAS)](https://github.com/grantgarland/lexicamp-app/actions/workflows/nightly-smoke.yml/badge.svg)](https://github.com/grantgarland/lexicamp-app/actions/workflows/nightly-smoke.yml)
+[![Release iOS (TestFlight)](https://github.com/grantgarland/lexicamp-app/actions/workflows/release-ios.yml/badge.svg)](https://github.com/grantgarland/lexicamp-app/actions/workflows/release-ios.yml)
 # Lexicamp
 
 Lexicamp is a vocabulary learning app built with Expo / React Native. It helps users memorize new words faster through optimized spaced repetition — designed for language learners who want to build deep vocabulary retention.
 
 This repo contains the **app source code**. Business docs, architecture decisions, roadmap, and project context live in [lexicamp-project](https://github.com/grantgarland/lexicamp-project).
 
-[![Smoke Test (Maestro + EAS)](https://github.com/grantgarland/lexicamp-app/actions/workflows/nightly-smoke.yml/badge.svg)](https://github.com/grantgarland/lexicamp-app/actions/workflows/nightly-smoke.yml)
-[![Release iOS (TestFlight)](https://github.com/grantgarland/lexicamp-app/actions/workflows/release-ios.yml/badge.svg)](https://github.com/grantgarland/lexicamp-app/actions/workflows/release-ios.yml)
+Live TestFlight test build can be download [here](https://testflight.apple.com/join/fY2DtmqN)
 
 ---
 
