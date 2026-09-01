@@ -149,9 +149,22 @@ jest.mock('@/query/hooks', () => ({
   useRemoveLanguage: () => mockNoopMutation,
 }));
 
+// `useWalkthroughActive` normally reads a native TourGuideProvider context this
+// suite never mounts — proxy it off the real `tourScene` store instead (same
+// trick as QuizScreen.test.tsx), so a test can flip the tour on with
+// `useTourScene.getState().setStepId(...)`. `tourTargets` stays REAL
+// (requireActual): the screen writes `tourTargets.wordsToolbar.current = node`
+// in a ref callback, and a hand-written stand-in throws the moment that ref
+// doesn't exist on it.
+jest.mock('@/tour/walkthrough', () => ({
+  ...jest.requireActual('@/tour/walkthrough'),
+  useWalkthroughActive: () => require('@/tour/tourScene').useTourScene.getState().stepId != null,
+}));
+
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { WordListScreen } from '@/screens/WordListScreen';
 import { PortalHost } from '@/ui/Portal';
+import { useTourScene } from '@/tour/tourScene';
 import i18n from '@/i18n';
 
 const t = (k, o) => i18n.t(k, o);
@@ -177,7 +190,9 @@ const deleteWord = (target) => {
 beforeEach(() => {
   mockReady = true;
   mockRows = [mockWord('c1', 'the sugar', 'el azúcar'), mockWord('c2', 'the salt', 'la sal')];
+  useTourScene.getState().setStepId(null);
 });
+afterAll(() => useTourScene.getState().setStepId(null));
 
 describe('Word List — delete (CRUD audit 2026-08-04)', () => {
   it('deletes exactly the word asked for, server-side and on screen', () => {
@@ -384,5 +399,58 @@ describe('Word List — filter sheet CTA gating', () => {
     // where Reset applied and closed on its own (.maestro/word-list.yaml).
     expect(isDisabled('filter-reset')).toBe(true);
     expect(isDisabled('filter-apply')).toBe(false);
+  });
+});
+
+// Bug: a user who had Custom Decks selected before the walkthrough ever ran
+// stayed on it underneath the tour's search overlay (this screen stays mounted
+// across tab traversal, so `subTab` is not reset by `router.navigate('/words')`).
+// w4's anchor — the All Words search/filter toolbar — is gated on
+// `subTab === 'words'`, so it never mounted, and the tour got stuck spotlighting
+// nothing over a screen the backdrop had made inert. Fix mirrors HomeScreen's
+// `tourActive` override for the study card: render the All Words tab while the
+// tour is active, independent of what the user had actually selected.
+describe('Word List — walkthrough forces All Words (root-cause fix)', () => {
+  const rerenderScreen = (view) =>
+    view.rerender(
+      <>
+        <WordListScreen />
+        <PortalHost />
+      </>,
+    );
+
+  it('snaps back to All Words once the tour starts, even from Custom Decks', () => {
+    const view = renderScreen();
+    fireEvent.press(screen.getByTestId('words-tab-decks'));
+    expect(screen.getByTestId('words-tab-decks').props.accessibilityState.selected).toBe(true);
+    expect(screen.getByText(t('wordList.decksEmptyTitle'))).toBeTruthy();
+
+    // w3 pre-warms this screen (arriving underneath the search overlay); w4
+    // spotlights the toolbar. Either way the tour is active by the time this
+    // screen is revealed.
+    useTourScene.getState().setStepId('w3b');
+    rerenderScreen(view);
+
+    expect(screen.getByTestId('words-tab-all').props.accessibilityState.selected).toBe(true);
+    // The w4 anchor — this is exactly the element that used to never mount.
+    expect(screen.getByTestId('words-search-input')).toBeTruthy();
+    expect(screen.queryByText(t('wordList.decksEmptyTitle'))).toBeNull();
+  });
+
+  it('restores the user’s own Custom Decks selection once the tour ends', () => {
+    const view = renderScreen();
+    fireEvent.press(screen.getByTestId('words-tab-decks'));
+
+    useTourScene.getState().setStepId('w3b');
+    rerenderScreen(view);
+    expect(screen.getByTestId('words-tab-all').props.accessibilityState.selected).toBe(true);
+
+    useTourScene.getState().setStepId(null);
+    rerenderScreen(view);
+
+    // Overriding the RENDERED tab must not have clobbered the user's actual
+    // selection underneath it.
+    expect(screen.getByTestId('words-tab-decks').props.accessibilityState.selected).toBe(true);
+    expect(screen.getByText(t('wordList.decksEmptyTitle'))).toBeTruthy();
   });
 });

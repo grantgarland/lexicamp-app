@@ -35,7 +35,7 @@ import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { useDeferredReady } from '@/lib/useDeferredReady';
 import { LanguageIndicator } from '@/screens/shared/LanguageSwitcher';
 import { useUiStore } from '@/store/uiStore';
-import { tourTargets } from '@/tour/walkthrough';
+import { tourTargets, useWalkthroughActive } from '@/tour/walkthrough';
 import { getTierByStability, TIERS, type TierId } from '@/theme/tiers';
 
 import {
@@ -142,6 +142,17 @@ export function WordListScreen() {
   const { isPaid } = useEntitlement();
 
   const [subTab, setSubTab] = useState<'words' | 'decks'>('words');
+  // 18 §F2: the walkthrough pre-warms this screen on the All Words sub-tab (w3)
+  // so w4's toolbar anchor is mounted before it's needed — same reasoning as
+  // HomeScreen's `tourActive` override for the study card. `subTab` is per-screen
+  // state that OUTLIVES a tab switch away and back (this screen stays mounted),
+  // so a user who had Custom Decks selected before the tour started would
+  // otherwise leave it selected underneath the tour's search overlay, and w4
+  // would spotlight a toolbar that was never rendered. Overriding the RENDERED
+  // tab (not `subTab` itself) means the user's own selection is exactly where
+  // they left it once the tour ends.
+  const tourActive = useWalkthroughActive();
+  const effectiveSubTab = tourActive ? 'words' : subTab;
   const [query, setQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortSel>(DEFAULT_SORT);
   const [filterTiers, setFilterTiers] = useState<Set<TierId>>(new Set());
@@ -260,7 +271,7 @@ export function WordListScreen() {
   const settledQuery = useDebouncedValue(query);
   // True while the user is mid-word: results on screen are for an older term.
   const searchPending = settledQuery.trim().toLowerCase() !== query.trim().toLowerCase();
-  const pendingKey = `${subTab}|${settledQuery.trim().toLowerCase()}|${sortBy.dim}${sortBy.dir}|${[...filterTiers].sort().join(',')}|${showArchived}`;
+  const pendingKey = `${effectiveSubTab}|${settledQuery.trim().toLowerCase()}|${sortBy.dim}${sortBy.dir}|${[...filterTiers].sort().join(',')}|${showArchived}`;
   // False in the render where the key changes, true once interactions settle.
   const contentReady = useDeferredReady(pendingKey);
   const [applied, setApplied] = useState({ key: pendingKey, query: settledQuery, sortBy, filterTiers, showArchived });
@@ -313,13 +324,13 @@ export function WordListScreen() {
               trailing slot on every screen (2026-08-04). */}
           <View style={styles.titleRight}>
             <RawText style={styles.count}>
-              {subTab === 'words' ? t('wordList.count', { count: savedCount }) : t('wordList.deckCount', { count: allDecks.length })}
+              {effectiveSubTab === 'words' ? t('wordList.count', { count: savedCount }) : t('wordList.deckCount', { count: allDecks.length })}
             </RawText>
             <LanguageIndicator compact />
           </View>
         </View>
         <SegmentedTabs
-          active={subTab}
+          active={effectiveSubTab}
           onChange={(id) => setSubTab(id as 'words' | 'decks')}
           tabs={[
             // Maestro hooks. SegmentedTabs sets accessibilityRole="tab" but no
@@ -344,7 +355,7 @@ export function WordListScreen() {
 
       {/* Search sits UNDER the tabs (words tab only) so switching tabs never moves the
           tab row across routes. */}
-      {subTab === 'words' && (
+      {effectiveSubTab === 'words' && (
         /* 18 §F2: walkthrough anchor (w4 — search/filter/details toolbar). */
         <View ref={(node) => { tourTargets.wordsToolbar.current = node; }} collapsable={false}>
           <SearchBar
@@ -363,7 +374,7 @@ export function WordListScreen() {
       {/* Words tab. `contentReady` gates the HEAVY mounts (18-session perf fix):
           the press paints the tab traversal + skeleton this frame; the list
           mounts right after interactions settle. */}
-      {subTab === 'words' &&
+      {effectiveSubTab === 'words' &&
         (wordsLoading || !contentReady ? (
           // PULSING ghosts — genuinely heavy work: first load, tab traversal, a
           // filter apply. NOT for typing: with the debounce above, a keystroke no
@@ -414,7 +425,7 @@ export function WordListScreen() {
         ))}
 
       {/* Decks tab (W-04 / W-07) */}
-      {subTab === 'decks' &&
+      {effectiveSubTab === 'decks' &&
         (!isPaid ? (
           <PremiumGate />
         ) : (
