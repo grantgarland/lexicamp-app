@@ -8,9 +8,11 @@
 // 401s, RevenueCat retries five times, gives up, and the mirror silently never
 // populates — while both dashboards show a perfectly configured webhook. That
 // failure is invisible from either side, which is why it is written here in
-// capitals. It cannot be set from the deploy API: use the Supabase dashboard
-// (Edge Functions → revenuecat-webhook → Details) or
-// `supabase functions deploy revenuecat-webhook --no-verify-jwt`.
+// capitals. It defaults to ON and must be turned off EXPLICITLY at deploy time —
+// `supabase functions deploy revenuecat-webhook --no-verify-jwt`, or the
+// verify_jwt flag on the deploy API — or afterwards in the Supabase dashboard
+// under Edge Functions → revenuecat-webhook → Details. ⚠️ A REDEPLOY THAT FORGETS
+// THE FLAG SILENTLY RE-ARMS IT, which is the likeliest way this breaks later.
 //
 // Authentication is instead the shared secret RevenueCat sends in the
 // Authorization header (dashboard → Integrations → Webhooks), compared here in
