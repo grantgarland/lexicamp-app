@@ -20,6 +20,7 @@ import { signOut } from '@/auth/session';
 import { dataSource } from '@/data';
 import { registerForPush } from '@/notifications/push';
 import { LEGAL_URLS, SUPPORT_EMAIL, SUPPORT_URLS } from '@/constants/legal';
+import { openWebLink } from '@/lib/openWebLink';
 import { appVersionLabel } from '@/constants/appInfo';
 import { BRAND_MARK_KNOCKOUT_XML, BRAND_MARK_XML } from '@/ui/brandMark';
 import { useAccountIdentity, useNotificationPrefs, useSetUsername, useUpdateNotificationPrefs, useUpdateProfile } from '@/query/hooks';
@@ -675,7 +676,7 @@ export function SupportSheet({ visible, onClose }: { visible: boolean; onClose: 
         {rows.map((r) => (
           <Pressable
             key={r.key}
-            onPress={() => void Linking.openURL(r.url)}
+            onPress={() => void (r.url.startsWith('mailto:') ? Linking.openURL(r.url) : openWebLink(r.url))}
             accessibilityRole="link"
             accessibilityLabel={r.a11y}
             style={({ pressed }) => [styles.supportRow, pressed && styles.supportRowPressed]}
@@ -727,7 +728,7 @@ export function AboutSheet({ visible, onClose }: { visible: boolean; onClose: ()
             [t('settings.acknowledgments'), LEGAL_URLS.acknowledgments],
           ] as const
         ).map(([label, url], i, arr) => (
-          <ListItem key={label} title={label} onPress={() => void Linking.openURL(url)} last={i === arr.length - 1} />
+          <ListItem key={label} title={label} onPress={() => void openWebLink(url)} last={i === arr.length - 1} />
         ))}
       </View>
       <RawText style={styles.aboutCopyright}>{t('settings.aboutCopyright')}</RawText>

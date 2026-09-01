@@ -8,12 +8,13 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { Linking, Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { authErrorKey, localAuthErrorKey } from '@/auth/errorMessages';
 import { useIsDark } from '@/theme/appearance';
 import { LEGAL_URLS } from '@/constants/legal';
+import { openWebLink } from '@/lib/openWebLink';
 import {
   AppleSignInCancelled,
   isAppleSignInAvailable,
@@ -281,11 +282,11 @@ export function AuthScreen() {
           <IconStar size={12} color={theme.color.textFaint} />
           <RawText style={styles.legal}>
             {t('auth.legalPrefix')}
-            <RawText style={styles.legalLink} onPress={() => void Linking.openURL(LEGAL_URLS.terms)}>
+            <RawText style={styles.legalLink} onPress={() => void openWebLink(LEGAL_URLS.terms)}>
               {t('auth.legalTerms')}
             </RawText>
             {t('auth.legalAnd')}
-            <RawText style={styles.legalLink} onPress={() => void Linking.openURL(LEGAL_URLS.privacy)}>
+            <RawText style={styles.legalLink} onPress={() => void openWebLink(LEGAL_URLS.privacy)}>
               {t('auth.legalPrivacy')}
             </RawText>
             {t('auth.legalSuffix')}
