@@ -74,6 +74,10 @@ jobs:
   #                  This is the one check whose failure mode is literally "we
   #                  submitted dev tooling to Apple", so it gates the store
   #                  path as well as the PR path.
+  #   - verify:eas-env — proves the `production` EAS environment holds the
+  #                  variables the binary needs (and not the dev password).
+  #                  Its failure mode is a build that looks perfect and cannot
+  #                  transact; see the step's own comment.
   preflight:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -98,6 +102,23 @@ jobs:
 
       - name: No dev-only code in the production bundle
         run: npm run verify:bundle
+
+      # Added 2026-08-31, after EXPO_PUBLIC_REVENUECAT_IOS_API_KEY was found to
+      # have NEVER been in any EAS environment: it lived only in one machine's
+      # .env.local, so every EAS build shipped with the paywall dead
+      # (purchasesStatus=disabled-no-key) while every manual purchase test
+      # passed -- because a DEVELOPMENT build reads EXPO_PUBLIC_* from local
+      # .env.local through Metro, not from the build environment.
+      #
+      # Nothing else here can catch that: typecheck, jest and verify:bundle all
+      # inspect the source or the artifact, and the artifact looks fine -- the
+      # value is simply inlined as undefined. This asks the one question they
+      # cannot: does the environment this build will actually read contain what
+      # the app needs?
+      - name: Production EAS environment has the variables the build needs
+        run: npm run verify:eas-env
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
   build-ios:
     needs: preflight

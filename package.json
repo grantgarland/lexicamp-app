@@ -83,7 +83,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "prepare": "git config core.hooksPath .githooks || true",
-    "verify:bundle": "node scripts/verify-production-bundle.mjs"
+    "verify:bundle": "node scripts/verify-production-bundle.mjs",
+    "verify:eas-env": "node scripts/verify-eas-env.mjs"
   },
   "private": true,
   "allowScripts": {
