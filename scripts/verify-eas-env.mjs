@@ -26,6 +26,15 @@ import { join } from 'node:path';
 const ROOT = new URL('..', import.meta.url).pathname;
 const ENVIRONMENT = 'production';
 
+/** EAS CLI pin — major only, so patches are absorbed and a breaking major is
+ *  not (nightly-smoke.yml's invariant 3: no unpinned external tools). Held at
+ *  the CURRENT major rather than nightly's `eas-cli@20`, for the reason
+ *  release-ios.yml gives for its own `eas-version: latest`: on the release
+ *  path, a CLI lagging Expo's server-side API is its own failure mode. The
+ *  `Name  VALUE` shape this script parses is identical on 20.5.1 and 23.2.0.
+ *  Overridable so a workflow can hand down its own pin. */
+const EAS_CLI_SPEC = process.env.EAS_CLI_SPEC ?? 'eas-cli@23';
+
 /** Must be present, or the shipped binary is broken in a way no test catches.
  *  Each entry names the symptom, because "a variable is missing" is not
  *  actionable and "the paywall is dead" is. */
@@ -71,17 +80,61 @@ if (unreferenced.length > 0) {
 }
 
 // ── The actual check ─────────────────────────────────────────────────────────
+// ⚠️ THE PACKAGE IS `eas-cli`; THE BINARY IT INSTALLS IS `eas`. Those are not
+// interchangeable on an npx line: `npx eas` resolves to an unrelated registry
+// package literally named `eas` (a templating library that ships no bin) and
+// dies with npm's "could not determine executable to run". That is what
+// red-lined the 2026-09-03 release dispatch, on this check's first real run —
+// and the catch below then blamed EXPO_TOKEN, so the message ruled out the one
+// thing that was actually fine. Name the package; never guess at the cause.
+//
+// Prefer an `eas` already on PATH (a global install locally; whatever
+// expo/expo-github-action put there in CI) so a run does not refetch the CLI,
+// and fall back to the pinned package otherwise.
+function easInvocation() {
+  try {
+    execFileSync('eas', ['--version'], { stdio: 'ignore' });
+    return { file: 'eas', lead: [], label: 'eas (on PATH)' };
+  } catch {
+    return { file: 'npx', lead: ['--yes', EAS_CLI_SPEC], label: `npx ${EAS_CLI_SPEC}` };
+  }
+}
+
+/** Both streams, minus the noise. BOTH matters: eas-cli puts only the generic
+ *  wrapper ("Error: env:list command failed.") on stderr and the line that
+ *  actually names the cause — a config-plugin resolution failure, a missing
+ *  login — on stdout, so reading stderr alone reports nothing useful. The
+ *  filtered lines are the upgrade banner and node's deprecation warnings. */
+function easFailureDetail(e) {
+  const noise = [
+    /^\u2605 eas-cli@/,
+    /^To upgrade, run:/,
+    /^npm install -g eas-cli$/,
+    /^Proceeding with outdated version\.$/,
+    /DeprecationWarning|--trace-deprecation/,
+  ];
+  const lines = [String(e.stdout ?? ''), String(e.stderr ?? ''), e.stdout || e.stderr ? '' : String(e.message)]
+    .join('\n')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !noise.some((re) => re.test(l)));
+  return (lines.length > 0 ? lines : ['(the CLI printed nothing)']).slice(0, 8).join('\n');
+}
+
+const eas = easInvocation();
 let raw;
 try {
-  raw = execFileSync('npx', ['eas', 'env:list', ENVIRONMENT, '--format', 'long'], {
+  raw = execFileSync(eas.file, [...eas.lead, 'env:list', ENVIRONMENT, '--format', 'long'], {
     cwd: ROOT,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 } catch (e) {
   console.error(`verify:eas-env — could not read the '${ENVIRONMENT}' EAS environment.`);
-  console.error('Needs EXPO_TOKEN (or an interactive `eas login`).');
-  console.error(String(e.stderr ?? e.message).trim().split('\n').slice(0, 4).join('\n'));
+  console.error(`Ran: ${eas.label} env:list ${ENVIRONMENT} --format long\n`);
+  console.error(easFailureDetail(e));
+  console.error('\nUsual causes: EXPO_TOKEN missing or expired (locally: `eas login`); `npm ci`');
+  console.error('not run, so the app config plugins do not resolve; the CLI could not be fetched.');
   process.exit(1);
 }
 
