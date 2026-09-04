@@ -75,7 +75,9 @@
       ],
       "./plugins/withAsyncStorageDbSize",
       "expo-web-browser",
-      "expo-image"
+      "expo-image",
+      "expo-font",
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true,
