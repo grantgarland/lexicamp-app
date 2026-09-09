@@ -193,13 +193,42 @@ describe('homeSnapshot', () => {
       state({ cardId: 'b', dueAt: new Date(NOW.getTime() - 3 * DAY) }), // overdue, backlog
       state({ cardId: 'c', dueAt: new Date(NOW.getTime() + 6 * HOUR) }), // next 24h
       state({ cardId: 'd', dueAt: new Date(NOW.getTime() + 30 * HOUR) }), // future
-      state({ cardId: 'e', dueAt: new Date(NOW.getTime() - HOUR), state: 0 }), // unseen → ignored
+      state({ cardId: 'e', dueAt: new Date(NOW.getTime() - HOUR), state: 0, reps: 0 }), // unseen, but DUE
     ];
     const cards = states.map((s) => card({ id: s.cardId }));
     const snap = homeSnapshot(cards, states, NOW);
-    expect(snap.needRecallTotal).toBe(2); // a + b
-    expect(snap.needRecallToday).toBe(1); // a only (b predates today)
+    expect(snap.needRecallTotal).toBe(3); // a + b + e
+    expect(snap.needRecallToday).toBe(2); // a + e (b predates today)
     expect(snap.dueTomorrow).toBe(1); // c only
+  });
+
+  // The bug this pins: save_card writes `due_at = now()` with state 0, and
+  // getDueCards' due pull has never filtered on state — so the quiz served
+  // freshly saved words while Home counted zero and rendered "All caught up!"
+  // over a non-empty queue (2026-09-09).
+  it('counts a freshly saved, never-reviewed word as due', () => {
+    const justSaved = new Date(NOW.getTime() - 30 * 1000);
+    const snap = homeSnapshot(
+      [card({ id: 'new', createdAt: justSaved })],
+      [state({ cardId: 'new', dueAt: justSaved, state: 0, reps: 0, stability: 0, lastReviewAt: null })],
+      NOW,
+    );
+    expect(snap.needRecallTotal).toBe(1);
+    expect(snap.needRecallToday).toBe(1);
+    expect(snap.dueSoon).toBe(1);
+    // …and it is still UNSEEN: earned counts (tiers, mastery) stay untouched.
+    expect(snap.tierCounts).toEqual([0, 0, 0, 0, 0]);
+    expect(snap.masteredCount).toBe(0);
+  });
+
+  it('still excludes an archived word that was never reviewed', () => {
+    const snap = homeSnapshot(
+      [card({ id: 'new', suspended: true })],
+      [state({ cardId: 'new', dueAt: new Date(NOW.getTime() - HOUR), state: 0, reps: 0 })],
+      NOW,
+    );
+    expect(snap.needRecallTotal).toBe(0);
+    expect(snap.dueSoon).toBe(0);
   });
 
   it('counts cards added today off the start-of-day boundary', () => {

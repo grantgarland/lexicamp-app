@@ -178,6 +178,16 @@ export function homeSnapshot(cards: Card[], states: CardFsrsState[], now: Date =
   // 07-17c ruling: archived words stay in EARNED counts (wordsSaved, tiers,
   // mastered, addedToday) but leave the review queue — so only the due
   // numbers below skip suspended cards.
+  //
+  // ⚠️ SUSPENSION IS THE ONLY EXCLUSION. A never-reviewed word (state 0) is
+  // DUE — save_card inserts its schedule with `due_at = now()`, and
+  // getDueCards' due pull is `due_at <= now()` with no state predicate, so the
+  // quiz has always served new words the moment they are saved. These counts
+  // used to add `state > 0` on top of that (03's "Unseen words have no due_at",
+  // which the schema never made true), so a user who saved words and came back
+  // to Home was told "All caught up!" about a queue that was holding them
+  // (2026-09-09). One due number app-wide (17 §H1/X1) means this predicate has
+  // to be the queue's predicate.
   const suspendedIds = new Set<string>();
   for (const c of cards) if (c.suspended) suspendedIds.add(c.id);
 
@@ -197,7 +207,7 @@ export function homeSnapshot(cards: Card[], states: CardFsrsState[], now: Date =
       tierCounts[idx] += 1;
       if (s.stability >= MASTERY_STABILITY) masteredCount += 1;
     }
-    if (s.state > 0 && !suspendedIds.has(s.cardId)) {
+    if (!suspendedIds.has(s.cardId)) {
       if (s.dueAt.getTime() <= now.getTime()) {
         needRecallTotal += 1;
         if (s.dueAt.getTime() >= sod.getTime()) needRecallToday += 1;
