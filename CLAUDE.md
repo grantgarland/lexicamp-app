@@ -56,6 +56,18 @@ GENERATED from the design system — never hand-edit tokens.generated.ts).
    stMin/stMax); `MASTERY_STABILITY` must equal the summit band's stMin.
 3. **Derived, not stored** (03): home stats, tiers, lifecycle all compute in
    `derive.ts` from raw cards+states. Never persist a derivable number.
+   **"Due now" has ONE definition** — unsuspended AND `due_at <= now()`, with
+   NO `state` filter (a card is due the moment it is saved: `card_fsrs_state`
+   defaults `due_at` to now() and `state` to 0, so 03's "unseen words have no
+   due_at" was never true of the schema). Spelled out in THREE places —
+   `derive.ts` homeSnapshot, `getDueCards`, `run_push_scheduler`'s `due_count`
+   — so change all or none. ⚠️ The server half goes live the INSTANT the
+   migration applies; the client half only reaches users on the next build. So
+   a same-commit fix still ships as a gap, and the gap is visible ONLY to
+   someone on an older build — as a reminder promising a number Home does not
+   show (dogfood, 2026-09-09: push said 41, an app build from before the fix
+   said 19). Reproduce a due-count report against the reporter's BUILD, not
+   `main`.
 4. **Cost discipline:** never call Azure from the client; everything goes
    through the cached Edge Functions (negative caching included). Examples
    fetch lazily, once per translation.
@@ -69,7 +81,12 @@ GENERATED from the design system — never hand-edit tokens.generated.ts).
 - **Schema changes:** author in 03 first → apply via the Supabase connector
   (project `wtscflpwxqwpciwtsdid`) → `npx supabase migration fetch` to refresh
   `supabase/migrations/` → commit. RLS on everything; run the security
-  advisors after DDL.
+  advisors after DDL. ⚠️ `migration fetch` REWRITES ALL ~70 existing migration
+  files and STRIPS their `--` rationale comments (one fetch deleted 203 such
+  lines) — always `git checkout -- supabase/migrations/` straight after, and
+  keep only the new file (`git status -uall` shows it as `??`). Comments inside
+  a `$function$` body survive; plain-DDL migrations lose everything. Silent:
+  the SQL stays correct, so nothing fails and no test goes red.
 - **Edge Functions:** source of truth is `supabase/functions/*/index.ts` in
   this repo; deploy through the connector; live-verify with a throwaway auth
   user (email confirm is OFF), then delete it.
