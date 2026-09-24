@@ -63,6 +63,23 @@ describe('purchases wiring', () => {
     expect(screen).not.toMatch(/price=\{t\('paywall\.(annual|monthly)Price'\)\}/);
   });
 
+  it('links the Terms of Use and Privacy Policy FROM the purchase screen (App Store 3.1.2)', () => {
+    // The textbook first-submission rejection for auto-renewable subscriptions:
+    // the purchase screen must carry FUNCTIONAL links to both documents. Until
+    // 2026-09-24 this screen said "Terms & Privacy apply." as plain text and the
+    // links lived only in Settings → About — found in the launch audit (`26`).
+    const screen = src('src/screens/PaywallScreen.tsx');
+    expect(screen).toMatch(/openWebLink\(LEGAL_URLS\.terms\)/);
+    expect(screen).toMatch(/openWebLink\(LEGAL_URLS\.privacy\)/);
+    expect(screen).toMatch(/testID="paywallTerms"/);
+    expect(screen).toMatch(/testID="paywallPrivacy"/);
+    for (const lang of ['en', 'es']) {
+      const paywall = JSON.parse(src(`src/i18n/locales/${lang}.json`)).paywall;
+      expect(paywall.termsLink).toBeTruthy();
+      expect(paywall.privacyLink).toBeTruthy();
+    }
+  });
+
   it('wires BOTH restore affordances to StoreKit, not to the paywall', () => {
     // ⚠️ An inert Restore is a guideline 3.1.1 rejection on its own, and there
     // are two of them: the paywall's link and the Settings row (17 §S5, UX-17a).

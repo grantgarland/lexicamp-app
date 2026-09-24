@@ -22,8 +22,10 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { SvgXml } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { LEGAL_URLS } from '@/constants/legal';
 import { FREE_DAILY_SAVES } from '@/domain/derive';
 import { useTranslation } from '@/i18n';
+import { openWebLink } from '@/lib/openWebLink';
 import { useLogEvent } from '@/query/hooks';
 import { BRAND_MARK_KNOCKOUT_XML } from '@/ui/brandMark';
 import { purchasesReady, type PaywallPlan } from '@/purchases/purchases';
@@ -227,6 +229,36 @@ export function PaywallScreen() {
           <RawText style={styles.restoreText}>{t('paywall.restore')}</RawText>
         </Pressable>
         <RawText style={styles.legal}>{t('paywall.legal')}</RawText>
+        {/* App Store guideline 3.1.2 (`26`, 2026-09-24): an auto-renewable
+            subscription's purchase screen must carry FUNCTIONAL links to the Terms
+            of Use and the Privacy Policy. This line used to read "Terms & Privacy
+            apply." as plain text — the links existed only in Settings → About,
+            which is the textbook first-submission rejection. Separate Pressables,
+            not inline <Text onPress>: inline links are 11pt tap targets and
+            VoiceOver reads the whole sentence as one element. */}
+        <View style={styles.legalLinks}>
+          <Pressable
+            testID="paywallTerms"
+            onPress={() => void openWebLink(LEGAL_URLS.terms)}
+            hitSlop={8}
+            accessibilityRole="link"
+            style={({ pressed }) => pressed && { opacity: 0.6 }}
+          >
+            <RawText style={styles.legalLink}>{t('paywall.termsLink')}</RawText>
+          </Pressable>
+          <RawText style={styles.legal} accessibilityElementsHidden importantForAccessibility="no">
+            ·
+          </RawText>
+          <Pressable
+            testID="paywallPrivacy"
+            onPress={() => void openWebLink(LEGAL_URLS.privacy)}
+            hitSlop={8}
+            accessibilityRole="link"
+            style={({ pressed }) => pressed && { opacity: 0.6 }}
+          >
+            <RawText style={styles.legalLink}>{t('paywall.privacyLink')}</RawText>
+          </Pressable>
+        </View>
       </View>
     </Screen>
   );
@@ -291,6 +323,8 @@ const styles = StyleSheet.create((theme) => {
     restore: { alignSelf: 'center', paddingVertical: 4 },
     restoreText: { fontFamily: fonts.sans.semibold, fontSize: 13, color: color.brand },
     legal: { fontFamily: fonts.sans.regular, fontSize: 11, lineHeight: 16, color: color.textFaint, textAlign: 'center' },
+    legalLinks: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 },
+    legalLink: { fontFamily: fonts.sans.semibold, fontSize: 11, lineHeight: 16, color: color.brand },
 
     successWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
     successBadge: { width: 84, height: 84, borderRadius: 28, backgroundColor: color.accent, alignItems: 'center', justifyContent: 'center', marginBottom: 20, boxShadow: theme.shadow.accent },
