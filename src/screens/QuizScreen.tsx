@@ -354,6 +354,10 @@ export function QuizScreen({ deckId, deckName }: QuizScreenProps = {}) {
                 card={card.content}
                 mode={card.mode}
                 revealCta={false}
+                // Never grab the keyboard under the walkthrough (see SearchScreen's
+                // WALKTHROUGH LOCK): w6 forces the flip, but the quiz can render a
+                // frame face-down before the tour publishes its step id.
+                autoFocus={!tourActive}
                 onReveal={() => {
                   setRevealed(true);
                   setAutoRating(null);

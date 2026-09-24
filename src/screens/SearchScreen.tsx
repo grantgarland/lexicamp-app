@@ -4,8 +4,8 @@
 // SearchBar, RecentChips, SkeletonCard. Lookup flows through DataSource.lookup()
 // (2.1): Tier-0 capture gate client-side for instant feedback → debounced query
 // through the state layer (mock now, translate Edge Function via SupabaseDataSource).
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet as RNStyleSheet, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Keyboard, Pressable, ScrollView, StyleSheet as RNStyleSheet, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -442,7 +442,7 @@ export function SearchView({ onClose, bottomInset = 0 }: { onClose: () => void; 
 
       {/* 18 §F2: walkthrough anchor (w3 — "search & save here"). */}
       <View ref={(node) => { tourTargets.searchInput.current = node; }} collapsable={false}>
-        <SearchBar value={query} onChange={setQuery} placeholder={placeholder} />
+        <SearchBar value={query} onChange={setQuery} placeholder={placeholder} locked={tourSearchDemo} />
       </View>
 
       {/* Recents live OUTSIDE the content scroll: the fade mask must stay fixed
@@ -616,20 +616,37 @@ function DirectionToggle({
   );
 }
 
-function SearchBar({ value, onChange, placeholder }: { value: string; onChange: (s: string) => void; placeholder: string }) {
+function SearchBar({ value, onChange, placeholder, locked = false }: { value: string; onChange: (s: string) => void; placeholder: string; locked?: boolean }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const hasValue = value.length > 0;
+  // WALKTHROUGH LOCK (bug found on build 12, 2026-09-24). Step w3 opens this
+  // screen, and the input's `autoFocus` took keyboard focus as it mounted. The
+  // tour's overlay blocks TOUCHES, not the keyboard: the keyboard rose over the
+  // tooltip's Next/Back/Skip — the tour's only exits, since the backdrop is inert
+  // by design — and typing replaced the demo word, swapping out the result card
+  // w3b spotlights. The tour was stranded, the screen looked frozen.
+  // So while the demo is on screen the field is display-only: no autoFocus, not
+  // editable, and blurred if focus arrived first (the input can mount a render
+  // before the tour publishes its step id).
+  const inputRef = useRef<TextInput>(null);
+  useEffect(() => {
+    if (!locked) return;
+    inputRef.current?.blur();
+    Keyboard.dismiss();
+  }, [locked]);
   return (
     <View style={styles.searchPad}>
       <View style={[styles.searchBox, { borderColor: hasValue ? theme.color.brand : theme.color.border }]}>
         <IconSearch size={17} color={hasValue ? theme.color.brand : theme.color.textMuted} />
         <TextInput
+          ref={inputRef}
           value={value}
           onChangeText={onChange}
           placeholder={placeholder}
           placeholderTextColor={theme.color.textFaint}
-          autoFocus
+          autoFocus={!locked}
+          editable={!locked}
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
