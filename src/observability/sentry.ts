@@ -50,6 +50,7 @@ export type SentryStatus = 'uninitialized' | 'disabled-dev' | 'disabled-no-dsn' 
 export let sentryStatus: SentryStatus = 'uninitialized';
 
 interface SentryModule {
+  captureMessage: (message: string, context?: { level?: 'warning'; extra?: Record<string, unknown> }) => string;
   init: (options: {
     dsn: string;
     tracesSampleRate: number;
@@ -103,5 +104,26 @@ export function initSentry(): void {
     // have taken the entry module with it.
     sentryEnabled = false;
     sentryStatus = 'failed';
+  }
+}
+
+/**
+ * Record a handled-but-notable event — never a crash — such as a best-effort
+ * step that failed while the user's action still succeeded. No-op unless Sentry
+ * is running (so a no-op in dev), and never throws: reporting must not be the
+ * thing that breaks its caller.
+ *
+ * Use this where the evidence has to outlive the user's data. `logEvent` writes
+ * to `study_events`, which cascades away with the account — useless for anything
+ * that happens during account deletion.
+ */
+export function reportMessage(message: string, extra?: Record<string, unknown>): void {
+  if (!sentryEnabled) return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Sentry = require('@sentry/react-native') as SentryModule;
+    Sentry.captureMessage(message, { level: 'warning', extra });
+  } catch {
+    /* see above */
   }
 }

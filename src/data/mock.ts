@@ -885,4 +885,9 @@ export const mockDataSource: DataSource = {
     // Mock: nothing persistent to destroy — the screen still runs its sign-out
     // and bounce, which is the part worth exercising in mock mode.
   },
+
+  async revokeAppleAuthorization() {
+    // Mock: there is no Apple authorization to revoke. Mock identities are never
+    // `apple`, so the deletion flow does not reach this in practice.
+  },
 };

@@ -305,4 +305,11 @@ export interface DataSource {
    *  remove this from the UI. Irreversible; the caller is responsible for the
    *  confirmation dialog and for signing out afterwards. */
   deleteOwnAccount(): Promise<void>;
+  /** Revoke the CALLING user's Sign in with Apple authorization, per Apple's
+   *  account-deletion guidance, using a fresh authorization code from the native
+   *  Apple sheet (single-use, valid ~5 minutes). Must run BEFORE
+   *  `deleteOwnAccount` — the `apple-revoke` Edge Function authenticates the
+   *  caller by their session, which deletion destroys. Rejects on any failure;
+   *  callers treat it as best-effort (see `auth/deleteAccount.ts`). */
+  revokeAppleAuthorization(authorizationCode: string): Promise<void>;
 }

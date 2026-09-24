@@ -567,6 +567,7 @@
     "deleteAccount": "Delete Account",
     "deleteAccountTitle": "Delete your account?",
     "deleteAccountBody": "This permanently deletes your account, all saved words, study history, and subscription. This cannot be undone.",
+    "deleteAccountBodyApple": "This permanently deletes your account, all saved words, study history, and subscription. This cannot be undone. Apple will then ask you to confirm, so we can also disconnect your Apple ID from Lexicamp.",
     "deleteAccountWarn": "If you have an active subscription, cancel it in the App Store before deleting to avoid further charges.",
     "deleteConfirm": "Yes, delete my account",
     "searchLanguages": "Search languages…",

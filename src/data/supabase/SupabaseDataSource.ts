@@ -751,4 +751,14 @@ export const supabaseDataSource: DataSource = {
     const { error } = await supabase.rpc('delete_own_account');
     bail(error);
   },
+
+  async revokeAppleAuthorization(authorizationCode: string): Promise<void> {
+    // `26` B1. The function name is pinned by a contract test against
+    // supabase/functions/ — a rename on either side fails CI, not production.
+    const { error } = await supabase.functions.invoke('apple-revoke', { body: { authorizationCode } });
+    if (error) {
+      const status = (error as { context?: { status?: number } }).context?.status;
+      throw new Error(`apple_revoke_failed${status != null ? `_${status}` : ''}`);
+    }
+  },
 };

@@ -92,6 +92,21 @@ pre-verified; see `00` infra decisions).
   dictionary examples, cached per-sense on `translations_cache.examples`
   (jsonb map keyed by normalized target term). Validates the requested sense
   against the cached row before spending an Azure call.
+- **`apple-revoke`** (verify_jwt ON; `26` B1, 2026-09-23): revokes a user's
+  Sign in with Apple authorization during account deletion, per Apple's
+  account-deletion guidance. The client re-runs the native Apple sheet for a
+  fresh single-use authorization code and calls this BEFORE
+  `delete_own_account()` (the caller is authenticated by the session deletion
+  destroys). Exchanges the code at `appleid.apple.com/auth/token`, refuses to
+  revoke a *different* Apple ID than the account's own (409), then revokes.
+  Nothing Apple-issued is ever stored. Fails closed (500 `not configured`) when
+  any secret is missing. Secrets — **set by the operator; the key never passes
+  through an agent**: `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`
+  (the `.p8` contents, armour included — real or `\n`-escaped newlines both
+  work), `APPLE_CLIENT_ID` (= bundle ID `com.lexicamp.app`). Apple's
+  `invalid_client` means one of those four is wrong; `invalid_grant` means the
+  code was spent or expired. Signing is verified offline by
+  `npm run verify:apple-secret`.
 - Deploying via the MCP connector: pass `functions/deno.json` in the files
   array AND set `import_map_path` (bare `@supabase/supabase-js` specifier) —
   the CLI resolves it implicitly, the connector does not.

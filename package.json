@@ -84,7 +84,8 @@
     "test:watch": "jest --watch",
     "prepare": "git config core.hooksPath .githooks || true",
     "verify:bundle": "node scripts/verify-production-bundle.mjs",
-    "verify:eas-env": "node scripts/verify-eas-env.mjs"
+    "verify:eas-env": "node scripts/verify-eas-env.mjs",
+    "verify:apple-secret": "node --no-warnings scripts/verify-apple-client-secret.mts"
   },
   "private": true,
   "allowScripts": {

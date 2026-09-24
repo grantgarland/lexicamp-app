@@ -567,6 +567,7 @@
     "deleteAccount": "Eliminar cuenta",
     "deleteAccountTitle": "¿Eliminar tu cuenta?",
     "deleteAccountBody": "Esto elimina permanentemente tu cuenta, todas las palabras guardadas, el historial y la suscripción. No se puede deshacer.",
+    "deleteAccountBodyApple": "Esto elimina permanentemente tu cuenta, todas las palabras guardadas, el historial y la suscripción. No se puede deshacer. Después, Apple te pedirá que confirmes para que también podamos desvincular tu ID de Apple de Lexicamp.",
     "deleteAccountWarn": "Si tienes una suscripción activa, cancélala en App Store antes de eliminar la cuenta para evitar cargos futuros.",
     "deleteConfirm": "Sí, eliminar mi cuenta",
     "searchLanguages": "Buscar idiomas…",

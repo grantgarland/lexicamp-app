@@ -17,6 +17,9 @@ import { useTranslation } from '@/i18n';
 import { router } from 'expo-router';
 
 import { signOut } from '@/auth/session';
+import { requestAppleAuthorizationCode } from '@/auth/appleRevocation';
+import { deleteAccountWithAppleRevocation } from '@/auth/deleteAccount';
+import { reportMessage } from '@/observability/sentry';
 import { dataSource } from '@/data';
 import { registerForPush } from '@/notifications/push';
 import { LEGAL_URLS, SUPPORT_EMAIL, SUPPORT_URLS } from '@/constants/legal';
@@ -284,7 +287,9 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
       <ConfirmDialog
         visible={confirmDelete}
         title={t('settings.deleteAccountTitle')}
-        body={t('settings.deleteAccountBody')}
+        // Apple accounts are told up front that Apple's sheet is coming (`26` B1) —
+        // an unannounced "sign in" prompt in the middle of deleting reads as a bug.
+        body={t(identity?.provider === 'apple' ? 'settings.deleteAccountBodyApple' : 'settings.deleteAccountBody')}
         // Split out of `body` rather than concatenated after a blank line: the
         // billing consequence is the one thing here the user can still act on,
         // and as a second muted paragraph it read as more of the same warning.
@@ -314,7 +319,23 @@ export function EditProfileSheet({ visible, profile, isPaid, onClose, onUpgrade 
           setDeleting(true);
           void (async () => {
             try {
-              await dataSource.deleteOwnAccount();
+              // Revoke Sign in with Apple first, then delete (`26` B1). The policy —
+              // dismissing Apple's sheet cancels, any other revocation failure is
+              // reported and deletion proceeds — lives in auth/deleteAccount.ts.
+              const provider =
+                identity?.provider ?? (await dataSource.getAccountIdentity().then((i) => i.provider, () => null));
+              const outcome = await deleteAccountWithAppleRevocation({
+                provider,
+                requestAppleCode: requestAppleAuthorizationCode,
+                revokeApple: (code) => dataSource.revokeAppleAuthorization(code),
+                deleteAccount: () => dataSource.deleteOwnAccount(),
+                report: reportMessage,
+              });
+              if (outcome === 'cancelled') {
+                // Nothing was deleted. Leave the dialog open so they can retry or cancel.
+                setDeleting(false);
+                return;
+              }
             } catch {
               // Surface and BAIL — signing out after a failed delete would hide
               // the fact that the account still exists.
