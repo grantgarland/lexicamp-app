@@ -5,7 +5,7 @@
 // (2.1): Tier-0 capture gate client-side for instant feedback → debounced query
 // through the state layer (mock now, translate Edge Function via SupabaseDataSource).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Keyboard, Pressable, ScrollView, StyleSheet as RNStyleSheet, TextInput, View } from 'react-native';
+import { Keyboard, Pressable, ScrollView, StyleSheet as RNStyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -92,6 +92,16 @@ export function toCardResult(
     })),
   };
 }
+
+/** Fixed line height for the search input, in points at 1× text size (`26`
+ *  B16, 2026-09-26). The input switches font when it has text — sans for the
+ *  placeholder, serif for a typed word — and an unsized single-line TextInput
+ *  takes its height from the font's line metrics: measured on an iPhone 16 Pro
+ *  Max at 1×, 20pt (sans) vs 24.3pt (serif), so the box grew 4.3pt on the first
+ *  keystroke and everything below it jumped. Sizing the line for the taller
+ *  serif, with the box padding trimmed to match, keeps the box at its resting
+ *  height (45.3pt) in both states. */
+const SEARCH_LINE_PT = 24;
 
 /** How long typing must pause before the word counts as finished (`26` B15). */
 const LOOKUP_PAUSE_MS = 1000;
@@ -664,6 +674,10 @@ function SearchBar({ value, onChange, onSubmit, placeholder, locked = false }: {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const hasValue = value.length > 0;
+  // Scales with Dynamic Type, capped where the input's own text is capped, so
+  // large text still fits the fixed line (`SEARCH_LINE_PT`).
+  const { fontScale } = useWindowDimensions();
+  const lineHeight = Math.ceil(SEARCH_LINE_PT * Math.min(fontScale, FONT_SCALE_MAX));
   // WALKTHROUGH LOCK (bug found on build 12, 2026-09-24). Step w3 opens this
   // screen, and the input's `autoFocus` took keyboard focus as it mounted. The
   // tour's overlay blocks TOUCHES, not the keyboard: the keyboard rose over the
@@ -679,9 +693,13 @@ function SearchBar({ value, onChange, onSubmit, placeholder, locked = false }: {
     inputRef.current?.blur();
     Keyboard.dismiss();
   }, [locked]);
+  // …and it LOOKS display-only (`26` B13 follow-up, 2026-09-26): dimmed, no
+  // clear ✕ (it would wipe the demo word the next step spotlights), announced as
+  // disabled. A live-looking field that ignores typing read as "typing clears
+  // the input" in dogfood.
   return (
-    <View style={styles.searchPad}>
-      <View style={[styles.searchBox, { borderColor: hasValue ? theme.color.brand : theme.color.border }]}>
+    <View style={styles.searchPad} pointerEvents={locked ? 'none' : 'auto'}>
+      <View style={[styles.searchBox, { borderColor: hasValue && !locked ? theme.color.brand : theme.color.border }, locked && styles.searchBoxLocked]}>
         <IconSearch size={17} color={hasValue ? theme.color.brand : theme.color.textMuted} />
         <TextInput
           ref={inputRef}
@@ -698,13 +716,14 @@ function SearchBar({ value, onChange, onSubmit, placeholder, locked = false }: {
           // after the pause (`26` B15).
           onSubmitEditing={onSubmit}
           accessibilityLabel={placeholder ?? t('common.search')}
+          accessibilityState={{ disabled: locked }}
           // Maestro tap target (word-capture.yaml) — taps by id, never by
           // placeholder text (placeholder is locale/profile-dependent).
           testID="search-input"
           maxFontSizeMultiplier={FONT_SCALE_MAX}
-          style={[styles.searchInput, { fontFamily: hasValue ? theme.fonts.serif.regular : theme.fonts.sans.regular }]}
+          style={[styles.searchInput, { height: lineHeight, fontFamily: hasValue ? theme.fonts.serif.regular : theme.fonts.sans.regular }]}
         />
-        {hasValue && (
+        {hasValue && !locked && (
           <Pressable onPress={() => onChange('')} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('search.clear')} testID="search-clear" style={styles.clear}>
             <IconX size={11} color={theme.color.textMuted} />
           </Pressable>
@@ -818,9 +837,12 @@ const styles = StyleSheet.create((theme) => {
       backgroundColor: color.surfaceSunken,
       borderRadius: 14,
       borderWidth: theme.borderWidth.base,
-      paddingVertical: 11,
+      // 9 + 24 (SEARCH_LINE_PT) + 9 = 42pt inside the border — the box's resting
+      // height before B16 (11 + 20 + 11), now held in both states.
+      paddingVertical: 9,
       paddingHorizontal: 14,
     },
+    searchBoxLocked: { opacity: 0.6 },
     searchInput: { flex: 1, fontSize: 16, color: color.textStrong, padding: 0 },
     clear: { width: 20, height: 20, borderRadius: 10, backgroundColor: color.borderStrong, alignItems: 'center', justifyContent: 'center' },
 
