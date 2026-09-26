@@ -28,6 +28,14 @@ describe('walkthrough focus lock', () => {
     expect(search).toMatch(/if \(!locked\) return;\s*inputRef\.current\?\.blur\(\);\s*Keyboard\.dismiss\(\);/);
   });
 
+  it('makes the locked field look and read as display-only (B13 follow-up)', () => {
+    // A live-looking field that silently ignored typing read as "typing clears
+    // the input" in dogfood; the clear ✕ could also wipe the spotlit demo word.
+    expect(search).toMatch(/hasValue && !locked && \(/);
+    expect(search).toMatch(/accessibilityState=\{\{ disabled: locked \}\}/);
+    expect(search).toMatch(/locked && styles\.searchBoxLocked/);
+  });
+
   it('keeps the quiz answer field from auto-focusing under the tour', () => {
     expect(src('src/screens/QuizScreen.tsx')).toMatch(/autoFocus=\{!tourActive\}/);
   });

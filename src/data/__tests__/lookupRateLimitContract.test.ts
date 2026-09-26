@@ -56,3 +56,21 @@ describe('search lookup gates (app)', () => {
     expect(ds).toMatch(/throw new LookupBusyError\(reason, retryAfterSeconds\)/);
   });
 });
+
+describe('search input height (26 B16)', () => {
+  // The input swaps sans (placeholder) for serif (typed word); an unsized
+  // TextInput takes its height from the font, so the box grew 4.3pt on the first
+  // keystroke. Pinned: a fixed, Dynamic-Type-scaled line height, and the padding
+  // that keeps the resting box height (9 + 24 + 9 = 42pt inside the border).
+  const screen = src('src/screens/SearchScreen.tsx');
+
+  it('gives the input a fixed line height that does not depend on the font', () => {
+    expect(screen).toMatch(/const SEARCH_LINE_PT = 24;/);
+    expect(screen).toMatch(/Math\.ceil\(SEARCH_LINE_PT \* Math\.min\(fontScale, FONT_SCALE_MAX\)\)/);
+    expect(screen).toMatch(/style=\{\[styles\.searchInput, \{ height: lineHeight, fontFamily:/);
+  });
+
+  it('trims the box padding so the resting height is unchanged', () => {
+    expect(screen).toMatch(/paddingVertical: 9,\s*paddingHorizontal: 14,/);
+  });
+});
