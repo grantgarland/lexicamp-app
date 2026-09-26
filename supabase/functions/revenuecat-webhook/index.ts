@@ -20,7 +20,8 @@
 //
 // The apply itself lives in the `apply_revenuecat_event` RPC, not here: dedupe,
 // the out-of-order guard and the mirror write have to be one transaction, and
-// SQL is where that is cheap. This file is transport and auth only.
+// SQL is where that is cheap. This file is transport and auth — plus ONE
+// exception, the TRANSFER recipient grant below (`26` B14).
 // @ts-ignore -- Deno npm: specifier resolved at runtime, not by the TS server.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -41,6 +42,82 @@ function secretsMatch(a: string, b: string): boolean {
   const n = Math.max(ea.length, eb.length);
   for (let i = 0; i < n; i++) diff |= (ea[i] ?? 0) ^ (eb[i] ?? 0);
   return diff === 0;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * `26` B14 (2026-09-25) — a TRANSFER must GRANT the recipient, not only revoke
+ * the prior owner.
+ *
+ * `apply_revenuecat_event` handles TRANSFER by revoking `transferred_from` and
+ * assuming "the winning side is set by the events that follow it". RevenueCat
+ * sends no such event: the next thing the recipient receives is their next
+ * RENEWAL — up to a year away on an annual plan. So anyone whose Apple ID
+ * already held a subscription (a new account after deletion, a second account,
+ * a reinstall) paid and stayed FREE until the hourly reconcile noticed —
+ * observed live on 2026-09-25 (TRANSFER 12:05 → reconciled 13:00 UTC), through
+ * one purchase, four restores and a re-login.
+ *
+ * A TRANSFER carries no product, period or expiry, so the recipient's state is
+ * fetched from RevenueCat and applied through `apply_revenuecat_snapshot` —
+ * the reconcile job's own path, so there is one definition of "apply RevenueCat's
+ * truth" rather than two. `$RCAnonymousID`s are skipped (not Supabase users), as
+ * are recipients with no profile yet (the mirror row needs one; reconcile's
+ * transfer-recipient candidates pick them up later).
+ */
+async function grantTransferRecipients(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  event: Record<string, unknown>,
+): Promise<{ granted: Record<string, unknown>[]; failed: number }> {
+  const recipients = (Array.isArray(event.transferred_to) ? event.transferred_to : []).filter(
+    (x): x is string => typeof x === 'string' && UUID.test(x),
+  );
+  const granted: Record<string, unknown>[] = [];
+  if (recipients.length === 0) return { granted, failed: 0 };
+
+  const apiKey = Deno.env.get('REVENUECAT_SECRET_API_KEY');
+  if (!apiKey) {
+    console.error(JSON.stringify({ at: 'transfer_grant', error: 'REVENUECAT_SECRET_API_KEY unset' }));
+    return { granted, failed: recipients.length };
+  }
+
+  let failed = 0;
+  for (const userId of recipients) {
+    try {
+      const { data: profile } = await supabase.from('profiles').select('id').eq('id', userId).maybeSingle();
+      if (!profile) {
+        granted.push({ user: userId, result: 'no_profile' });
+        continue;
+      }
+      const res = await fetch(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(userId)}`, {
+        headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
+      });
+      // Grant-only: never act on a non-OK answer. A 5xx must not become a
+      // revocation, and a 404 for someone RevenueCat just transferred TO would be
+      // an anomaly worth a retry, not a verdict.
+      if (!res.ok) {
+        failed++;
+        console.error(JSON.stringify({ at: 'transfer_grant', user: userId, status: res.status }));
+        continue;
+      }
+      const { data: applied, error } = await supabase.rpc('apply_revenuecat_snapshot', {
+        p_user_id: userId,
+        p_snapshot: await res.json(),
+      });
+      if (error) {
+        failed++;
+        console.error(JSON.stringify({ at: 'transfer_grant', user: userId, message: error.message }));
+        continue;
+      }
+      granted.push({ user: userId, ...(applied as Record<string, unknown>) });
+    } catch (e) {
+      failed++;
+      console.error(JSON.stringify({ at: 'transfer_grant', user: userId, message: String(e) }));
+    }
+  }
+  return { granted, failed };
 }
 
 Deno.serve(async (req: Request) => {
@@ -99,5 +176,21 @@ Deno.serve(async (req: Request) => {
   // Logged at info so an unresolved app_user_id (the "purchases arrive but match
   // nobody" failure) is greppable without opening the database.
   console.log(JSON.stringify({ at: 'apply', ...(data as Record<string, unknown>) }));
+
+  if (String(event.type ?? '').toUpperCase() === 'TRANSFER') {
+    // Runs on redeliveries too — the RPC dedupes the event, but the grant is an
+    // idempotent "apply RevenueCat's current truth", so repeating it is safe and
+    // is exactly what makes a retry useful.
+    const transfer = await grantTransferRecipients(supabase, event);
+    console.log(JSON.stringify({ at: 'transfer_grant', eventId: event.id, ...transfer }));
+    if (transfer.failed > 0) {
+      // Non-200 ON PURPOSE, like a DB failure: a failed grant (RevenueCat API
+      // down, a transient apply error) is exactly what RevenueCat's retry is for.
+      // The hourly reconcile remains the backstop if every retry fails.
+      return json({ error: 'transfer grant failed', ...transfer }, 500);
+    }
+    return json({ ...((data as Record<string, unknown>) ?? { result: 'ok' }), transfer: transfer.granted });
+  }
+
   return json(data ?? { result: 'ok' });
 });

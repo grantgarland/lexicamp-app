@@ -141,14 +141,45 @@ describe('revenuecat-webhook contract', () => {
     expect(fn).not.toMatch(/Authorization'\) === expected/);
   });
 
-  it('returns non-200 ONLY for a database failure', () => {
+  it('returns non-200 ONLY for transient failures (database, or a TRANSFER grant)', () => {
     // RevenueCat retries any non-200 five times. Duplicates, stale events,
     // unmapped users and unhandled types are all normal outcomes: 4xx-ing them
     // buries the real failures under noise that will never succeed.
     const statuses = [...fn.matchAll(/json\([^;]*?,\s*(\d{3})\)/gs)].map((m) => m[1]);
-    // 405 method, 500 unconfigured, 401 unauthorized, 400 ×2 malformed, 500 apply.
-    expect(statuses.sort()).toEqual(['400', '400', '401', '405', '500', '500']);
+    // 405 method, 500 unconfigured, 401 unauthorized, 400 ×2 malformed, 500 apply,
+    // and (`26` B14) 500 for a failed TRANSFER recipient grant — transient by
+    // nature (RevenueCat's API, an apply error), so the retry is the point.
+    expect(statuses.sort()).toEqual(['400', '400', '401', '405', '500', '500', '500']);
     expect(fn).toMatch(/result: 'skipped_sandbox'/);
+  });
+});
+
+describe('revenuecat-webhook TRANSFER grant (26 B14)', () => {
+  // Found 2026-09-25: apply_revenuecat_event revokes a TRANSFER's prior owner and
+  // grants the recipient NOTHING ("the winning side is set by the events that
+  // follow it" — RevenueCat sends none). A paying user stayed free until the
+  // hourly reconcile. These pin the fix.
+  it('grants every Supabase-user recipient of a TRANSFER', () => {
+    expect(fn).toMatch(/event\.type[^;]*\)\.toUpperCase\(\) === 'TRANSFER'/);
+    expect(fn).toMatch(/await grantTransferRecipients\(supabase, event\)/);
+    expect(fn).toMatch(/event\.transferred_to/);
+  });
+
+  it('skips RevenueCat anonymous ids — only UUIDs are Supabase users', () => {
+    expect(fn).toMatch(/UUID\.test\(x\)/);
+  });
+
+  it("applies RevenueCat's truth through the reconcile job's own RPC", () => {
+    expect(fn).toMatch(/api\.revenuecat\.com\/v1\/subscribers\//);
+    expect(fn).toMatch(/rpc\('apply_revenuecat_snapshot'/);
+  });
+
+  it('never acts on a non-OK RevenueCat answer (grant-only)', () => {
+    expect(fn).toMatch(/if \(!res\.ok\) \{\s*failed\+\+;/);
+  });
+
+  it('asks RevenueCat to retry when the grant fails', () => {
+    expect(fn).toMatch(/transfer grant failed'[^;]*500\)/);
   });
 });
 
