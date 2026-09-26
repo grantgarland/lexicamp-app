@@ -8,7 +8,9 @@ import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tansta
 
 import { dataSource as ds } from '@/data';
 import type { WordListItem } from '@/data/DataSource';
+import { LookupBusyError } from '@/data/lookupBusy';
 import { commitWithOutbox } from '@/data/outbox';
+import { useLookupCooldown } from '@/store/lookupCooldownStore';
 import { type HomeSnapshot, homeSnapshot } from '@/domain/derive';
 import type { BufferedRating } from '@/domain/quiz';
 import type { LookupOutcome } from '@/domain/translation';
@@ -524,6 +526,8 @@ export interface LookupData {
   /** 429-hardening (2026-07-19): 'busy' = rate-limited/throttled (ours or
    *  Azure's, worth retrying shortly); 'unavailable' = service failure. */
   error: 'busy' | 'unavailable' | null;
+  /** Re-run this lookup now (used when a cool-down ends, `26` B15). */
+  retry: () => void;
 }
 /** Search-capture lookup (2.1). Caller debounces + pre-gates (Tier-0) before
  *  enabling; the source re-gates authoritatively. Results are cached per
@@ -535,13 +539,37 @@ export function useLookup(query: string, direction: SearchDirection, enabled: bo
   const activeLang = useActiveLang(); // pair changes → cached lookups must not leak across languages
   const q = useQuery({
     queryKey: ['lookup', userState, activeLang, direction, query],
-    queryFn: () => ds.lookup(query, direction),
+    queryFn: async () => {
+      try {
+        return await ds.lookup(query, direction);
+      } catch (e) {
+        // `26` B15: record the server's "come back in N seconds" the moment it
+        // arrives, so the screen can pause lookups and count down.
+        if (e instanceof LookupBusyError && e.retryAfterSeconds != null) {
+          useLookupCooldown.getState().start(e.reason, Date.now() + e.retryAfterSeconds * 1000);
+        }
+        throw e;
+      }
+    },
     enabled,
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
-  const error = enabled && q.isError ? ((q.error as Error).message === 'lookup_busy' ? ('busy' as const) : ('unavailable' as const)) : null;
-  return { outcome: enabled ? (q.data ?? null) : null, isLoading: enabled && q.isPending && !q.isError, error };
+  // A retry after a failure is loading, not an error: without this the old
+  // "busy" card would flash while the post-cool-down retry is in flight.
+  const retryingAfterError = q.isError && q.isFetching;
+  const error =
+    enabled && q.isError && !retryingAfterError
+      ? (q.error as Error).message === 'lookup_busy'
+        ? ('busy' as const)
+        : ('unavailable' as const)
+      : null;
+  return {
+    outcome: enabled ? (q.data ?? null) : null,
+    isLoading: enabled && ((q.isPending && !q.isError) || retryingAfterError),
+    error,
+    retry: () => void q.refetch(),
+  };
 }
 
 /** Lazy example sentences (16 §3) — fetched once per (translation, sense),

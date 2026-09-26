@@ -14,7 +14,8 @@ describe('walkthrough focus lock', () => {
   const search = src('src/screens/SearchScreen.tsx');
 
   it('locks the search field while the tour demo is on screen', () => {
-    expect(search).toMatch(/<SearchBar [^>]*locked=\{tourSearchDemo\}/);
+    // Tolerates arrow-function props on the element (`onSubmit={() => …}` has a `>`).
+    expect(search).toMatch(/<SearchBar\b[^\n]*\blocked=\{tourSearchDemo\}/);
     expect(search).toMatch(/autoFocus=\{!locked\}/);
     expect(search).toMatch(/editable=\{!locked\}/);
   });

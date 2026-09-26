@@ -18,10 +18,13 @@ import { directionLangs } from '@/domain/derive';
 import { type LookupResult, posTagI18nKey, qualityReasonI18nKey, senseDisplayWord, type UsageExample } from '@/domain/translation';
 import type { Profile, SearchDirection } from '@/domain/types';
 import { useTranslation } from '@/i18n';
+import { formatCountdown } from '@/data/lookupBusy';
 import { resolveSenseCardId } from '@/lib/senseCardId';
+import { useCountdown } from '@/lib/useCountdown';
 import { maybePromptForReminders } from '@/notifications/firstSavePrompt';
 import { useDeleteCard, useEntitlement, useExamples, useLookup, useProfile, useSaveCard, useSetCardTargetOverride, useWords } from '@/query/hooks';
 import { LanguageIndicator } from '@/screens/shared/LanguageSwitcher';
+import { useLookupCooldown } from '@/store/lookupCooldownStore';
 import { usePrefsStore } from '@/store/prefsStore';
 import {
   ConfirmDialog,
@@ -89,6 +92,9 @@ export function toCardResult(
     })),
   };
 }
+
+/** How long typing must pause before the word counts as finished (`26` B15). */
+const LOOKUP_PAUSE_MS = 1000;
 
 /** Small debounce so lookups fire on typing pauses, not every keystroke. */
 function useDebouncedValue<T>(value: T, ms: number): T {
@@ -177,17 +183,42 @@ export function SearchView({ onClose, bottomInset = 0 }: { onClose: () => void; 
   // Tier-0 capture gate, client-side (16 §2): instant feedback, and junk input
   // never even reaches the data source. The source re-gates authoritatively.
   const verdict = q.length >= 2 && langs ? evaluateCaptureInput(q, langs.sourceCode) : null;
-  // 600ms: 250ms fired lookups on mid-word
-  // typing pauses — every prefix ("hel", "hell") was an uncached lookup costing
-  // up to TWO Azure calls (dictionary + MT fallback) and a junk cache row. 600ms
-  // fires on a real stop-typing pause, cutting Azure spend several-fold with no
-  // change to the interaction (results still appear automatically).
-  const debouncedQ = useDebouncedValue(q, 600);
-  const { outcome, isLoading, error: lookupError } = useLookup(
-    debouncedQ,
+  // LOOK UP A FINISHED WORD, NOT A PARTIAL ONE (`26` B15, 2026-09-26).
+  // History: 250ms fired on mid-word pauses — every prefix ("hel", "hell") was an
+  // uncached lookup costing up to TWO Azure calls and a junk cache row. 600ms was
+  // better but still fired on the pauses of ordinary phone typing: ~3 lookups per
+  // word, so ~3 words a minute tripped the per-user rate limit and the user saw
+  // "Translation is busy" mid-session. Now a lookup runs when the word looks
+  // finished — a full 1s pause, OR the keyboard's Search key, which runs at once
+  // (someone who taps Search has told us the word is done; making them wait out
+  // the pause would feel broken).
+  const debouncedQ = useDebouncedValue(q, LOOKUP_PAUSE_MS);
+  const [submittedQ, setSubmittedQ] = useState<string | null>(null);
+  const lookupQ = submittedQ === q ? q : debouncedQ;
+
+  // COOL-DOWN (`26` B15). When the server says "wait N seconds" (429 with
+  // retryAfterSeconds), searching pauses: no lookups fire, a live countdown shows,
+  // and the current search runs by itself when it reaches zero. Pausing (rather
+  // than firing and failing on every keystroke) is what keeps the countdown
+  // steady instead of restarting each time the user types.
+  // The deadline is recorded by `useLookup` the moment the 429 arrives; a past
+  // deadline simply reads as "not cooling down", so nothing has to clear it.
+  const cooldown = useLookupCooldown((st) => st.cooldown);
+  const secsLeft = useCountdown(cooldown?.until ?? null);
+  const coolingDown = cooldown != null && secsLeft != null && secsLeft > 0;
+
+  const { outcome, isLoading, error: lookupError, retry: retryLookup } = useLookup(
+    lookupQ,
     direction,
-    debouncedQ === q && verdict?.ok === true, // wait out the debounce + the gate
+    !coolingDown && lookupQ === q && verdict?.ok === true, // finished word + the gate + not cooling down
   );
+  // Countdown over → run the search now showing. (If the user typed a different
+  // word meanwhile, re-enabling fetches it anyway; the refetch just dedupes.)
+  const wasCooling = useRef(false);
+  useEffect(() => {
+    if (wasCooling.current && !coolingDown) retryLookup();
+    wasCooling.current = coolingDown;
+  }, [coolingDown]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Examples (16 §3) are USER-GATED (2026-07-22): never auto-fetched. If the
   // cache row already carries examples they show immediately; otherwise the card
@@ -265,12 +296,14 @@ export function SearchView({ onClose, bottomInset = 0 }: { onClose: () => void; 
   // toCardResult from `outcome.result.senses[i].quality`; TranslationCard reads them
   // per item so one bad sense never disables a sibling's Save button.
   const rejectReason = verdict != null && !verdict.ok ? verdict.reason : outcome?.status === 'rejected' ? outcome.reason : null;
-  const phase: 'recents' | 'typing' | 'results' | 'noresults' | 'rejected' | 'error' =
+  const phase: 'recents' | 'typing' | 'results' | 'noresults' | 'rejected' | 'cooldown' | 'error' =
     q === ''
       ? 'recents'
       : rejectReason != null
         ? 'rejected'
-        : lookupError != null
+        : coolingDown
+          ? 'cooldown'
+          : lookupError != null
           ? 'error'
           : q.length < 2 || isLoading || (verdict?.ok === true && outcome == null)
             ? 'typing'
@@ -442,7 +475,7 @@ export function SearchView({ onClose, bottomInset = 0 }: { onClose: () => void; 
 
       {/* 18 §F2: walkthrough anchor (w3 — "search & save here"). */}
       <View ref={(node) => { tourTargets.searchInput.current = node; }} collapsable={false}>
-        <SearchBar value={query} onChange={setQuery} placeholder={placeholder} locked={tourSearchDemo} />
+        <SearchBar value={query} onChange={setQuery} onSubmit={() => setSubmittedQ(q)} placeholder={placeholder} locked={tourSearchDemo} />
       </View>
 
       {/* Recents live OUTSIDE the content scroll: the fade mask must stay fixed
@@ -515,6 +548,17 @@ export function SearchView({ onClose, bottomInset = 0 }: { onClose: () => void; 
         {/* Service failure ≠ "no results" (429-hardening): rate-limited/throttled
             reads as "busy, try again shortly"; anything else as unavailable. The
             user retries by pausing typing again — no auto-retry into a throttle. */}
+        {phase === 'cooldown' && cooldown != null && (
+          <View key="cooldown" testID="search-cooldown">
+            <EmptyState
+              illustration={<IllustNetworkError />}
+              title={t(cooldown.reason === 'rate_limited' ? 'search.rateLimitedTitle' : 'search.busyTitle')}
+              body={t(cooldown.reason === 'rate_limited' ? 'search.rateLimitedBody' : 'search.busyCountdownBody', {
+                time: formatCountdown(secsLeft ?? 0),
+              })}
+            />
+          </View>
+        )}
         {phase === 'error' && (
           <View key="error">
             <EmptyState
@@ -616,7 +660,7 @@ function DirectionToggle({
   );
 }
 
-function SearchBar({ value, onChange, placeholder, locked = false }: { value: string; onChange: (s: string) => void; placeholder: string; locked?: boolean }) {
+function SearchBar({ value, onChange, onSubmit, placeholder, locked = false }: { value: string; onChange: (s: string) => void; onSubmit?: () => void; placeholder: string; locked?: boolean }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const hasValue = value.length > 0;
@@ -650,6 +694,9 @@ function SearchBar({ value, onChange, placeholder, locked = false }: { value: st
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
+          // The Search key means "this word is finished" — look it up now, not
+          // after the pause (`26` B15).
+          onSubmitEditing={onSubmit}
           accessibilityLabel={placeholder ?? t('common.search')}
           // Maestro tap target (word-capture.yaml) — taps by id, never by
           // placeholder text (placeholder is locale/profile-dependent).

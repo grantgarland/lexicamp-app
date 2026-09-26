@@ -31,9 +31,16 @@ const MAX_CHARS = 100;
 const MAX_WORDS = 5;
 const MAX_GRAPHEMES = 12;
 const MAX_RESULT_WORDS = 8; // phrase_mt heuristic (16 §2)
-const RATE_LIMIT_PER_HOUR = 60; // uncached lookups per user
+// ⚠️ RAISED 2026-09-26 (`26` B15): 8/min and 60/hr tripped during ordinary use.
+// Search debounced at 600ms, so a mid-word pause on a phone looked up the partial
+// word, and each distinct partial is its own uncached lookup — ~3 per word, so
+// ~3 words a minute hit the cap and the user saw "Translation is busy". The
+// client now waits for a finished word (1s pause or the Search key), and these
+// are the per-user ceilings on top of that. The GLOBAL cap below is unchanged:
+// it, not these, is what protects the shared Azure F0 quota.
+const RATE_LIMIT_PER_HOUR = 120; // uncached lookups per user
 // 429 hardening. Two additional layers, both on UNCACHED lookups only:
-const RATE_LIMIT_PER_MINUTE = 8; // per-user burst cap — typing bursts, not humans reading results
+const RATE_LIMIT_PER_MINUTE = 20; // per-user burst cap — typing bursts, not humans reading results
 const GLOBAL_LIMIT_PER_HOUR = 600; // ALL users combined — protects the shared Azure F0 resource
 // (each uncached lookup costs up to 2 Azure calls: dictionary + MT fallback)
 
@@ -233,8 +240,23 @@ function rowToOutcome(row: any): Record<string, unknown> {
   };
 }
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
+  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } });
+
+/** Fallback cool-down when Azure throttles us without saying for how long. */
+const AZURE_BUSY_RETRY_S = 30;
+
+/** A 429 the client can act on (`26` B15): WHY (`reason`) and WHEN to come back
+ *  (`retryAfterSeconds`, mirrored in the standard `Retry-After` header). The app
+ *  shows a live countdown and retries once when it reaches zero, so the numbers
+ *  must be honest — see `retryAfterFor`. Older app builds ignore the extra fields
+ *  and keep treating any 429 as "busy", so this is backwards-compatible. */
+const tooMany = (reason: 'rate_limited' | 'service_busy', retryAfterSeconds: number) =>
+  json(
+    { error: reason === 'rate_limited' ? 'rate limit exceeded' : 'translation service busy', reason, retryAfterSeconds },
+    429,
+    { 'Retry-After': String(retryAfterSeconds) },
+  );
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 Deno.serve(async (req: Request) => {
@@ -305,12 +327,31 @@ Deno.serve(async (req: Request) => {
     const { count } = await q;
     return count ?? 0;
   };
-  if ((await countEvents({ user: userId, since: minuteAgo })) >= RATE_LIMIT_PER_MINUTE)
-    return json({ error: 'rate limit exceeded' }, 429);
-  if ((await countEvents({ user: userId, since: hourAgo })) >= RATE_LIMIT_PER_HOUR)
-    return json({ error: 'rate limit exceeded' }, 429);
-  if ((await countEvents({ since: hourAgo })) >= GLOBAL_LIMIT_PER_HOUR)
-    return json({ error: 'translation service busy' }, 429);
+  /** Seconds until this window next has room, or null if it has room now.
+   *  With `count` lookups in the window and room for `limit`, a slot opens when
+   *  the (count − limit + 1)-th OLDEST one ages past the window edge — so that
+   *  is the row to read, not simply the oldest. */
+  const retryAfterFor = async (opts: { user?: string; since: string; windowMs: number; limit: number }) => {
+    const count = await countEvents(opts);
+    if (count < opts.limit) return null;
+    let q = supabase
+      .from('study_events')
+      .select('occurred_at')
+      .eq('event', 'lookup_uncached')
+      .gte('occurred_at', opts.since)
+      .order('occurred_at', { ascending: true })
+      .range(count - opts.limit, count - opts.limit);
+    if (opts.user) q = q.eq('user_id', opts.user);
+    const { data } = await q;
+    const edge = data?.[0]?.occurred_at ? Date.parse(data[0].occurred_at) : Date.now();
+    return Math.max(1, Math.ceil((edge + opts.windowMs - Date.now()) / 1000));
+  };
+  const perMinute = await retryAfterFor({ user: userId, since: minuteAgo, windowMs: 60_000, limit: RATE_LIMIT_PER_MINUTE });
+  if (perMinute != null) return tooMany('rate_limited', perMinute);
+  const perHour = await retryAfterFor({ user: userId, since: hourAgo, windowMs: 3_600_000, limit: RATE_LIMIT_PER_HOUR });
+  if (perHour != null) return tooMany('rate_limited', perHour);
+  const global = await retryAfterFor({ since: hourAgo, windowMs: 3_600_000, limit: GLOBAL_LIMIT_PER_HOUR });
+  if (global != null) return tooMany('service_busy', global);
 
   // Dictionary-first (X↔en pairs only; non-en pairs are deferred per 16 §1).
   // deno-lint-ignore no-explicit-any
@@ -324,7 +365,7 @@ Deno.serve(async (req: Request) => {
   let resolved = false;
   if (hasEnglish) {
     const dict = await dictionaryLookup(verdict.normalized, from, to);
-    if (dict === 'busy') return json({ error: 'translation service busy' }, 429);
+    if (dict === 'busy') return tooMany('service_busy', AZURE_BUSY_RETRY_S);
     if (dict === 'error') return json({ error: 'translation service unavailable' }, 503);
     if (dict.senses.length > 0) {
       const [primary, ...alts] = dict.senses;
@@ -348,7 +389,7 @@ Deno.serve(async (req: Request) => {
   if (!resolved) {
     // Constrained MT fallback (16 §2): compositional phrases the dictionary lacks.
     const mt = await mtTranslate(verdict.display, from, to);
-    if (mt === 'busy') return json({ error: 'translation service busy' }, 429);
+    if (mt === 'busy') return tooMany('service_busy', AZURE_BUSY_RETRY_S);
     if (mt === 'error') return json({ error: 'translation service unavailable' }, 503);
     // Identity-echo, generalized to ANY length (was: only >3-token sources). An MT
     // result identical to the input is an untranslated pass-through — persist it so

@@ -173,6 +173,9 @@
     "noResultsNetwork": "Si esta palabra debería tener resultado, puede que estés sin conexión o con una conexión lenta.",
     "busyTitle": "El traductor está ocupado",
     "busyBody": "Demasiadas búsquedas en este momento. Espera un momento y vuelve a intentar con tu palabra.",
+    "rateLimitedTitle": "Estás buscando muy rápido",
+    "rateLimitedBody": "Las búsquedas se pausan un momento después de muchas seguidas. Tu búsqueda se hará automáticamente en {{time}}.",
+    "busyCountdownBody": "El servicio de traducción está ocupado. Volveremos a intentar tu búsqueda en {{time}}.",
     "unavailableTitle": "El traductor no está disponible",
     "unavailableBody": "No se pudo conectar con el servicio de traducción. Comprueba tu conexión e inténtalo de nuevo en breve.",
     "alsoTranslates": "otras traducciones"

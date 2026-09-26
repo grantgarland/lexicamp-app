@@ -3,6 +3,7 @@
 // lookup/examples via the Edge Functions; saves via the save_card RPC (capture
 // gate Tier 2, 16 §2). Pure row→domain mapping lives in mappers.ts.
 //
+import { LookupBusyError, parseBusyBody } from '@/data/lookupBusy';
 import { applyReview } from '@/domain/fsrs';
 import { QUIZ_LENGTHS, uiRatingToFsrs, type BufferedRating, type QuizCardItem } from '@/domain/quiz';
 import type { LookupOutcome, UsageExample } from '@/domain/translation';
@@ -222,8 +223,15 @@ export const supabaseDataSource: DataSource = {
       // Azure 429 relayed by the fn) from other failures so the UI can say
       // "busy — try again shortly" instead of a misleading "no results", and so
       // the query layer knows never to auto-retry into a throttle.
-      const status = (error as { context?: { status?: number } }).context?.status;
-      throw new Error(status === 429 ? 'lookup_busy' : 'lookup_unavailable');
+      const context = (error as { context?: { status?: number; json?: () => Promise<unknown> } }).context;
+      if (context?.status === 429) {
+        // `26` B15: the 429 body says WHY and for HOW LONG, so the screen can
+        // show a real countdown instead of an open-ended "busy".
+        const body = await context.json?.().catch(() => null);
+        const { reason, retryAfterSeconds } = parseBusyBody(body);
+        throw new LookupBusyError(reason, retryAfterSeconds);
+      }
+      throw new Error('lookup_unavailable');
     }
     return data as LookupOutcome;
   },

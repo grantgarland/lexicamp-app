@@ -173,6 +173,9 @@
     "noResultsNetwork": "If this word should have a result, you may be offline or on a slow connection.",
     "busyTitle": "Translation is busy",
     "busyBody": "Too many lookups right now. Give it a moment, then try your word again.",
+    "rateLimitedTitle": "You're searching fast",
+    "rateLimitedBody": "Lookups pause for a moment after a burst of searches. Your search will run automatically in {{time}}.",
+    "busyCountdownBody": "The translation service is busy. We'll try your search again in {{time}}.",
     "unavailableTitle": "Translation is unavailable",
     "unavailableBody": "The translation service couldn’t be reached. Check your connection and try again shortly.",
     "alsoTranslates": "other translations"
