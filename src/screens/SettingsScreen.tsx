@@ -20,6 +20,7 @@ import { shortDate } from '@/lib/relativeTime';
 import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
 import { useUiStore } from '@/store/uiStore';
 import { findLanguage } from '@/constants';
+import { appVersion } from '@/constants/appInfo';
 import { LanguageSwitcherSheet } from '@/screens/shared/LanguageSwitcher';
 import { AboutSheet, EditProfileSheet, formatReminderTime, HowItWorksSheet, NotificationSheet, QuizLengthSheet, SupportSheet } from './settings/sheets';
 import {
@@ -316,7 +317,7 @@ export function SettingsScreen() {
             leading={<IconTile><IconInfo size={15} color={theme.color.brand} /></IconTile>}
             testID="settings-about"
             title={t('settings.about')}
-            subtitle={t('settings.version', { version: '1.0.0' })}
+            subtitle={t('settings.version', { version: appVersion() })}
             trailing={<Chevron />}
             onPress={() => setSheet('about')}
             last
