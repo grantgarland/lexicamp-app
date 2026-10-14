@@ -10,8 +10,14 @@ module.exports = {
   },
   // `metro/` is in scope too: the dev-only module swap that keeps the DEV badge
   // out of App Store bundles lives there, and it is plain CJS because
-  // metro.config.js has to require it.
-  testMatch: ['<rootDir>/src/**/*.test.@(ts|tsx)', '<rootDir>/metro/**/*.test.js'],
+  // metro.config.js has to require it. `scripts/` likewise, for the release
+  // version bump (scripts/bump-version.js), which a workflow runs before a
+  // build slot is spent.
+  testMatch: [
+    '<rootDir>/src/**/*.test.@(ts|tsx)',
+    '<rootDir>/metro/**/*.test.js',
+    '<rootDir>/scripts/**/*.test.js',
+  ],
   // jest-expo's default allowlist + @wrack (walkthrough lib ships untranspiled
   // ESM; QuizScreen imports it via the tour module — 18 §F2).
   transformIgnorePatterns: [

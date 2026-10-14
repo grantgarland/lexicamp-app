@@ -109,12 +109,16 @@ flow fails at its first assertion.
 ## Release — production build for TestFlight
 
 **The release path is a manual GitHub Actions dispatch:** Actions →
-**Release iOS (TestFlight)** → **Run workflow**. That is the whole procedure. The
-rest of this section explains what the workflow does, what it depends on, and how
-to recover when a step fails.
+**Release iOS (TestFlight)** → **Run workflow** on `main`, choosing a **bump**
+(`patch` / `minor` / `major` / `none`). That is the whole procedure. The rest of this
+section explains what the workflow does, what it depends on, and how to recover when a
+step fails.
 
 `.github/workflows/release-ios.yml` runs a cheap Linux preflight — `typecheck` ·
-`jest --ci` · `verify:bundle` — and only then spends an EAS build slot on:
+`jest --ci` · `verify:bundle` · `verify:eas-env`. Then a `version` job applies the
+bump to `expo.version`, commits `chore(release): vX.Y.Z` to `main` and tags it
+`vX.Y.Z` (see § 3). Only after that does it spend an EAS build slot, building that
+exact commit:
 
 ```bash
 eas build --platform ios --profile production --non-interactive --auto-submit --wait
@@ -182,23 +186,52 @@ into the shipped bundle in plaintext, readable by anyone who unzips the `.ipa`.
 (unlike `preview` / `development` / `smoke`), so a missing `SENTRY_AUTH_TOKEN` fails the
 build at the JS bundle step with `Auth token is required`.
 
-### 3. Versioning — leave it alone unless the marketing version changes
+### 3. Versioning — pick a bump on every dispatch; never edit it by hand
 
-`eas.json` sets `cli.appVersionSource: "remote"` and `production.autoIncrement: true`, so
-EAS owns the build number and increments it per build. Bump `expo.version` in `app.json`
-only for a user-visible release. **Never add `buildNumber` to `app.json`** — it would
-fight the remote source, and `appInfo.ts` is written to degrade gracefully without it.
+An iOS build carries two numbers, and each has exactly one owner:
+
+| | Info.plist key | Owner | How it moves |
+|---|---|---|---|
+| **Build number** | `CFBundleVersion` | EAS (`appVersionSource: "remote"`, `autoIncrement`) | +1 on every production build, server-side |
+| **Marketing version** | `CFBundleShortVersionString` | `expo.version` in `app.json` | the workflow's **bump** input |
+
+**Once a version is approved, App Store Connect closes its train.** Every later
+build has to carry a *higher* marketing version, or the upload is rejected after
+the build slot is already spent. Build 17 (2026-10-14) went this way: still
+`1.0.0` after `1.0.0` was approved, rejected with ITMS-90186 / ITMS-90062. So:
+
+- **`patch`** (1.0.1 → 1.0.2): fixes. The usual choice.
+- **`minor`** (1.0.2 → 1.1.0): new features. **`major`** (→ 2.0.0): a big change.
+- **`none`**: rebuild the current version. Valid **only while Apple has not approved
+  it yet**, i.e. retrying a build that failed or that you pulled before review.
+  Every build still gets a fresh build number from EAS.
+
+The `version` job (`scripts/bump-version.js`, unit-tested) rewrites only the
+`expo.version` line, refuses a version whose `v*` tag already exists, and pushes the
+commit and tag to `main` atomically. **Pull afterwards**: `main` gains a bot commit on
+every bumped release. If `main` moved after you dispatched, the push is rejected and
+nothing is built; just re-dispatch.
+
+Don't bump `expo.version` in a PR. The workflow would bump it again and skip a
+number. **Never add `buildNumber` to `app.json`**: it would fight the remote source,
+and `appInfo.ts` is written to degrade gracefully without it. The version is excluded
+from the expo-updates fingerprint (`fingerprint.config.js`), so a bump alone does not
+cut older binaries off from OTA updates.
 
 ### 4. Dispatch the workflow
 
-Actions → **Release iOS (TestFlight)** → **Run workflow**. Preflight is ~4 min; the
-EAS build is ~15–25 min queued + built, and `--auto-submit` hands the `.ipa` to App
-Store Connect without a second command.
+Actions → **Release iOS (TestFlight)** → **Run workflow** → branch `main`, then
+pick the **bump** (§ 3). Preflight is ~4 min; the EAS build is ~15–25 min queued +
+built, and `--auto-submit` hands the `.ipa` to App Store Connect without a second
+command. Before submitting for review, create the matching version (e.g. `1.0.2`) on
+App Store Connect's App Store tab and attach the build once it finishes processing.
 
 The equivalent local path, for when you want to watch it or the runner is
-unavailable:
+unavailable. Bump first (unless retrying an unapproved version), because nothing
+else will:
 
 ```bash
+node scripts/bump-version.js patch   # commit + tag + push it, as the workflow would
 npx eas-cli build --platform ios --profile production --auto-submit
 ```
 
@@ -206,7 +239,8 @@ npx eas-cli build --platform ios --profile production --auto-submit
 
 The workflow does this via `--auto-submit`. Run it by hand only to recover a build
 that succeeded and then failed at the submit stage — the `.ipa` still exists on EAS,
-so this is much cheaper than rebuilding:
+so this is much cheaper than rebuilding. (If the *build* failed instead, the bump is
+already on `main`; re-dispatch with `bump: none`.)
 
 ```bash
 npx eas-cli submit --platform ios --profile production --latest
@@ -240,7 +274,10 @@ simulator builds for anything you can.
 This is why the workflow has no `push:` trigger. A manual dispatch means a slot is
 spent only when someone means to spend it, which is stricter than the tag-triggered
 policy it replaced (a stray tag push can't burn a build). If cadence ever justifies
-automating it, the honest version is `push: tags: ['v*']` — not push-to-main.
+automating it, the honest version is `push: tags: ['v*']` — not push-to-main. Note
+that the workflow now *creates* the `v*` tags itself. They are pushed with
+`GITHUB_TOKEN`, which never triggers other workflows, so such a trigger would only
+fire on tags a human pushes.
 
 ---
 
