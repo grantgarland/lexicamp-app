@@ -44,6 +44,49 @@ describe('Input password reveal', () => {
     expect(field.props.spellCheck).toBe(false);
   });
 
+  describe('iOS re-mask wipe', () => {
+    const { Platform } = require('react-native');
+    const original = Platform.OS;
+    beforeEach(() => {
+      Platform.OS = 'ios';
+    });
+    afterEach(() => {
+      Platform.OS = original;
+    });
+
+    const remasked = () => {
+      const onChangeText = jest.fn();
+      render(<Input testID="pw" value="Secret12" onChangeText={onChangeText} secureTextEntry />);
+      fireEvent.press(screen.getByTestId('pwReveal')); // show
+      fireEvent.press(screen.getByTestId('pwReveal')); // hide again
+      return onChangeText;
+    };
+
+    it('restores the password when UIKit wipes it on the next keystroke', () => {
+      // The wipe as the device reports it: "" first, then the key on its own.
+      const onChangeText = remasked();
+      fireEvent.changeText(screen.getByTestId('pw'), '');
+      expect(onChangeText).not.toHaveBeenCalled();
+      fireEvent.changeText(screen.getByTestId('pw'), 'x');
+      expect(onChangeText).toHaveBeenLastCalledWith('Secret12x');
+    });
+
+    it('swallows a wiping backspace once, then deletes normally', () => {
+      const onChangeText = remasked();
+      fireEvent.changeText(screen.getByTestId('pw'), '');
+      fireEvent.changeText(screen.getByTestId('pw'), 'Secret1');
+      expect(onChangeText).toHaveBeenLastCalledWith('Secret1');
+    });
+
+    it('leaves a normal append alone, and only guards the first edit', () => {
+      const onChangeText = remasked();
+      fireEvent.changeText(screen.getByTestId('pw'), 'Secret12x');
+      expect(onChangeText).toHaveBeenLastCalledWith('Secret12x');
+      fireEvent.changeText(screen.getByTestId('pw'), '');
+      expect(onChangeText).toHaveBeenLastCalledWith('');
+    });
+  });
+
   it('adds no toggle to an ordinary field', () => {
     render(<Input testID="email" value="" onChangeText={() => {}} />);
     expect(screen.queryByRole('button')).toBeNull();

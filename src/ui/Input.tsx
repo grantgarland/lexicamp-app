@@ -3,7 +3,7 @@
 // error, focus ring via boxShadow) · optional left icon · hint/error line.
 // `secureTextEntry` fields get a trailing show/hide-password toggle for free.
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Platform, Pressable, TextInput, type TextInputProps, View, type ViewStyle } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
@@ -22,7 +22,7 @@ export interface InputProps extends Omit<TextInputProps, 'style'> {
   containerStyle?: ViewStyle;
 }
 
-export function Input({ label, error, hint, iconLeft, containerStyle, onFocus, onBlur, secureTextEntry, testID, ...rest }: InputProps) {
+export function Input({ label, error, hint, iconLeft, containerStyle, onFocus, onBlur, secureTextEntry, testID, value, onChangeText, ...rest }: InputProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
   const [focused, setFocused] = useState(false);
@@ -32,6 +32,35 @@ export function Input({ label, error, hint, iconLeft, containerStyle, onFocus, o
   // state, so a remount (e.g. switching sign-in ↔ sign-up) re-masks.
   const secure = secureTextEntry === true;
   const [revealed, setRevealed] = useState(false);
+  // UIKit wipes a secure field on the first edit after it is re-masked, so
+  // reveal → hide → type one key used to leave just that key (iOS simulator,
+  // 2026-10-14). The wipe arrives as TWO change events — "" then the keystroke
+  // alone — so: armed when hiding, swallow that "" (TextInput then re-syncs the
+  // native text to `value`), and re-attach the keystroke that follows unless it
+  // is an ordinary edit of the old value. Cost: a backspace that triggers the
+  // wipe is swallowed once, which beats losing the whole password.
+  const rearmed = useRef(false);
+  const wiped = useRef(false);
+  const handleChangeText = (text: string) => {
+    if (rearmed.current && Platform.OS === 'ios' && value != null && value !== '') {
+      if (text === '' && !wiped.current) {
+        wiped.current = true;
+        return;
+      }
+      const wasWiped = wiped.current;
+      rearmed.current = false;
+      wiped.current = false;
+      if (wasWiped && !text.startsWith(value) && !value.startsWith(text)) {
+        onChangeText?.(value + text);
+        return;
+      }
+    }
+    onChangeText?.(text);
+  };
+  const toggleReveal = () => {
+    if (revealed) rearmed.current = true;
+    setRevealed(!revealed);
+  };
 
   const borderColor = error != null ? theme.color.danger : focused ? theme.color.brand : theme.color.borderStrong;
   const boxShadow = focused
@@ -48,6 +77,8 @@ export function Input({ label, error, hint, iconLeft, containerStyle, onFocus, o
           maxFontSizeMultiplier={FONT_SCALE_MAX}
           style={styles.input}
           testID={testID}
+          value={value}
+          onChangeText={handleChangeText}
           secureTextEntry={secure && !revealed}
           // An unmasked password must not be capitalised, corrected or learned
           // by the keyboard's suggestion dictionary. Android only honours that
@@ -70,7 +101,7 @@ export function Input({ label, error, hint, iconLeft, containerStyle, onFocus, o
         />
         {secure && (
           <Pressable
-            onPress={() => setRevealed((r) => !r)}
+            onPress={toggleReveal}
             accessibilityRole="button"
             // The label names the ACTION, so VoiceOver/TalkBack announce what a
             // tap will do; the glyph shows the current state.
