@@ -32,6 +32,7 @@
     "expo-status-bar": "~57.0.1",
     "expo-symbols": "~57.0.2",
     "expo-system-ui": "~57.0.3",
+    "expo-updates": "~57.0.26",
     "expo-web-browser": "~57.0.2",
     "i18next": "^26.3.6",
     "react": "19.2.3",
@@ -83,6 +84,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "prepare": "git config core.hooksPath .githooks || true",
+    "update:ota": "node scripts/ota-update.mjs",
     "verify:bundle": "node scripts/verify-production-bundle.mjs",
     "verify:eas-env": "node scripts/verify-eas-env.mjs",
     "verify:apple-secret": "node --no-warnings scripts/verify-apple-client-secret.mts"

@@ -10,7 +10,8 @@
       "env": {
         "SENTRY_DISABLE_AUTO_UPLOAD": "true",
         "EXPO_PUBLIC_USE_SUPABASE": "1"
-      }
+      },
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",
@@ -18,21 +19,24 @@
       "env": {
         "SENTRY_DISABLE_AUTO_UPLOAD": "true",
         "EXPO_PUBLIC_USE_SUPABASE": "1"
-      }
+      },
+      "channel": "preview"
     },
     "smoke": {
       "distribution": "internal",
       "env": {
         "SENTRY_DISABLE_AUTO_UPLOAD": "true",
         "EXPO_PUBLIC_USE_SUPABASE": "0"
-      }
+      },
+      "channel": "smoke"
     },
     "production": {
       "autoIncrement": true,
       "environment": "production",
       "env": {
         "EXPO_PUBLIC_USE_SUPABASE": "1"
-      }
+      },
+      "channel": "production"
     }
   },
   "submit": {

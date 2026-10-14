@@ -9,7 +9,9 @@
     "cancel": "Cancelar",
     "undo": "Deshacer",
     "done": "Listo",
-    "close": "Cerrar"
+    "close": "Cerrar",
+    "showPassword": "Mostrar contraseña",
+    "hidePassword": "Ocultar contraseña"
   },
   "tabs": {
     "home": "Inicio",
@@ -796,6 +798,7 @@
       "emailTaken": "Ya existe una cuenta con ese correo. Prueba a iniciar sesión.",
       "badEmail": "Eso no parece un correo electrónico válido.",
       "weakPassword": "Las contraseñas necesitan al menos 6 caracteres.",
+      "pwnedPassword": "Esa contraseña apareció en una filtración de datos, así que es fácil de adivinar. Elige otra.",
       "samePassword": "Elige una contraseña distinta a la actual.",
       "tooSoon": "Un momento — inténtalo de nuevo en unos segundos.",
       "rateLimited": "Demasiados intentos. Espera unos minutos e inténtalo de nuevo.",

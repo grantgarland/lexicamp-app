@@ -244,6 +244,31 @@ automating it, the honest version is `push: tags: ['v*']` — not push-to-main.
 
 ---
 
+## Release — OTA update (JS-only fixes)
+
+`expo-updates` is configured with the `fingerprint` runtime policy, so an
+update only reaches binaries whose native code matches. Anything that touches
+native modules or native config in `app.json` still needs the store build
+above. For a JS/copy/styling fix, merge to `main`, then from a clean checkout:
+
+```bash
+npm run update:ota -- --message "What changed, in a few words"
+```
+
+That publishes to the `production` channel (`--channel preview` for internal
+builds; `--platform ios` to limit it) and then uploads the update's source maps
+to Sentry, because `eas update` never does that itself. The script refuses to
+publish without `SENTRY_AUTH_TOKEN`. It builds from the EAS `production`
+environment only, never from `.env.local`, and always uploads to the
+org/project in `app.json`. See the header of `scripts/ota-update.mjs` for why
+each guard exists.
+
+Users get an update on their next launch after it finishes downloading, which
+can take up to two launches. Sentry symbolicates OTA crashes by debug ID, so
+uploaded maps show no release, and that is expected. Each event's
+`ota_updates` context names the update ID and channel. Roll back with
+`eas update:republish` on the previous update group.
+
 ## Related
 
 - [lexicamp-project](https://github.com/grantgarland/lexicamp-project) — business plan, technical architecture, data model, roadmap, and all project documentation

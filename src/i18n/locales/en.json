@@ -9,7 +9,9 @@
     "cancel": "Cancel",
     "undo": "Undo",
     "done": "Done",
-    "close": "Close"
+    "close": "Close",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
   },
   "tabs": {
     "home": "Home",
@@ -796,6 +798,7 @@
       "emailTaken": "An account already exists for that email. Try signing in instead.",
       "badEmail": "That doesn't look like a valid email address.",
       "weakPassword": "Passwords need at least 6 characters.",
+      "pwnedPassword": "That password has appeared in a data breach, so it's easy to guess. Choose a different one.",
       "samePassword": "Choose a password different from your current one.",
       "tooSoon": "Just a moment — try again in a few seconds.",
       "rateLimited": "Too many attempts. Wait a few minutes and try again.",

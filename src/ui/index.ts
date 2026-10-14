@@ -49,6 +49,8 @@ export { WordDetailSheet, type WordDetailSheetProps } from './WordDetailSheet';
 export { EditTranslationSheet, type EditTranslationSheetProps, TARGET_OVERRIDE_MAX } from './EditTranslationSheet';
 export {
   IconHome,
+  IconEye,
+  IconEyeOff,
   IconList,
   IconChart,
   IconGear,
