@@ -36,6 +36,26 @@ name: Release iOS (TestFlight)
 
 on:
   workflow_dispatch:
+    inputs:
+      # Every store build after an approval needs a HIGHER marketing version.
+      # App Store Connect closes a version's train once it is approved, and
+      # EAS only auto-increments the build number. Build 17 (2026-10-14) was
+      # rejected for exactly this: still 1.0.0 after 1.0.0 was approved
+      # (ITMS-90186 / ITMS-90062). The `version` job applies this bump to
+      # expo.version in app.json and commits it to main BEFORE building.
+      bump:
+        description: >-
+          Version bump. patch = fixes, minor = new features, major = big change.
+          none = rebuild the CURRENT version, only valid while Apple has NOT
+          approved it yet (e.g. retrying a failed build).
+        type: choice
+        required: true
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+          - none
 
 # Not a skip-gate — a serializer. Two dispatches in quick succession would
 # otherwise race on the remote build-number counter (`autoIncrement`) and spend
@@ -84,6 +104,15 @@ jobs:
     permissions:
       contents: read # checkout
     steps:
+      # Releases come from main only. The version job pushes a bump commit to
+      # main, and README › Release § 1 already requires the work to land there
+      # first. Checked here so a wrong-branch dispatch costs nothing.
+      - name: Dispatched from main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Release iOS must be dispatched from main (got ${GITHUB_REF})."
+          exit 1
+
       - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v6
@@ -120,8 +149,81 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
-  build-ios:
+  # Applies the dispatch's `bump` to expo.version, commits it to main and tags
+  # it, so the repo always says what the store has. That matters twice:
+  #   - the NEXT bump starts from the version actually shipped, and
+  #   - OTA updates (npm run update:ota) are built from main, so main has to
+  #     describe the binary they target.
+  # The version is deliberately excluded from the expo-updates fingerprint
+  # (fingerprint.config.js), so a bump alone never strands users on an older
+  # version from OTA fixes.
+  #
+  # Runs AFTER preflight, so a red gate never leaves a bump on main, and BEFORE
+  # build-ios, which builds the exact commit this job pushes.
+  #
+  # Race safety: it bumps the dispatched commit (github.sha), not whatever main
+  # is by now. If main moved after the dispatch, the push is non-fast-forward
+  # and fails here, before a build slot is spent, instead of shipping commits
+  # that preflight never checked. Re-dispatch to pick them up.
+  #
+  # The push uses GITHUB_TOKEN, and pushes made with GITHUB_TOKEN do not
+  # trigger other workflows, so the bump commit does not set off ci.yml.
+  version:
     needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # push the bump commit + tag to main
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.1
+
+      # Pure Node, no npm ci: the script only reads and writes app.json.
+      - name: Bump expo.version
+        id: bump
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: node scripts/bump-version.js "$BUMP"
+
+      - name: Commit, tag and push to main
+        id: commit
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+          CHANGED: ${{ steps.bump.outputs.changed }}
+        run: |
+          if [ "$CHANGED" != "true" ]; then
+            echo "bump=none: rebuilding ${VERSION} from ${GITHUB_SHA} with no version commit."
+            echo "sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # A tag that already exists means this version was already built,
+          # and possibly approved. Shipping it again is the ITMS-90062 rejection
+          # this job exists to prevent.
+          if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" >/dev/null; then
+            echo "::error::Tag v${VERSION} already exists. Choose a larger bump."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(release): v${VERSION}"
+          git tag "v${VERSION}"
+          if ! git push --atomic origin "HEAD:refs/heads/main" "refs/tags/v${VERSION}"; then
+            echo "::error::main moved after this run was dispatched. Nothing was pushed and no build slot was spent; re-dispatch."
+            exit 1
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "### Releasing v${VERSION}" >> "$GITHUB_STEP_SUMMARY"
+
+  build-ios:
+    needs: version
     runs-on: ubuntu-latest
     # Generous on purpose: `--wait` blocks for the whole cloud build, and free
     # tier has no priority queue — a busy period can leave the job queued well
@@ -131,7 +233,12 @@ jobs:
     permissions:
       contents: read # checkout
     steps:
+      # The commit the version job pushed (or the dispatched one, for
+      # bump=none). Pinned by sha, not `main`, so a later push cannot change
+      # what this slot builds.
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.sha }}
 
       # node_modules IS required locally even though the build runs remotely:
       # eas-cli evaluates the app config before uploading, which resolves the
@@ -198,11 +305,12 @@ jobs:
       #     without an interactive Apple login. Never commit the .p8 — it is
       #     covered by the `*.p8` line in .gitignore.
       #
-      # NO VERSION BUMP STEP HERE, BY DESIGN: eas.json sets
-      # `cli.appVersionSource: "remote"` with `build.production.autoIncrement:
-      # true`, so EAS owns the iOS build number and increments it server-side.
-      # A manual bump in this workflow would fight it and desynchronise the
-      # remote counter.
+      # TWO NUMBERS, TWO OWNERS. The BUILD number (CFBundleVersion) belongs to
+      # EAS: eas.json sets `cli.appVersionSource: "remote"` with
+      # `build.production.autoIncrement: true`, so it increments server-side
+      # and must never be bumped here or added to app.json. The MARKETING
+      # version (CFBundleShortVersionString) is expo.version, set by the
+      # `version` job above from the dispatch's `bump` input.
       # ───────────────────────────────────────────────────────────────────────
       - name: Build production iOS app and submit to App Store Connect
         # --wait blocks until the cloud build finishes (and surfaces its exit
@@ -228,7 +336,7 @@ jobs:
   # either a burned build slot or an artifact stuck short of TestFlight, so
   # this one outranks a red ci.yml in practice.
   escalate-failure:
-    needs: [preflight, build-ios]
+    needs: [preflight, version, build-ios]
     if: failure()
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -249,9 +357,11 @@ jobs:
               'The production iOS build/submit path is red.',
               '',
               'Triage order:',
-              '1. Did `preflight` fail? Then no EAS build slot was spent — fix and re-dispatch.',
+              '1. Did `preflight` or `version` fail? Then no EAS build slot was spent — fix and re-dispatch.',
+              '   If `version` says main moved, just re-dispatch.',
               '2. Did `build-ios` fail *during the build*? A slot is gone (EAS free tier: 15 iOS/mo).',
-              '   Check remaining quota before re-dispatching.',
+              '   Check remaining quota before re-dispatching. The version bump is already on main',
+              '   and tagged, so re-dispatch with bump=none; that version was never approved.',
               '3. Did it fail at *submit*? The .ipa exists on EAS — recover with',
               '   `eas submit --platform ios --latest` rather than rebuilding.',
               '',
