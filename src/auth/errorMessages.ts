@@ -17,12 +17,19 @@ const PATTERNS: readonly (readonly [string, string])[] = [
   ['anonymous sign-ins are disabled', 'auth.err.missingFields'],
   ['invalid login credentials', 'auth.err.badCredentials'],
   ['email not confirmed', 'auth.err.emailNotConfirmed'],
+  // signUpWithEmail's own guard for a signup that returns no session — what
+  // the user sees if email confirmation is ever switched back on.
+  ['check your email to confirm', 'auth.err.emailNotConfirmed'],
   ['user already registered', 'auth.err.emailTaken'],
   ['already been registered', 'auth.err.emailTaken'],
   ['unable to validate email address', 'auth.err.badEmail'],
   ['invalid email', 'auth.err.badEmail'],
   ['password should be at least', 'auth.err.weakPassword'],
   ['password should contain', 'auth.err.weakPassword'],
+  // Leaked-password protection (HaveIBeenPwned). Length is fine; the password
+  // itself is on a breach list. Must NOT fall through to generic — prod
+  // 2026-10-14, a new user retried five times against "Something went wrong".
+  ['known to be weak', 'auth.err.pwnedPassword'],
   ['should be different from the old password', 'auth.err.samePassword'],
   // Rate limits — GoTrue phrases these several ways.
   ['for security purposes', 'auth.err.tooSoon'],

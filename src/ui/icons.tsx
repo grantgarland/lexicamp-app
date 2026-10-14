@@ -154,6 +154,27 @@ export function IconX({ size = 12, color = STROKE }: IconProps) {
   );
 }
 
+/** Password reveal pair. Each glyph shows the field's CURRENT state (eye = the
+ *  password is hidden, tap to show; struck eye = it is visible), the convention
+ *  iOS, Android and the major web sign-in forms share. */
+export function IconEye({ size = 20, color = STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />
+      <Circle cx="12" cy="12" r="3" />
+    </Svg>
+  );
+}
+
+export function IconEyeOff({ size = 20, color = STROKE }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M17.9 17.9A10.4 10.4 0 0 1 12 19c-6.4 0-10-7-10-7a18.2 18.2 0 0 1 4.1-4.9M9.9 5.2A9.3 9.3 0 0 1 12 5c6.4 0 10 7 10 7a18.3 18.3 0 0 1-2.2 3.1M14.1 14.1a3 3 0 0 1-4.2-4.2" />
+      <Line x1="3" y1="3" x2="21" y2="21" />
+    </Svg>
+  );
+}
+
 export function IconFire({ size = 18, color = STROKE }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke="none">
