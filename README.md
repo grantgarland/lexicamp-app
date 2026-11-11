@@ -6,8 +6,6 @@ Lexicamp is a vocabulary learning app built with Expo / React Native. It helps u
 
 This repo contains the **app source code**. Business docs, architecture decisions, roadmap, and project context live in [lexicamp-project](https://github.com/grantgarland/lexicamp-project).
 
-Live TestFlight test build can be download [here](https://testflight.apple.com/join/fY2DtmqN)
-
 ---
 
 ## Getting Started
