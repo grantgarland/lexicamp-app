@@ -69,9 +69,40 @@ export function configurePurchases(): void {
     // configuring later than app start, and offerings would not be warm.
     sdk().configure({ apiKey: API_KEY });
     purchasesStatus = 'ready';
+    enableAppleAdsAttribution();
   } catch {
     // A purchase SDK must never be the reason the app fails to boot.
     purchasesStatus = 'failed';
+  }
+}
+
+/**
+ * Apple Ads attribution. Hands RevenueCat the AdServices attribution token so a
+ * trial or subscription can be traced to the campaign / ad group / keyword that
+ * produced the install — the Apple Ads console alone stops at "downloads".
+ *
+ * Must run straight after configure(): the SDK collects the token once, early
+ * in the install's life, and Apple only honours a token for 24 hours.
+ *
+ * No ATT prompt: AdServices attribution is Apple's own first-party API and is
+ * not "tracking" under App Tracking Transparency. No Xcode change either — the
+ * RevenueCat pod imports AdServices itself (Sources/Attribution/
+ * AttributionFetcher.swift), which autolinks the framework.
+ *
+ * ⚠️ The token reaches RevenueCat regardless, but campaign and keyword NAMES
+ * only appear once the Apple Search Ads integration is switched on in the
+ * RevenueCat dashboard. Until then this is collected and unused.
+ */
+function enableAppleAdsAttribution(): void {
+  if (Platform.OS !== 'ios') return;
+  try {
+    // Fire-and-forget: attribution is analytics, and must never be the reason
+    // purchases report 'failed' — hence its own try/catch inside configure's.
+    void sdk()
+      .enableAdServicesAttributionTokenCollection()
+      .catch(() => {});
+  } catch {
+    /* an SDK without the method, or a rejected native call — not our problem */
   }
 }
 

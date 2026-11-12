@@ -7,7 +7,7 @@
 // icon tile; destructive Sign-out confirms via sheet.
 import { useRouter } from 'expo-router';
 import { type ReactNode, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Linking, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
@@ -21,6 +21,7 @@ import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
 import { useUiStore } from '@/store/uiStore';
 import { findLanguage } from '@/constants';
 import { appVersion } from '@/constants/appInfo';
+import { APP_STORE_URLS } from '@/constants/legal';
 import { LanguageSwitcherSheet } from '@/screens/shared/LanguageSwitcher';
 import { AboutSheet, EditProfileSheet, formatReminderTime, HowItWorksSheet, NotificationSheet, QuizLengthSheet, SupportSheet } from './settings/sheets';
 import {
@@ -111,6 +112,24 @@ export function SettingsScreen() {
       await openManageSubscriptions();
     } catch {
       showToast({ variant: 'destructive', message: t('settings.manageUnavailable') });
+    }
+  };
+
+  // "Rate Lexicamp" — the always-available route to a review, for the people
+  // the automatic prompt (lib/reviewPrompt) never reaches: StoreKit shows that
+  // sheet at most 3 times a year and not at all in TestFlight. Deliberately
+  // `Linking`, NOT `openWebLink`: the in-app browser would render the web
+  // listing, where a review cannot be written.
+  const handleRate = async () => {
+    try {
+      await Linking.openURL(APP_STORE_URLS.writeReview);
+    } catch {
+      try {
+        await Linking.openURL(APP_STORE_URLS.writeReviewWeb);
+      } catch {
+        // No App Store at all (a Simulator) — say so rather than do nothing.
+        showToast({ variant: 'destructive', message: t('settings.rateUnavailable') });
+      }
     }
   };
 
@@ -313,6 +332,20 @@ export function SettingsScreen() {
             trailing={<Chevron />}
             onPress={() => setSheet('support')}
           />
+          {/* iOS only: the id is an App Store listing, and Android is not
+              shipped. ⚠️ Every row added here moves the ones below it toward
+              the FAB — .maestro/settings.yaml centres each of them for exactly
+              that reason; a new row BELOW this one needs the same treatment. */}
+          {Platform.OS === 'ios' && (
+            <ListItem
+              leading={<IconTile><IconStar size={15} color={theme.color.brand} /></IconTile>}
+              testID="settings-rate"
+              title={t('settings.rateApp')}
+              subtitle={t('settings.rateAppSub')}
+              trailing={<Chevron />}
+              onPress={() => void handleRate()}
+            />
+          )}
           <ListItem
             leading={<IconTile><IconInfo size={15} color={theme.color.brand} /></IconTile>}
             testID="settings-about"
