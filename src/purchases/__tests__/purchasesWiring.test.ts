@@ -32,6 +32,24 @@ describe('purchases wiring', () => {
     expect(body).not.toMatch(/^import Purchases from 'react-native-purchases'/m);
   });
 
+  it('turns on Apple Ads attribution straight after configure, without risking it', () => {
+    const body = src('src/purchases/purchases.ts');
+    const configure = body.slice(body.indexOf('export function configurePurchases'));
+    const fn = configure.slice(0, configure.indexOf('\n}\n') + 1);
+    // Straight after configure(): the AdServices token is only honoured for 24h
+    // from install, so a later call site attributes nobody.
+    expect(fn.indexOf('enableAppleAdsAttribution()')).toBeGreaterThan(fn.indexOf('.configure('));
+    // ...but AFTER 'ready' is recorded: attribution failing must never be what
+    // marks purchases 'failed' and takes the paywall down with it.
+    expect(fn.indexOf('enableAppleAdsAttribution()')).toBeGreaterThan(fn.indexOf("purchasesStatus = 'ready'"));
+
+    const attribution = body.slice(body.indexOf('function enableAppleAdsAttribution'));
+    const helper = attribution.slice(0, attribution.indexOf('\n}\n') + 1);
+    expect(helper).toContain('enableAdServicesAttributionTokenCollection()');
+    expect(helper).toContain("Platform.OS !== 'ios'");
+    expect(helper).toContain('.catch(');
+  });
+
   it('configures purchases from the app entry', () => {
     const entry = src('index.js');
     expect(entry).toMatch(/configurePurchases\(\);/);

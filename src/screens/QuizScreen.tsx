@@ -18,6 +18,7 @@ import type { BufferedRating, QuizCardItem, UiRating } from '@/domain/quiz';
 import { sessionStats, uiRatingToFsrs } from '@/domain/quiz';
 import { useTranslation } from '@/i18n';
 import { dueLabel } from '@/lib/relativeTime';
+import { noteSessionAndMaybeAskForReview } from '@/lib/reviewPrompt';
 import { useCommitQuizSession, useDueCards, useEntitlement, useHomeData } from '@/query/hooks';
 import { QUIZ_LENGTH_FREE, usePrefsStore } from '@/store/prefsStore';
 import { useUiStore } from '@/store/uiStore';
@@ -237,7 +238,18 @@ export function QuizScreen({ deckId, deckName }: QuizScreenProps = {}) {
       // server-side, so committing would 404 and would pollute a real account's
       // history with words the user never saved.
       if (!useFixture) {
-        commit.mutate({ ratings: next, durationMs: startedAt.current == null ? undefined : Date.now() - startedAt.current });
+        // The App Store rating ask hangs off the commit's SUCCESS, never off
+        // reaching this line: asking for a rating over the "couldn't save your
+        // session" error is the worst moment available. Skipped while the tour
+        // is up (replaying it over real due cards still commits) — a system
+        // sheet there would land on top of a tooltip. Policy: lib/reviewPrompt.
+        const finished = sessionStats(next);
+        commit.mutate(
+          { ratings: next, durationMs: startedAt.current == null ? undefined : Date.now() - startedAt.current },
+          tourActive
+            ? undefined
+            : { onSuccess: () => void noteSessionAndMaybeAskForReview({ accuracy: finished.accuracy, reviewed: finished.total }) },
+        );
       }
       setPhase('end');
     } else {

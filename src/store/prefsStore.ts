@@ -52,6 +52,14 @@ interface PrefsState {
    *  prompt per install, so re-asking a decliner cannot work and only annoys.
    *  Reminders stay reachable from Settings, which is the real second chance. */
   notifPromptSeen: boolean;
+  /** Real study sessions finished AND saved on this device (lib/reviewPrompt).
+   *  Per-device on purpose: an App Store rating belongs to the Apple ID on the
+   *  phone, not to the Lexicamp account, so this is not a server fact. */
+  sessionsCompleted: number;
+  /** When the system rating prompt was last REQUESTED (ms epoch), or null.
+   *  ⚠️ Requested, not shown: StoreKit decides whether the sheet appears and
+   *  reports nothing back, so this is the only fact the app can know. */
+  reviewAskedAt: number | null;
   setSearchDirection: (d: SearchDirection) => void;
   addRecent: (userId: string, word: string) => void;
   removeRecent: (userId: string, word: string) => void;
@@ -61,6 +69,8 @@ interface PrefsState {
   setEduCardDismissed: (v: boolean) => void;
   setWalkthroughDone: (v: boolean) => void;
   setNotifPromptSeen: (v: boolean) => void;
+  noteSessionCompleted: () => void;
+  setReviewAskedAt: (ts: number) => void;
 }
 
 export const usePrefsStore = create<PrefsState>()(
@@ -74,6 +84,8 @@ export const usePrefsStore = create<PrefsState>()(
       eduCardDismissed: false,
       walkthroughDone: false,
       notifPromptSeen: false,
+      sessionsCompleted: 0,
+      reviewAskedAt: null,
       setSearchDirection: (searchDirection) => set({ searchDirection }),
       setLocale: (locale) => {
         i18n.changeLanguage(locale);
@@ -83,6 +95,8 @@ export const usePrefsStore = create<PrefsState>()(
       setEduCardDismissed: (eduCardDismissed) => set({ eduCardDismissed }),
       setWalkthroughDone: (walkthroughDone) => set({ walkthroughDone }),
       setNotifPromptSeen: (notifPromptSeen) => set({ notifPromptSeen }),
+      noteSessionCompleted: () => set((s) => ({ sessionsCompleted: s.sessionsCompleted + 1 })),
+      setReviewAskedAt: (reviewAskedAt) => set({ reviewAskedAt }),
       addRecent: (userId, word) =>
         set((s) => {
           const cur = s.recentsByUser[userId] ?? [];
@@ -118,6 +132,10 @@ export const usePrefsStore = create<PrefsState>()(
         quizLength: s.quizLength,
         eduCardDismissed: s.eduCardDismissed,
         walkthroughDone: s.walkthroughDone,
+        // Both MUST persist: an un-persisted `reviewAskedAt` would re-request
+        // the rating sheet after every cold start (prefsStore.test pins this).
+        sessionsCompleted: s.sessionsCompleted,
+        reviewAskedAt: s.reviewAskedAt,
       }),
     },
   ),
