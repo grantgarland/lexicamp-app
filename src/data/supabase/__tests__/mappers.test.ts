@@ -244,6 +244,123 @@ describe('mapQuizItem', () => {
   });
 });
 
+// Orientation (27 §13 P0-a, 2026-11-25). translations_cache rows are stored in
+// SEARCH direction, so a word the user looked up learning→native (fr→en, in an
+// en→fr deck) has the LEARNING language on its source side. The quiz used to read
+// rows in search order and so asked "Recall the French word" while grading an
+// English answer. Production had one such card when this was found.
+describe('mapQuizItem orientation (learning language is always the answer)', () => {
+  const bt = (displayText: string) => ({ normalizedText: displayText, displayText, numExamples: 0, frequencyCount: 0 });
+  const HOUSE_EXAMPLE = {
+    sourcePrefix: 'La ',
+    sourceTerm: 'maison',
+    sourceSuffix: ' est grande.',
+    targetPrefix: 'The ',
+    targetTerm: 'house',
+    targetSuffix: ' is big.',
+  };
+  // Looked up fr→en: source = French (learning), target = English (native).
+  const REVERSE: TranslationJoin = {
+    id: 't2',
+    display_source: 'maison',
+    translation: 'house',
+    source_lang: 'fr',
+    target_lang: 'en',
+    pos_tag: 'NOUN',
+    prefix_word: null,
+    alt_translations: [{ normalizedTarget: 'home', displayTarget: 'home' }],
+    // Back-translations of "house" are FRENCH words, the answer among them.
+    back_translations: [bt('maison'), bt('domicile')],
+    examples: { house: [HOUSE_EXAMPLE] },
+  };
+  // The same word looked up the normal way, en→fr.
+  const FORWARD: TranslationJoin = {
+    id: 't3',
+    display_source: 'house',
+    translation: 'maison',
+    source_lang: 'en',
+    target_lang: 'fr',
+    pos_tag: 'NOUN',
+    prefix_word: 'la',
+    alt_translations: [],
+    back_translations: [bt('house'), bt('home'), bt('dwelling')],
+    examples: {
+      maison: [{ sourcePrefix: 'The ', sourceTerm: 'house', sourceSuffix: ' is big.', targetPrefix: 'La ', targetTerm: 'maison', targetSuffix: ' est grande.' }],
+    },
+  };
+  const RECALL = { ...FSRS, stability: 20 };
+
+  it('a learning→native row puts the native word on the front and the learning word as the answer', () => {
+    const q = mapQuizItem(CARD, REVERSE, RECALL, 'fr');
+    expect(q.mode).toBe('recall');
+    expect(q.content.frontWord).toBe('house');
+    expect(q.content.backWord).toBe('maison');
+  });
+
+  it('matches the normal-direction lookup of the same word', () => {
+    const rev = mapQuizItem(CARD, REVERSE, RECALL, 'fr').content;
+    const fwd = mapQuizItem(CARD, FORWARD, RECALL, 'fr').content;
+    expect(rev.frontWord).toBe(fwd.frontWord);
+    expect(rev.backWord).toBe(fwd.backWord);
+    expect(rev.frontPrompt).toBe(fwd.frontPrompt);
+    expect(rev.backExample).toBe(fwd.backExample);
+    expect(rev.backExampleNative).toBe(fwd.backExampleNative);
+  });
+
+  it('example sentence: the learning-language line leads, the native line glosses', () => {
+    const q = mapQuizItem(CARD, REVERSE, RECALL, 'fr');
+    expect(q.content.backExample).toBe('La maison est grande.');
+    expect(q.content.backExampleNative).toBe('The house is big.');
+  });
+
+  it('the front hint never leaks the answer: native sentence only, never back-translations', () => {
+    const q = mapQuizItem(CARD, REVERSE, RECALL, 'fr');
+    expect(q.content.frontSub).toBe('“The house is big.”');
+    expect(q.content.frontSub).not.toMatch(/maison|domicile/);
+    // No cached example → no hint at all, even though back-translations exist.
+    const bare = mapQuizItem(CARD, { ...REVERSE, examples: null }, RECALL, 'fr');
+    expect(bare.content.frontSub).toBeUndefined();
+  });
+
+  it('the normal-direction hint chain is unchanged (back-translations minus the front word)', () => {
+    const q = mapQuizItem(CARD, FORWARD, RECALL, 'fr');
+    expect(q.content.frontSub).toContain('home');
+    expect(q.content.frontSub).toContain('dwelling');
+    expect(q.content.frontSub).not.toMatch(/maison/);
+  });
+
+  it('custom_back (the sense identity) travels with its side: the front on a reversed row', () => {
+    const q = mapQuizItem({ ...CARD, custom_back: 'home' }, REVERSE, RECALL, 'fr');
+    expect(q.content.frontWord).toBe('home');
+    expect(q.content.backWord).toBe('maison');
+  });
+
+  it('Edit Translations: the override replaces the learning-language answer on a reversed row', () => {
+    const q = mapQuizItem(CARD, REVERSE, RECALL, 'fr', 'demeure');
+    expect(q.content.frontWord).toBe('house');
+    expect(q.content.backWord).toBe('demeure');
+  });
+
+  it('missing source/target langs fall back to search order (pre-projection rows)', () => {
+    const { source_lang: _s, target_lang: _t, ...noLangs } = REVERSE;
+    const q = mapQuizItem(CARD, noLangs, RECALL, 'fr');
+    expect(q.content.frontWord).toBe('maison');
+    expect(q.content.backWord).toBe('house');
+  });
+
+  // The two mappers orient independently; they must agree, or the word list and
+  // the quiz show the same card the opposite way round.
+  it.each([
+    ['reverse row', REVERSE],
+    ['forward row', FORWARD],
+  ])('agrees with mapWordListItem on the %s', (_label, tr) => {
+    const q = mapQuizItem(CARD, tr, RECALL, 'fr').content;
+    const w = mapWordListItem(CARD, tr, RECALL, null, 'fr');
+    expect(q.frontWord).toBe(w.native);
+    expect(q.backWord).toBe(w.target);
+  });
+});
+
 describe('toCommitRow', () => {
   it('flattens a ReviewComputation into the commit_quiz_session RPC row', () => {
     const now = new Date('2026-07-06T12:00:00Z');

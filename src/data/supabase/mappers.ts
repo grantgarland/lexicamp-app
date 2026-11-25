@@ -269,7 +269,18 @@ export function mapWordListItem(
  *    2) the SOURCE-language example sentence — context implies the sense, and
  *       the answer only ever lives on the target side, so nothing leaks.
  *  POS was considered and rejected: sibling senses usually share it. */
-function senseHint(card: CardRow, tr: TranslationJoin): string | undefined {
+function senseHint(card: CardRow, tr: TranslationJoin, flip = false): string | undefined {
+  if (flip) {
+    // Row looked up LEARNING→native: the front shows the row's TARGET side, and
+    // the answer is the row's SOURCE side. Both rungs of the normal chain live
+    // on that source side — back-translations are source-language words (they
+    // usually include the answer itself) and the source sentence contains it
+    // verbatim — so either would hand over the answer. Only the TARGET-side
+    // (native) sentence is safe. The front word itself is already the sense the
+    // user saved, so it does the disambiguating that rung 1 does normally.
+    const ex = senseExample(card, tr);
+    return ex != null ? `“${ex.targetPrefix}${ex.targetTerm}${ex.targetSuffix}”` : undefined;
+  }
   const back =
     card.custom_back != null
       ? (tr.alt_translations ?? []).find(
@@ -291,21 +302,49 @@ function senseHint(card: CardRow, tr: TranslationJoin): string | undefined {
   return undefined;
 }
 
-/** Due card → quiz view-model (mode mirrors the mock: lower tiers = recognition). */
+/** Same orientation rule as mapWordListItem: a cache row is stored in SEARCH
+ *  direction, so a row looked up learning→native has the learning language on
+ *  its SOURCE side. False when the langs are missing (falls back to search order). */
+function isLearningOnSource(tr: TranslationJoin, learningLang: string): boolean {
+  return (
+    tr.source_lang != null &&
+    tr.target_lang != null &&
+    tr.source_lang === learningLang &&
+    tr.target_lang !== learningLang
+  );
+}
+
+/** Due card → quiz view-model (mode mirrors the mock: lower tiers = recognition).
+ *
+ *  Oriented by the LEARNING language (`targetLang`, the deck's target_lang): the
+ *  front is always the native side and the answer is always the language being
+ *  studied, whichever way the word was searched. Before 2026-11-25 this read the
+ *  row in search order, so a card saved from a learning→native search (fr→en in
+ *  an en→fr deck) asked "Recall the French word" and graded an ENGLISH answer
+ *  (27 §13 P0-a; one such card in production). mapWordListItem got the same fix
+ *  on 2026-08-02. custom_front/custom_back travel with their search side, exactly
+ *  as they do there. */
 export function mapQuizItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow, targetLang: string, override?: string | null): QuizCardItem {
   const tier = getTierByStability(fsrs.stability);
   const mode: QuizMode = tier.id === 'bc' || tier.id === 'abc' ? 'recognition' : 'recall';
-  const hint = senseHint(card, tr);
+  const flip = isLearningOnSource(tr, targetLang);
+  const hint = senseHint(card, tr, flip);
   // Cached example only — display-side; the quiz never adds network calls.
   // Per-sense (2026-07-17): THIS card's sense, never a sibling's.
   const ex = senseExample(card, tr);
+  const searchTarget = card.custom_back ?? tr.translation ?? '';
+  const searchNative = card.custom_front ?? tr.display_source;
+  // The example's sides follow the row too: its source half is in the row's
+  // source language. Learning-language sentence leads, native glosses it.
+  const exSource = ex != null ? `${ex.sourcePrefix}${ex.sourceTerm}${ex.sourceSuffix}` : '';
+  const exTarget = ex != null ? `${ex.targetPrefix}${ex.targetTerm}${ex.targetSuffix}` : '';
   return {
     id: card.id,
     tierId: tier.id,
     mode,
     fsrs: mapFsrsState(fsrs),
     content: {
-      frontWord: card.custom_front ?? tr.display_source,
+      frontWord: flip ? searchTarget : searchNative,
       ...(hint != null ? { frontSub: hint } : {}),
       frontPrompt:
         mode === 'recognition'
@@ -313,17 +352,17 @@ export function mapQuizItem(card: CardRow, tr: TranslationJoin, fsrs: FsrsRow, t
           : i18n.t('quiz.promptRecall', { lang: languageName(targetLang) }),
       // Edit Translations: the user's own text IS the answer they're studying,
       // so it drives both the revealed back and the recall input's slot count.
-      backWord: override ?? card.custom_back ?? tr.translation ?? '',
+      backWord: override ?? (flip ? searchNative : searchTarget),
       ...(tr.pos_tag ? { backPos: i18n.t(`pos.${tr.pos_tag}`, { defaultValue: tr.pos_tag.toLowerCase() }) } : {}),
-      // Target line leads, source line glosses it. NOTE the overlap with
+      // Learning line leads, native line glosses it. NOTE the overlap with
       // `senseHint`: when a sense has no back-translations, the front's `frontSub`
-      // is already this same source sentence, so the two will match on those
+      // is already this same native sentence, so the two will match on those
       // cards. That is repetition, not a leak — the answer only ever lives on the
-      // target side.
+      // learning side.
       ...(ex != null
         ? {
-            backExample: `${ex.targetPrefix}${ex.targetTerm}${ex.targetSuffix}`,
-            backExampleNative: `${ex.sourcePrefix}${ex.sourceTerm}${ex.sourceSuffix}`,
+            backExample: flip ? exSource : exTarget,
+            backExampleNative: flip ? exTarget : exSource,
           }
         : {}),
     },
